@@ -1,0 +1,21 @@
+# Commercial Bank — senders: COMBANK (card) + ComBank_Q+ (account-level)
+# Redaction: account numbers / card masks left as-is (bank's own masking), amounts
+# and balances kept as plausible fakes.
+
+Dear Cardholder, Purchase at Star Tac Cellular COLOMBO-11 LK for LKR 600.00 on 04/03/26 02:59 PM has been authorised on your debit card ending #5308.
+
+Dear Cardholder, Purchase at Chennai Silks (Pvt) Lt COLOMBO-11 LK for LKR 5,950.00 on 04/03/26 01:22 PM has been authorised on your debit card ending #5308.
+
+Dear Cardholder, Purchase at EPPCO FILLING STATION PPOLGAHAWELA KGLK for LKR 3,000.00 on 28/02/26 10:59 PM has been authorised on your debit card ending #5308.
+
+Dear Cardholder, Purchase at Central Pharmacy & Gro Polgahawela LK for LKR 5,490.00 on 26/02/26 10:26 PM has been authorised on your debit card ending #5308.
+
+Withdrawal at POLGAHAWELA-1 BR POLGAHAWELA KGLK for LKR 25,000.00 on 01/03/26 10:12 AM from card ending #5308. Click link to view the Digital Receipt for Withdrawal performed at ComBank ATMs  https://vas.combank.net/rec/sHKEPGdTzQQPdbQP
+
+Credit for Rs. 6,000.00 to 8025675326 at 13:52 at DIGITAL BANKING DIVISION
+
+Credit for Rs. 247,330.00 to 8025675326 at 22:43 at DIGITAL BANKING DIVISION
+
+We wish to confirm a CRM Deposit at 16:57 for Rs. 150,000.00 through POLGAHAW-CRM1 BR to your account 8*****5326
+
+Dear Customer , We noticed that you have not logged into your ComBank  Digital account for the past 30 days. You can conveniently access your Bank accounts by logging in to ComBank Digital online banking service from wherever you are, 24 hours a day.

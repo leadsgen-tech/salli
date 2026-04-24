@@ -94,5 +94,63 @@ object CombankFixtures {
             body = "Dear Cardholder, please verify the merchant name and transaction amount before entering the One Time Password (OTP). Keep your OTP confidential and do not share it with anyone. Your OTP at Merchant 'SOURCEGRAPH AMPCODE' for USD 0.00 is 125610",
             expected = Expectation.Otp,
         ),
+        ParseCase(
+            label = "combank_card_withdrawal",
+            sender = "COMBANK",
+            body = "Withdrawal at POLGAHAWELA-1 BR POLGAHAWELA KGLK for LKR 25,000.00 on 01/03/26 10:12 AM from card ending #5308. Click link to view the Digital Receipt for Withdrawal performed at ComBank ATMs  https://vas.combank.net/rec/abcdef",
+            expected = Expectation.Success(
+                type = TransactionType.ATM,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 2500000,
+                currency = Currency.LKR,
+                accountSuffix = "#5308",
+                location = "POLGAHAWELA-1 BR POLGAHAWELA KGLK",
+            ),
+        ),
+        ParseCase(
+            label = "combank_q_account_credit",
+            sender = "ComBank_Q+",
+            body = "Credit for Rs. 6,000.00 to 8025675326 at 13:52 at DIGITAL BANKING DIVISION",
+            expected = Expectation.Success(
+                type = TransactionType.ONLINE_TRANSFER,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 600000,
+                currency = Currency.LKR,
+                accountSuffix = "8025675326",
+                merchantRaw = "DIGITAL BANKING DIVISION",
+            ),
+        ),
+        ParseCase(
+            label = "combank_q_account_credit_large",
+            sender = "ComBank_Q+",
+            body = "Credit for Rs. 247,330.00 to 8025675326 at 22:43 at DIGITAL BANKING DIVISION",
+            expected = Expectation.Success(
+                type = TransactionType.ONLINE_TRANSFER,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 24733000,
+                currency = Currency.LKR,
+                accountSuffix = "8025675326",
+                merchantRaw = "DIGITAL BANKING DIVISION",
+            ),
+        ),
+        ParseCase(
+            label = "combank_q_crm_deposit",
+            sender = "ComBank_Q+",
+            body = "We wish to confirm a CRM Deposit at 16:57 for Rs. 150,000.00 through POLGAHAW-CRM1 BR to your account 8*****5326",
+            expected = Expectation.Success(
+                type = TransactionType.CDM,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 15000000,
+                currency = Currency.LKR,
+                accountSuffix = "8*****5326",
+                location = "POLGAHAW-CRM1 BR",
+            ),
+        ),
+        ParseCase(
+            label = "combank_q_dormant_reminder",
+            sender = "ComBank_Q+",
+            body = "Dear Customer , We noticed that you have not logged into your ComBank  Digital account for the past 30 days. You can conveniently access your Bank accounts by logging in to ComBank Digital online banking service from wherever you are, 24 hours a day.",
+            expected = Expectation.Informational(),
+        ),
     )
 }

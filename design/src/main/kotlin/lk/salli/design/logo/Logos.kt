@@ -74,6 +74,7 @@ object BankLogos {
         "BOC" to "banks/boc.jpg",
         "BOCONLINE" to "banks/boc.jpg",
         "COMBANK" to "banks/combank.jpg",
+        "ComBank_Q+" to "banks/combank.jpg",
         // No People's Bank logo in the bundled set yet — return null so the UI falls back
         // to the generic bank icon rather than miscrediting the transaction to BOC.
         "SAMPATH" to "banks/sampath.jpg",
