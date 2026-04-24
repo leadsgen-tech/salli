@@ -4,8 +4,14 @@
 
 Salli reads your bank SMS, parses transactions locally, and shows you where your money went. Nothing leaves the phone — no backend, no account, no telemetry.
 
-<!-- Screenshots go here -->
-<!-- ![Home](fastlane/metadata/android/en-US/images/phoneScreenshots/1-home.png) -->
+![Salli on a few Pixels](screenshots/Mockup.jpg)
+
+<p>
+  <img src="screenshots/home.png" alt="Home" width="23%" />
+  <img src="screenshots/timeline.png" alt="Timeline" width="23%" />
+  <img src="screenshots/insights.png" alt="Insights" width="23%" />
+  <img src="screenshots/budgets.png" alt="Budgets" width="23%" />
+</p>
 
 ## What it does
 

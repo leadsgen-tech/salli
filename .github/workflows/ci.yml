@@ -42,31 +42,5 @@ jobs:
             domain/build/reports/tests/
           retention-days: 7
 
-  build:
-    name: Build debug APK
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-
-      - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: salli-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
-          if-no-files-found: error
+# APK builds are handled by release.yml on v* tags (and via manual dispatch for
+# ad-hoc APKs), so every main-branch push doesn't spin up a full Android build.
