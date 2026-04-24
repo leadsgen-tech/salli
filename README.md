@@ -67,7 +67,7 @@ The onboarding + Settings permission tiles detect this case and surface the same
 ### Build from source
 
 ```bash
-git clone https://github.com/<you>/salli
+git clone https://github.com/leadsgen-tech/salli
 cd salli
 ./gradlew :app:installDebug
 ```

@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Redaction guide
-    url: https://github.com/nabilahamed/salli/blob/main/docs/BANK_SAMPLES_GUIDE.md
+    url: https://github.com/leadsgen-tech/salli/blob/main/docs/BANK_SAMPLES_GUIDE.md
     about: How to safely redact bank SMS before sharing them here.
   - name: Which SMS types we need
-    url: https://github.com/nabilahamed/salli/blob/main/docs/TRANSACTION_TYPES.md
+    url: https://github.com/leadsgen-tech/salli/blob/main/docs/TRANSACTION_TYPES.md
     about: The full list of transaction categories the parser cares about.
