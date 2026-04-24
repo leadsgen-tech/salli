@@ -1,0 +1,114 @@
+name: Bank support request
+description: Submit redacted SMS samples so Salli can parse your bank.
+title: "[bank] <Bank name> — SMS samples"
+labels: ["bank-support", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping expand Salli's bank coverage — every Sri Lankan
+        bank we add means thousands of people don't have to enter
+        transactions by hand.
+
+        **Before filling this out, please read
+        [docs/BANK_SAMPLES_GUIDE.md](../blob/main/docs/BANK_SAMPLES_GUIDE.md).**
+        That doc explains how to redact SMS safely and exactly which kinds
+        of messages we need. The short version: **keep the SMS shape, strip
+        the sensitive bits (account digits, names, phone numbers, real
+        amounts).**
+
+        Please do not paste raw, unredacted SMS. Issues containing
+        unredacted PII will be deleted without a reply.
+
+  - type: input
+    id: bank_name
+    attributes:
+      label: Bank name
+      description: Full official name of the bank or wallet (e.g. "Sampath Bank PLC", "HNB", "Frimi").
+      placeholder: Nations Trust Bank
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: transaction_types_included
+    attributes:
+      label: Which transaction types does this bank send? (tick everything you have samples for)
+      description: >
+        Each ticked type needs **3 or more** redacted samples in the "Samples"
+        box below. More is better — edge cases (location present / absent,
+        balance present / absent, weekend timestamps) catch regex bugs.
+      options:
+        - label: "Card purchase — POS swipe at a shop (LKR)"
+        - label: "Card purchase — foreign currency (USD/EUR/etc)"
+        - label: "Card purchase — declined (amount + merchant shown, no actual debit)"
+        - label: "ATM cash withdrawal"
+        - label: "ATM / CDM cash deposit"
+        - label: "Cheque deposit (credit to your account)"
+        - label: "Cheque cleared (debit from your account)"
+        - label: "Online transfer — outgoing (debit)"
+        - label: "Online transfer — incoming (credit)"
+        - label: "CEFT / SLIPS interbank transfer"
+        - label: "Fund transfer confirmation (the follow-up SMS after a transfer)"
+        - label: "Mobile / app payment (e.g. LPay, PayApp, Peo Pay)"
+        - label: "Bill payment (utility / credit-card bill)"
+        - label: "Mobile reload / top-up"
+        - label: "Standing order / recurring payment"
+        - label: "Refund / reversal credit"
+        - label: "Salary / payroll credit"
+
+  - type: checkboxes
+    id: non_transaction_types
+    attributes:
+      label: Non-transaction messages from this sender? (helps the parser reject noise)
+      description: >
+        These aren't transactions but the parser needs to recognise and
+        **ignore** them so they don't pollute your Timeline.
+      options:
+        - label: "OTP / one-time password"
+        - label: "Balance alert (just a balance, no transaction)"
+        - label: "Login notification"
+        - label: "Failed-login / security alert"
+        - label: "Card activation / expiry reminder"
+        - label: "Promotional / marketing SMS"
+        - label: "Compliance / tax notice"
+
+  - type: textarea
+    id: samples
+    attributes:
+      label: Redacted SMS samples
+      description: >
+        Paste one SMS per line, prefixed with the **type label** from the
+        checkbox list above in square brackets. Minimum 3 samples per ticked
+        type. See the guide for the redaction rules — last 3-4 account
+        digits OK, names replaced with `[NAME]`, amounts replaced with
+        plausible fake values.
+      render: text
+      placeholder: |
+        [Card purchase POS] Purchase at KEELLS SUPER for LKR 1250.00 on 15/04/26 04:32 PM on card ending #1234. Avl: Rs X,XXX.00.
+        [Card purchase POS] Purchase at DOMINOS PIZZA for LKR 2890.00 on 12/04/26 07:15 PM on card ending #1234. Avl: Rs X,XXX.00.
+        [Card purchase POS] Purchase at CEYPETCO BAMBALAPITIYA for LKR 5000.00 on 10/04/26 08:12 AM on card ending #1234. Avl: Rs X,XXX.00.
+        [ATM withdrawal] Withdrawal Rs 10000.00 at ATM BAMBALAPITIYA on 14/04/26 06:12 PM. Avl: Rs X,XXX.00.
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else worth knowing?
+      description: >
+        Weird formatting quirks? Does the bank send two SMS for one transaction
+        (a debit alert + a separate confirmation)? Does the sender ID change
+        mid-month? Drop anything here.
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Confirm before submitting
+      options:
+        - label: "I have redacted all account numbers, customer / sender names, phone numbers, reference IDs, and real amounts following the rules in [BANK_SAMPLES_GUIDE.md](../blob/main/docs/BANK_SAMPLES_GUIDE.md)."
+          required: true
+        - label: "These samples are from my own accounts (not forwarded from someone else's phone)."
+          required: true
+        - label: "I understand these samples will be committed to a public, open-source repository."
+          required: true

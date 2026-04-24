@@ -1,0 +1,60 @@
+name: Quick SMS samples
+description: Just paste redacted SMS. No categorisation needed — we'll figure it out.
+title: "[samples] Redacted SMS contribution"
+labels: ["bank-support", "samples", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping. This is the lightest-weight way to contribute:
+        paste one or more redacted SMS below. You don't have to tell us
+        which bank, which account, or what type of transaction — we can
+        see all of that from the SMS itself.
+
+        **The only thing that matters is redaction.** Read
+        [docs/BANK_SAMPLES_GUIDE.md](../blob/main/docs/BANK_SAMPLES_GUIDE.md)
+        first — it's a two-minute read.
+
+        **Never paste raw, unredacted SMS.** Issues containing unredacted
+        PII will be deleted without a reply.
+
+  - type: textarea
+    id: samples
+    attributes:
+      label: Redacted SMS samples
+      description: >
+        One SMS per line (or per blank-separated block if the SMS is long).
+        Account numbers trimmed to last 3–4 digits, names → `[NAME]`,
+        phone numbers → `[PHONE]`, amounts replaced with plausible fakes,
+        reference IDs → `[REF]`. Merchants, locations, dates, bank name
+        can stay.
+      render: text
+      placeholder: |
+        Online Transfer Debit Rs 5000.00 From A/C No XXX870. Balance
+        available Rs 125000.00 - Thank you for banking with BOC
+
+        Purchase at KEELLS SUPER for LKR 1250.00 on 15/04/26 04:32 PM on
+        card ending #1234. Avl: Rs X,XXX.00.
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything worth flagging?
+      description: >
+        Weird formatting? Bank sends two SMS for one transaction? A
+        template that's changed recently? Totally optional — leave blank
+        if nothing jumps out.
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Confirm before submitting
+      options:
+        - label: "I have redacted account numbers, names, phone numbers, reference IDs, and real amounts per the [redaction rules](../blob/main/docs/BANK_SAMPLES_GUIDE.md#what-to-redact)."
+          required: true
+        - label: "These samples are from my own accounts."
+          required: true
+        - label: "I understand these samples will be committed to a public, open-source repository."
+          required: true

@@ -1,0 +1,1 @@
+On-device SMS expense tracker for Sri Lanka. No account. No cloud. Ever.

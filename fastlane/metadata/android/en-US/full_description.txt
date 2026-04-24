@@ -1,0 +1,27 @@
+Salli (සල්ලි) reads your bank SMS and tracks your spending — entirely on your phone. No account to create, no cloud to sign into, no data leaving the device.
+
+<b>What it does</b>
+
+• Logs every bank SMS the instant it arrives. No manual entry.
+• Tracks balance per account, updated from each SMS's reported balance.
+• Auto-categorises transactions by merchant (Keells → Groceries, Uber → Transport, Netflix → Subscriptions) and by type (ATM → Cash, CEFT → Transfers).
+• Insights tab with a donut chart of category spend and per-category breakdown, across any date range.
+• Budgets — monthly caps per category with a live progress bar.
+• Home shows your total balance across accounts, this-week / this-month spending trends, and where your money is going.
+• Timeline with daily totals, income / expense pills, search.
+• Transfer detection — debit on one of your accounts paired with a credit on another within 48 hours is shown as a transfer, not as double spending.
+• Fee extraction — People's Bank debit + Fund Transfer confirm SMS are merged into one row with the fee shown inline.
+• Unknown SMS queue — messages Salli can't parse yet show up for you to triage.
+• CSV export. Delete-all-data at any time.
+
+<b>Supported banks</b>
+
+Bank of Ceylon, People's Bank, Commercial Bank. More coming — contribute real (redacted) SMS samples via GitHub.
+
+<b>Privacy</b>
+
+Salli has no INTERNET permission in use unless you opt into the (currently parked) AI mode. No analytics, no Firebase, no account. Your transaction data is stored only on your device, is exportable as CSV, and is deleted the moment you uninstall.
+
+<b>Open source</b>
+
+Apache 2.0. Every bank template, every keyword, every line of UI is in the repo. Contributions welcome.

@@ -1,0 +1,11 @@
+First release.
+
+- On-device SMS parsing for Bank of Ceylon, People's Bank, Commercial Bank
+- Home with balance, trend indicators, top spenders, recent activity
+- Timeline with date range, search, daily totals, income/expense pills
+- Insights with donut chart and category breakdown
+- Budgets with multi-category caps and live progress
+- Transfer detection and inline fee display
+- Unknown SMS review queue
+- CSV export, full data wipe
+- No account, no cloud, no telemetry

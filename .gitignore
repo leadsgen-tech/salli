@@ -1,0 +1,35 @@
+# Android / Gradle
+.gradle/
+build/
+/captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.iml
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+.fleet/
+
+# Kotlin
+.kotlin/
+
+# macOS
+.DS_Store
+
+# Salli-specific
+# Real SMS samples MUST NOT be committed — redacted ones live in samples/redacted/
+samples/raw/
+samples/*.raw.txt
+
+# Credentials / secrets
+*.keystore
+*.jks
+keystore.properties
+signing.properties
+
+# Logs
+*.log

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Core SMS permissions: receive real-time, read historical. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Network is used for ONE thing only: fetching the AI model file if the user
+         opts into AI mode. No analytics, no sync, no anything-else. Standard mode does
+         not use the network at all. See ModelManager for the single download URL. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Foreground service for the model download. DATA_SYNC is the correct Android 14+
+         service type for downloading large files — the platform kills plain background
+         downloads once the app is backgrounded. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application
+        android:name=".SalliApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Salli"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Salli">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".sms.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Handles the inline "who was this for?" reply from a transaction prompt
+             notification. Not exported — only our own PendingIntent can fire it. -->
+        <receiver
+            android:name=".sms.TransactionReplyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="lk.salli.app.TX_REPLY" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Hilt injects the HiltWorkerFactory into SalliApplication during onCreate. If we
+             leave WorkManager's default startup initializer enabled, it runs BEFORE Hilt has
+             injected the factory and falls back to the default factory — which then can't
+             instantiate our @AssistedInject-annotated workers ("NoSuchMethodException: …
+             ModelDownloadWorker.<init>…"). Removing the default initializer makes WorkManager
+             wait for Configuration.Provider on our Application. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+        <!-- Android 14+ requires the WorkManager foreground service to declare a
+             foregroundServiceType matching what the worker requests. Our download worker
+             returns ForegroundInfo with FOREGROUND_SERVICE_TYPE_DATA_SYNC, so we have to
+             merge that declaration onto the WorkManager-provided service element. Without
+             this, the service crashes with "foregroundServiceType 0x00000001 is not a subset
+             of foregroundServiceType attribute 0x00000000". -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+    </application>
+
+</manifest>

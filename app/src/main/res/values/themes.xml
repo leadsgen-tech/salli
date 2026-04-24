@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Minimal stub — the real theming lives in Compose (SalliTheme). This exists only so the
+         AndroidManifest <activity android:theme=...> reference resolves before the activity
+         draws Compose content, and so the splash/initial window behaves correctly. -->
+    <style name="Theme.Salli" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- Force Day mode regardless of system setting — the brand is light-only for now. -->
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>

@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build + publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        run: ./gradlew :parser:test :domain:test --no-daemon
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Rename + checksum
+        id: pack
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-dev}"
+          mv app/build/outputs/apk/debug/app-debug.apk "salli-${tag}.apk"
+          sha256sum "salli-${tag}.apk" > "salli-${tag}.apk.sha256"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            salli-${{ steps.pack.outputs.tag }}.apk
+            salli-${{ steps.pack.outputs.tag }}.apk.sha256
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+
+      - name: Upload APK as workflow artifact (non-tag runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: salli-${{ steps.pack.outputs.tag }}
+          path: |
+            salli-*.apk
+            salli-*.apk.sha256
+          retention-days: 30

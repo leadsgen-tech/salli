@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-build-only manifest additions. Merged into the final manifest for `assembleDebug` and
+  skipped entirely for `assembleRelease`, so the shortcuts below never leak into a shipped APK.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- A back-door into the SMS ingest pipeline so we can fire fake bank alerts from
+             `adb shell am broadcast` without waiting for a real SMS. See
+             DebugSmsInjectReceiver.kt for the trigger format. -->
+        <receiver
+            android:name=".sms.DebugSmsInjectReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="lk.salli.app.DEBUG_INJECT_SMS" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
