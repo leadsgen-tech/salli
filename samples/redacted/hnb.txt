@@ -1,0 +1,56 @@
+# HNB — sender: HNB
+# Redaction: names replaced with [NAME], amounts/balances kept as plausible fakes,
+# account masks left as-is (bank already masks to last 2–4 digits).
+
+Your verification code is 123456. Use this to verify your transfer with HNB Digital Banking
+මෙම අංකය කිසිවෙකුට නොකියන්න.
+இந்த இலக்கத்தை எவருடனும் பகிர வேண்டாம்.
+ Do not share this number with anyone
+
+LKR 10,025.00 debited to Ac No:01902XXXXX33 on 04/09/25 17:20:15 Reason:MB:Sadah Bal:LKR 6,597.54 Protect from scams *DO NOT SHARE ACCOUNT DETAILS /OTP* Hotline 0112462462
+
+A Transaction for LKR 25.00 has been debit ed to Ac No:01902XXXXX33 on 05/09/25 05:31:18 .
+Remarks :HNB Alert Charges.Bal: LKR 6,572.54
+
+LKR 6,000.00 credited to Ac No:01902XXXXX33 on 05/09/25 11:45:55 Reason:CEFT-[NAME] Bal:LKR 12,572.54 Protect from scams *DO NOT SHARE ACCOUNT DETAILS /OTP* Hotline 0112462462
+
+LKR 6,000.00 credited to Ac No:01902XXXXX33 on 05/09/25 11:49:13 Reason:CEFT-[NAME] Bal:LKR 18,572.54 Protect from scams *DO NOT SHARE ACCOUNT DETAILS /OTP* Hotline 0112462462
+
+HNB SMS ALERT:INTERNET, Account:0190***4833,Location:SURFSHARK* SURFSHARK., US,Amount(Approx.):53.42 USD,Av.Bal:1791.36 LKR,Date:05.09.25,Time:11:51, Hot Line:0112462462
+
+HNB ATM Withdrawal e-Receipt
+Amt(Approx.):  15000.00 LKR
+A/C: 0190***4833
+Txn Fee: 30.00LKR
+Location: PEOPLE'S BANK         , LKA
+Term ID: 0280AB01
+Date: 02.06.25 Time:17:05
+Txn No: 2503920984
+Avl Bal: 4592.86 LKR
+Hotline:94112462462
+
+HNB ATM Withdrawal e-Receipt
+Amt(Approx.):  25000.00 LKR
+A/C: 0190***4833
+Txn Fee: 30.00LKR
+Location: IBBAGAMUWA-1  BR      , LKA
+Term ID: TIBBAGA1
+Date: 20.05.25 Time:14:12
+Txn No: 2483419182
+Avl Bal: 505.65 LKR
+Hotline:94112462462
+
+HNB ATM Withdrawal e-Receipt
+Amt(Approx.):  2000.00 LKR
+A/C: 0190***4554
+Txn Fee: 5.00LKR
+Location: HNB MALLAWAPITIYA CRM 01, LKA
+Term ID: 888277
+Date: 24.04.26 Time:10:15
+Txn No: 3042522171
+Avl Bal: 1001.64 LKR
+Hotline:94112462462
+
+HNB SMS ALERT:INTERNET, Account:0190***4554,Location:PH *DOMINOS PIZZA SRI, LK,Amount(Approx.):2427.00 LKR,Av.Bal:6.64 LKR,Date:23.04.26,Time:17:50, Hot Line:0112462462
+
+HNB SMS ALERT:INTERNET, Account:0190***4554,Location:Google 1 1 1 1 WARP S, US,Amount(Approx.):180.00 LKR,Av.Bal:396.64 LKR,Date:20.04.26,Time:16:18, Hot Line:0112462462

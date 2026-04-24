@@ -1,0 +1,29 @@
+# Seylan Bank — sender: SEYLAN (alt: SEYLANBANK)
+# Redaction: names replaced with [NAME], amounts/balances kept as plausible fakes,
+# card mask left as-is.
+
+Seylan Card ...3687 debit Txn 9566324039 of LKR 5,000.00 done on 19/12/2025 04:18:36 PM at Nippon Bag City          KURUNEGALA   LK. Avl bal 2,505.03
+
+Seylan Card ...3687 debit Txn 9566119213 of LKR 12,000.00 done on 19/12/2025 03:02:03 PM at Peoples Bank           Kurunegala Ra  LK. Avl bal 505.03
+
+Seylan Card ...3687 debit Txn 9560531401 of LKR 5,000.00 done on 17/12/2025 05:27:30 PM at MAHAWA                 MAHAWA         LK. Avl bal 2,535.03
+
+Seylan Card ...3687 debit Txn 9560025721 of LKR 2,870.00 done on 17/12/2025 01:53:31 PM at CARGILLS EXPRESS-YANTHAM KURUNEGALA   LK. Avl bal 7,565.03
+
+Seylan Card ...3687 debit Txn 9498655538 of LKR 10,000.00 done on 25/11/2025 11:04:03 AM at Peoples Bank           Kurunegala Ra  LK. Avl bal 477.43
+
+Seylan Card ...3687 debit Txn 9445628494 of LKR 500.00 done on 06/11/2025 12:08:29 AM at DEBIT CARD ANNUAL FEES. Avl bal 507.43
+
+Seylan Card ...3687 debit Txn 9444397529 of LKR 20,000.00 done on 05/11/2025 10:35:12 AM at Kurunegala Offsite---- Kurunegala--   LK. Avl bal 1,007.43
+
+Seylan Card ...3687 debit Txn 9348999488 of LKR 24,000.00 done on 30/09/2025 03:49:23 PM at Peoples Bank           Kurunegala Ra  LK. Avl bal 915.23
+
+Seylan Card ...3687 debit Txn 9345128877 of LKR 50,000.00 done on 29/09/2025 09:17:15 AM at Peoples Bank           Pothuhera Bra  LK. Avl bal 24,945.23
+
+Seylan Card ...3687 debit Txn 9334531157 of LKR 20,000.00 done on 25/09/2025 10:28:32 AM at POLGAHAW-CRM1 BR       POLGAHAWELA    LK. Avl bal 74,975.23
+
+Dear MR [NAME], You have logged in to Seylan Online Banking/Mobile Banking at 09:45 Hrs. (+5.30 GMT) on 2025-09-25 Not you? Call us on +94112008888
+
+Seylan Card ...3687 debit Txn 9326098765 of LKR 40,000.00 done on 22/09/2025 09:45:19 AM at Peoples Bank           Pothuhera Bra  LK. Avl bal 113,055.23
+
+Seylan Card ...3687 debit Txn 9318206370 of LKR 8,000.00 done on 19/09/2025 07:07:53 AM at ICBS                   POTHUHERA      LK. Avl bal 153,585.23

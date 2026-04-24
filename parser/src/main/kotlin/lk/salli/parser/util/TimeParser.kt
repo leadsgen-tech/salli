@@ -27,6 +27,15 @@ object TimeParser {
     // DD/MM/YY HH:MM AM|PM — Commercial Bank purchase / decline.
     private val combank = DateTimeFormatter.ofPattern("d/M/yy h:mm a", java.util.Locale.ENGLISH)
 
+    // DD/MM/YY HH:MM:SS — HNB account debit/credit.
+    private val hnbAccount = DateTimeFormatter.ofPattern("d/M/yy H:mm:ss")
+
+    // DD.MM.YY HH:MM — HNB card SMS alerts + ATM receipts.
+    private val hnbDot = DateTimeFormatter.ofPattern("d.M.yy H:mm")
+
+    // DD/MM/YYYY hh:mm:ss AM|PM — Seylan card debit.
+    private val seylan = DateTimeFormatter.ofPattern("d/M/yyyy h:mm:ss a", java.util.Locale.ENGLISH)
+
     fun parsePeoplesPrimary(timeOfDay: String, date: String): Long? =
         runCatching {
             LocalDateTime.parse("$timeOfDay $date", peoplesPrimary)
@@ -42,6 +51,24 @@ object TimeParser {
     fun parseCombank(date: String, time: String, ampm: String): Long? =
         runCatching {
             LocalDateTime.parse("$date $time ${ampm.uppercase()}", combank)
+                .atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    fun parseHnbAccount(date: String, time: String): Long? =
+        runCatching {
+            LocalDateTime.parse("$date $time", hnbAccount)
+                .atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    fun parseHnbDot(date: String, time: String): Long? =
+        runCatching {
+            LocalDateTime.parse("$date $time", hnbDot)
+                .atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    fun parseSeylan(date: String, time: String, ampm: String): Long? =
+        runCatching {
+            LocalDateTime.parse("$date $time ${ampm.uppercase()}", seylan)
                 .atZone(colombo).toInstant().toEpochMilli()
         }.getOrNull()
 }

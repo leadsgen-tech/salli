@@ -1,9 +1,12 @@
 package lk.salli.parser
 
+import lk.salli.parser.templates.AmanaTemplate
 import lk.salli.parser.templates.BocOnlineTemplate
 import lk.salli.parser.templates.BocTemplate
 import lk.salli.parser.templates.CombankTemplate
+import lk.salli.parser.templates.HnbTemplate
 import lk.salli.parser.templates.PeoplesBankTemplate
+import lk.salli.parser.templates.SeylanTemplate
 
 /**
  * Central registry of bank templates. Kept here (not discovered via reflection) so the list is
@@ -19,6 +22,9 @@ object Templates {
         BocOnlineTemplate,
         PeoplesBankTemplate,
         CombankTemplate,
+        HnbTemplate,
+        SeylanTemplate,
+        AmanaTemplate,
     )
 
     fun forSender(sender: String): List<BankTemplate> =
