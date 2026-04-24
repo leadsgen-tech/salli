@@ -34,17 +34,71 @@ Salli does all of the above without ever touching the network. SMS parsing runs 
 
 ## Bank coverage (v1)
 
-Coverage is honest: just because a sender is recognised doesn't mean every SMS shape that bank sends is parsed. Unknown shapes land in the Unknown SMS queue for triage.
+Only what we've actually parsed from real samples ships. Anything else a bank sends lands in the Unknown SMS queue for triage — it's how we find out what's missing.
 
-| Bank | Sender | Coverage |
-|---|---|---|
-| Bank of Ceylon | `BOC` | **Full** — ATM withdraw / CDM deposit, cheque deposit, online transfer (debit + credit), CEFT transfer (debit + credit), ACH clearing |
-| People's Bank | `PeoplesBank` | **Full** — POS / CDM / ATM debits + credits, mobile payment, fund transfer confirm, bill payment, QR payment |
-| Commercial Bank | `COMBANK` | **Partial** — debit-card purchase (LKR + FX) and declined attempts only. Transfers / ATM / CDM / bill payments / incoming credits not yet supported — samples needed |
+### Bank of Ceylon — sender `BOC`
 
-Queued once samples land: Sampath, HNB, NTB, DFCC, Seylan, Amana, NDB, HSBC, Standard Chartered.
+**Covered**
+- ATM withdrawal
+- ATM / CDM cash deposit
+- Cheque deposit (credit)
+- Online transfer — debit + credit
+- CEFT transfer — debit + credit
+- Generic "Transfer Credit / Debit"
+- ACH clearing
 
-Contributing SMS samples — from your current ComBank account or from any unsupported bank — is the single biggest way to help. See [docs/BANK_SAMPLES_GUIDE.md](docs/BANK_SAMPLES_GUIDE.md).
+### People's Bank — sender `PeoplesBank`
+
+**Covered**
+- Card purchase (POS)
+- ATM withdrawal, CDM cash deposit, branch cash payment
+- LPAY / PeoPAY / Just Pay mobile transfers
+- Fund transfer (the two-SMS pair — debit + confirm — is merged into one row with the fee surfaced)
+- Bill payment
+- QR payment
+
+### Commercial Bank — sender `COMBANK`
+
+**Covered**
+- Debit-card purchase (LKR and foreign currency)
+- Declined attempts (flagged separately, not counted as spend)
+
+**Not yet covered** — transfers, ATM, CDM, bill payments, any account-level SMS. Needs samples from a ComBank current/savings account.
+
+### Hatton National Bank — sender `HNB`
+
+**Covered**
+- Account debit / credit (Mobile Banking transfers, CEFT credits)
+- Fee / alert-charge debits
+- Card purchase (LKR and foreign currency; FX rows drop the balance because we'd otherwise mix currencies)
+- ATM withdrawal with explicit transaction fee
+
+**Not yet covered** — bill payments, cheque clearance, standing orders, card declines. Likely-covered-by-current-regex but unverified: inward CEFT/SLIPS credits beyond the samples we've seen.
+
+### Seylan Bank — senders `SEYLAN`, `SEYLANBANK`
+
+**Covered**
+- Card purchase (POS)
+- ATM withdrawal at other banks' ATMs (Peoples Bank / HNB / ICBS / Offsite / CRM — heuristically classified from the merchant text)
+- Card annual fees
+
+**Not yet covered** — everything account-side (transfers, deposits, incoming credits). Samples from a Seylan current account would unlock this.
+
+### Amana Bank — sender `AMANABANK`
+
+**Covered**
+- POS card purchase
+- Inward CEFT transfer (incoming credit, with payer + reference)
+- Outbound IB CEFT transfer (outgoing debit, transfer fee tracked separately)
+- Savings profit distribution (Islamic-banking interest equivalent, tagged as income)
+
+**Not yet covered** — ATM, CDM, bill payments, mobile-wallet transfers. Needs more sample variety.
+
+---
+
+### Queued (sender recognised by our coverage target, templates pending)
+
+Sampath, NTB, DFCC, NDB, HSBC, Standard Chartered. Contributing 3–5 redacted SMS per bank is the single biggest way to help; see [docs/BANK_SAMPLES_GUIDE.md](docs/BANK_SAMPLES_GUIDE.md). Contributions are anonymous; maintainers do the regex work.
 
 ## Install
 
