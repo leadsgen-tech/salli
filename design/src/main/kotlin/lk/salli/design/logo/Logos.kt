@@ -46,9 +46,11 @@ object MerchantLogos {
         "netflix" to "merchants/netflix.jpg",
         "spotify" to "merchants/spotify.jpg",
         "steam" to "merchants/steam.jpg",
+        // SLT Mobitel is one brand — Mobitel is SLT's mobile arm — so they share a logo.
+        // Dialog is a separate telco; until we bundle a dedicated asset, let it fall through
+        // to the Utilities category icon rather than show a competitor's mark.
         "slt" to "merchants/slt.jpg",
         "mobitel" to "merchants/slt.jpg",
-        "dialog" to "merchants/slt.jpg",
         "carnage" to "merchants/carnage.jpg",
         "cool planet" to "merchants/coolplanet.jpg",
         "coolplanet" to "merchants/coolplanet.jpg",
@@ -72,7 +74,8 @@ object BankLogos {
         "BOC" to "banks/boc.jpg",
         "BOCONLINE" to "banks/boc.jpg",
         "COMBANK" to "banks/combank.jpg",
-        "PeoplesBank" to "banks/boc.jpg", // no people's bank logo in our set — fall back
+        // No People's Bank logo in the bundled set yet — return null so the UI falls back
+        // to the generic bank icon rather than miscrediting the transaction to BOC.
         "SAMPATH" to "banks/sampath.jpg",
         "HNB" to "banks/hnb.jpg",
         "NTB" to "banks/ntb.jpg",
