@@ -260,5 +260,71 @@ object CombankFixtures {
                 merchantRaw = "Account XXXXXXXXXXX8871",
             ),
         ),
+        // Mirror of accountCredit — same shape but with "Debit … from <account>".
+        ParseCase(
+            label = "combank_q_account_debit",
+            sender = "ComBank_Q+",
+            body = "Debit for Rs. 4,700.00 from 8025675326 at 22:19 at DIGITAL BANKING DIVISION",
+            expected = Expectation.Success(
+                type = TransactionType.ONLINE_TRANSFER,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 470000,
+                currency = Currency.LKR,
+                accountSuffix = "8025675326",
+                merchantRaw = "DIGITAL BANKING DIVISION",
+            ),
+        ),
+        // Justpay — recurring billing aggregator. ~40 hits/inbox in observed dumps. Note
+        // `Rs.` with NO space before the amount, and the bank's literal "sucessfully" typo.
+        ParseCase(
+            label = "combank_justpay_no_space",
+            sender = "COMBANK",
+            body = "Dear Customer, your transaction made via \"Justpay\" for Rs.15600.00 has been approved sucessfully. Thank you",
+            expected = Expectation.Success(
+                type = TransactionType.MOBILE_PAYMENT,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 1560000,
+                currency = Currency.LKR,
+                merchantRaw = "Justpay",
+            ),
+        ),
+        ParseCase(
+            label = "combank_justpay_small",
+            sender = "COMBANK",
+            body = "Dear Customer, your transaction made via \"Justpay\" for Rs.150.00 has been approved sucessfully. Thank you",
+            expected = Expectation.Success(
+                type = TransactionType.MOBILE_PAYMENT,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 15000,
+                currency = Currency.LKR,
+                merchantRaw = "Justpay",
+            ),
+        ),
+        // Flash account-admin chatter.
+        ParseCase(
+            label = "combank_flash_temporary_password",
+            sender = "COMBANK",
+            body = "Your temporary password for Flash Digital Banking is[REF]",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            label = "combank_flash_password_changed",
+            sender = "COMBANK",
+            body = "Flash Digital Banking password changed successfully. For inquiries, contact Tel: +[PHONE] Date 15/03/2026 Time 20:29:25",
+            expected = Expectation.Informational(),
+        ),
+        // Dormant variants — different wording, same intent.
+        ParseCase(
+            label = "combank_dormant_not_accessed",
+            sender = "COMBANK",
+            body = "Dear Customer , as informed we have noticed that you have not accessed your ComBank Digital account in the past 30 days. We invite you to log in to our ComBank Digital online banking service.",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            label = "combank_dormant_deactivated",
+            sender = "COMBANK",
+            body = "Dear Customer , This is to inform you that due to security reasons, your ComBank Digital online banking facility was deactivated recently as you have not used the service.",
+            expected = Expectation.Informational(),
+        ),
     )
 }

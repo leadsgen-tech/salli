@@ -26,6 +26,14 @@ data class AccountSummary(
     val accountLabel: String,
     val balance: Money?,
     val senderAddress: String,
+    /**
+     * Net (income − expense) over all time for this account. Used as a fallback chip line
+     * when [balance] is null — the bank's SMS never carry a balance for senders like ComBank,
+     * but we can still show the user the cumulative flow we've tracked.
+     */
+    val activityNet: Money? = null,
+    /** True when every tracked transaction on this account is an EXPENSE. Drives chip wording. */
+    val activityExpenseOnly: Boolean = false,
 )
 
 data class TopSpender(
@@ -81,25 +89,46 @@ class HomeViewModel @Inject constructor(
     val refreshing: StateFlow<Boolean> = refresher.refreshing
     fun refresh() = refresher.refresh()
 
-    val state: StateFlow<HomeUiState> = combine(
+    // Fold (accounts × per-account activity totals) into a single source so the main combine
+    // stays at 5 args. Activity totals re-emit on every transaction insert, so chips refresh
+    // without a manual refresh.
+    private val accountsWithActivity = combine(
         db.accounts().observeAll(),
+        db.transactions().observeActivityPerAccount(),
+    ) { accounts, activity -> accounts to activity.groupBy { it.accountId } }
+
+    val state: StateFlow<HomeUiState> = combine(
+        accountsWithActivity,
         db.transactions().observeTimeline(limit = 20),
         observeAllThisAndPreviousMonth(),
         db.categories().observeAll(),
         prefs.userName,
-    ) { accounts, recent, windows, categories, userName ->
+    ) { (accounts, activityByAccount), recent, windows, categories, userName ->
         val categoriesById = categories.associateBy { it.id }
         val accountsById = accounts.associateBy { it.id }
 
-        val accountSummaries = accounts.map { a ->
+        val rawSummaries = accounts.map { a ->
+            // Fold rows of the same account across currencies into one (rare — most LK
+            // accounts only ever see LKR — but POS abroad lands in USD and would otherwise
+            // appear as a second activity row).
+            val rows = activityByAccount[a.id].orEmpty()
+            val netMinor = rows.sumOf { it.netMinor }
+            val expenseMinor = rows.sumOf { it.expenseMinor }
+            val incomeMinor = rows.sumOf { it.incomeMinor }
+            val activityCurrency = rows.maxByOrNull { kotlin.math.abs(it.netMinor) }?.currency
+                ?: a.currency
             AccountSummary(
                 id = a.id,
                 displayName = a.displayName,
                 accountLabel = a.senderAddress + if (a.accountSuffix != "—") " · ${a.accountSuffix}" else "",
                 balance = a.balanceMinor?.let { Money(it, a.currency) },
                 senderAddress = a.senderAddress,
+                activityNet = if (rows.isEmpty()) null else Money(netMinor, activityCurrency),
+                activityExpenseOnly = rows.isNotEmpty() && incomeMinor == 0L && expenseMinor > 0L,
             )
         }
+
+        val accountSummaries = rawSummaries
 
         val items = recent.map { tx ->
             tx.toTimelineItem(
@@ -273,4 +302,5 @@ class HomeViewModel @Inject constructor(
         }
         return out.toList()
     }
+
 }

@@ -320,17 +320,22 @@ private fun AccountChip(
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(2.dp))
-        Text(
-            // Card-level accounts (ComBank #5166, HSBC card, etc.) never carry a balance in
-            // their SMS — render the suffix instead so the chip still tells the user which
-            // physical card the row represents.
-            text = account.balance?.let(::formatMoneyBold) ?: account.accountLabel,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimary,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
+        // Single line, same style for every account. Real balances come from BOC's
+        // `Av_Bal` / People's Bank's anchor-plus-delta imputation; for senders that never
+        // ship a balance (ComBank cards, the Q+ account) we fall back to the signed net of
+        // tracked activity. A card with only outflows reads as `−Rs 45,385.00`, an account
+        // with mixed flow as `Rs 14,153.28` — same visual, no extra labels.
+        val display: Money? = account.balance ?: account.activityNet
+        if (display != null) {
+            Text(
+                text = formatMoneyBold(display),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

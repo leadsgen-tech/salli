@@ -1,5 +1,6 @@
 package lk.salli.data.db.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -7,6 +8,20 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import lk.salli.data.db.entities.TransactionEntity
+
+/**
+ * Per-account roll-up used as a fallback "balance" line when an account never receives a
+ * balance-bearing SMS (ComBank cards, the Q+ account, etc.). [netMinor] is signed
+ * (income − expense over all time, declines and transfer-grouped legs excluded). [expenseOnly]
+ * lets the chip pick "Spent · Rs X" wording for card-only accounts where every row is a debit.
+ */
+data class AccountActivityRow(
+    @ColumnInfo(name = "account_id") val accountId: Long,
+    @ColumnInfo(name = "net_minor") val netMinor: Long,
+    @ColumnInfo(name = "expense_minor") val expenseMinor: Long,
+    @ColumnInfo(name = "income_minor") val incomeMinor: Long,
+    @ColumnInfo(name = "currency") val currency: String,
+)
 
 @Dao
 interface TransactionDao {
@@ -33,6 +48,28 @@ interface TransactionDao {
     /** Recent rows across all senders — feeds InternalTransferDetector. */
     @Query("SELECT * FROM transactions WHERE timestamp >= :sinceTimestamp ORDER BY timestamp DESC")
     suspend fun recentAll(sinceTimestamp: Long): List<TransactionEntity>
+
+    /**
+     * Per-account income/expense totals over all time. Drives Home's fallback chip line for
+     * accounts whose SMS never carries a balance — see [AccountActivityRow].
+     */
+    @Query(
+        """
+        SELECT account_id,
+            SUM(CASE flow_id
+                    WHEN 0 THEN -amount_minor
+                    WHEN 1 THEN  amount_minor
+                    ELSE 0
+                END) AS net_minor,
+            SUM(CASE WHEN flow_id = 0 THEN amount_minor ELSE 0 END) AS expense_minor,
+            SUM(CASE WHEN flow_id = 1 THEN amount_minor ELSE 0 END) AS income_minor,
+            amount_currency AS currency
+        FROM transactions
+        WHERE is_declined = 0 AND transfer_group_id IS NULL
+        GROUP BY account_id, amount_currency
+        """,
+    )
+    fun observeActivityPerAccount(): Flow<List<AccountActivityRow>>
 
     @Query(
         """

@@ -77,6 +77,22 @@ object CombankTemplate : BankTemplate {
             """(.+?)\s*$""",
     )
 
+    // "Debit for Rs. <amt> from <account> at HH:MM at DIGITAL BANKING DIVISION" — mirror of
+    // accountCredit (note "from" instead of "to"). Account is the full visible number.
+    private val accountDebit = Regex(
+        """^Debit\s+for\s+Rs\.\s+([\d,]+\.\d{2})\s+from\s+(\S+)\s+at\s+(\d{1,2}:\d{2})\s+at\s+""" +
+            """(.+?)\s*$""",
+    )
+
+    // "Dear Customer, your transaction made via "Justpay" for Rs.<amt> has been approved
+    //  sucessfully. Thank you"  ← bank's typo retained.
+    // Note `Rs.` has NO space before the amount in this shape (e.g. `Rs.15600.00`).
+    private val justpay = Regex(
+        """^Dear\s+Customer,\s+your\s+transaction\s+made\s+via\s+"?Justpay"?\s+for\s+""" +
+            """Rs\.?\s*([\d,]+\.\d{2})\s+has\s+been\s+approved.*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
     // "We wish to confirm a CRM Deposit at HH:MM for Rs. <amt> through <LOC> to your account
     //  <mask>" — optionally followed by a receipt URL (`https://vas.combank.net/rec/…`). The
     //  trailing URL is real-world; fixtures historically didn't carry it which is why the
@@ -86,10 +102,29 @@ object CombankTemplate : BankTemplate {
             """([\d,]+\.\d{2})\s+through\s+(.+?)\s+to\s+your\s+account\s+(\S+)(?:\s+\S+)*\s*$""",
     )
 
-    // "Dear Customer , We noticed that you have not logged into your ComBank  Digital account …"
+    // Dormant / deactivated ComBank Digital reminders. Three observed variants:
+    //   "Dear Customer, We noticed that you have not logged into your ComBank Digital …"
+    //   "Dear Customer, as informed we have noticed that you have not accessed your ComBank
+    //    Digital account in the past 30 days …"
+    //   "Dear Customer, This is to inform you that due to security reasons, your ComBank
+    //    Digital online banking facility was deactivated recently …"
+    // All share the "ComBank Digital" mention with no transactional content; bucket them so
+    // they don't pollute the Unknown queue.
+    // Two lookaheads so either ordering works:
+    //   "…not logged into your ComBank Digital…"  (keyword before)
+    //   "…ComBank Digital…was deactivated…"        (keyword after)
     private val dormantReminder = Regex(
-        """^Dear\s+Customer\s*,\s*We\s+noticed\s+that\s+you\s+have\s+not\s+logged\s+into\s+your\s+""" +
-            """ComBank.*Digital.*$""",
+        """^Dear\s+Customer\s*,""" +
+            """(?=.*ComBank\s+Digital)""" +
+            """(?=.*(?:not\s+logged|not\s+accessed|deactivated)).*$""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+
+    // "Your temporary password for Flash Digital Banking is …" / "Flash Digital Banking
+    // password changed successfully …" — onboarding chatter for ComBank's Flash app.
+    private val flashAccountAdmin = Regex(
+        """^(Your\s+temporary\s+password\s+for\s+Flash\s+Digital\s+Banking|""" +
+            """Flash\s+Digital\s+Banking\s+password\s+changed\s+successfully).*$""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -181,6 +216,9 @@ object CombankTemplate : BankTemplate {
         if (rejectedPayment.containsMatchIn(trimmed)) {
             return ParseResult.Informational("ComBank payment rejected")
         }
+        if (flashAccountAdmin.containsMatchIn(trimmed)) {
+            return ParseResult.Informational("ComBank Flash account admin")
+        }
 
         purchase.find(trimmed)?.let { m ->
             val (merchant, currencyRaw, amountStr, date, time, ampm, cardLast4) = m.destructured
@@ -249,7 +287,7 @@ object CombankTemplate : BankTemplate {
             val (_, amountStr, location, account) = m.destructured
             return ParseResult.Success(
                 ParsedTransaction(
-                    senderAddress = "ComBank_Q+",
+                    senderAddress = "COMBANK",
                     accountNumberSuffix = account,
                     amount = Money.ofMajor(amountStr, Currency.LKR),
                     balance = null,
@@ -269,7 +307,7 @@ object CombankTemplate : BankTemplate {
             val (amountStr, account, _, channel) = m.destructured
             return ParseResult.Success(
                 ParsedTransaction(
-                    senderAddress = "ComBank_Q+",
+                    senderAddress = "COMBANK",
                     accountNumberSuffix = account,
                     amount = Money.ofMajor(amountStr, Currency.LKR),
                     balance = null,
@@ -280,6 +318,46 @@ object CombankTemplate : BankTemplate {
                     // not a payer — surface it as the merchant so users can at least see where
                     // the credit came from.
                     merchantRaw = channel.trim(),
+                    location = null,
+                    timestamp = receivedAt,
+                    isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
+
+        accountDebit.find(trimmed)?.let { m ->
+            val (amountStr, account, _, channel) = m.destructured
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "COMBANK",
+                    accountNumberSuffix = account,
+                    amount = Money.ofMajor(amountStr, Currency.LKR),
+                    balance = null,
+                    fee = null,
+                    flow = TransactionFlow.EXPENSE,
+                    type = TransactionType.ONLINE_TRANSFER,
+                    merchantRaw = channel.trim(),
+                    location = null,
+                    timestamp = receivedAt,
+                    isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
+
+        justpay.find(trimmed)?.let { m ->
+            val (amountStr) = m.destructured
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "COMBANK",
+                    accountNumberSuffix = null,
+                    amount = Money.ofMajor(amountStr, Currency.LKR),
+                    balance = null,
+                    fee = null,
+                    flow = TransactionFlow.EXPENSE,
+                    type = TransactionType.MOBILE_PAYMENT,
+                    merchantRaw = "Justpay",
                     location = null,
                     timestamp = receivedAt,
                     isDeclined = false,
@@ -335,7 +413,7 @@ object CombankTemplate : BankTemplate {
             val (merchant, currencyRaw, amountStr) = m.destructured
             return ParseResult.Success(
                 ParsedTransaction(
-                    senderAddress = "ComBank_Q+",
+                    senderAddress = "COMBANK",
                     accountNumberSuffix = null,
                     amount = Money.ofMajor(amountStr, Currency.normalize(currencyRaw)),
                     balance = null,
@@ -355,7 +433,7 @@ object CombankTemplate : BankTemplate {
             val (amountStr, accountMask) = m.destructured
             return ParseResult.Success(
                 ParsedTransaction(
-                    senderAddress = "ComBank_Q+",
+                    senderAddress = "COMBANK",
                     accountNumberSuffix = null,
                     amount = Money.ofMajor(amountStr, Currency.LKR),
                     balance = null,

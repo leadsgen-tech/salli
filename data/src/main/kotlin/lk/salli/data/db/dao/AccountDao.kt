@@ -35,7 +35,14 @@ interface AccountDao {
           AND a.is_archived = 0
           AND a.account_suffix != '—'
         GROUP BY a.id
-        ORDER BY MAX(t.timestamp) DESC, a.id DESC
+        ORDER BY
+          -- Prefer bank-account rows (e.g. `8025675326`) over card rows (`#5308`) when
+          -- attributing an orphan-suffix SMS. ComBank's Q+ Fund Transfer / Q+ Transaction
+          -- shapes carry no suffix in their body but are debits *from the user's account*,
+          -- not from a card; this CASE makes sure they land on the account row.
+          CASE WHEN a.account_suffix LIKE '#%' THEN 1 ELSE 0 END,
+          MAX(t.timestamp) DESC,
+          a.id DESC
         LIMIT 1
         """,
     )
