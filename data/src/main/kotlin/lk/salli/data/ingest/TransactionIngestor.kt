@@ -115,12 +115,10 @@ class TransactionIngestor(
                     updatedAt = now(),
                 )
                 db.transactions().update(mergedEntity)
-                // A merge can change the row's balance_minor (an orphan confirm had null; after
-                // merging with its primary it suddenly carries a balance). The cached account
-                // balance needs to re-pick the latest balance-carrying row.
-                if (mergedEntity.balanceMinor != null) {
-                    db.accounts().refreshCachedBalance(existingEntity.accountId)
-                }
+                // Always recompute — refreshCachedBalance now imputes from prior balance + the
+                // sum of balance-less debits/credits since, so it works whether or not the
+                // merged row itself carries a balance.
+                db.accounts().refreshCachedBalance(existingEntity.accountId)
                 return@withTransaction IngestResult.Merged(transactionId = existingEntity.id)
             }
         }
@@ -141,12 +139,12 @@ class TransactionIngestor(
             )
         val txId = db.transactions().insert(entity)
 
-        // Refresh account balance atomically from the latest-dated transaction that carries
-        // one. A single UPDATE with a subquery avoids any read-then-write race, and picking by
-        // body timestamp means out-of-order SMS delivery can't leave the cached balance stale.
-        if (parsed.balance != null) {
-            db.accounts().refreshCachedBalance(accountId)
-        }
+        // Refresh the cached balance unconditionally. The query anchors on the most recent
+        // balance-carrying transaction and adds the signed sum of every balance-less debit/
+        // credit since — so a debit SMS that dropped its `Av_Bal` block (PeoplesBank 2026
+        // shape) still moves the chip the right way without waiting for the next balance-
+        // bearing SMS to land.
+        db.accounts().refreshCachedBalance(accountId)
 
         // Cross-bank pairing — only for unflagged income/expense (not declined, not transfers).
         if (!parsed.isDeclined && (parsed.flow == TransactionFlow.EXPENSE || parsed.flow == TransactionFlow.INCOME)) {

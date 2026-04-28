@@ -17,6 +17,10 @@ class OtpGuardTest {
         "425401 is the one-time password (OTP) to your online payment LKR 1287.00 from BOC Card 2462 at CARGILLS R.",
         "Your verification code is 123456",
         "Use one time password 999000",
+        // ComBank approval prompts — no "OTP"/"verification code" keyword, but unambiguous.
+        "Transaction Transfer within ComBank LKR 200.00 attempted. Please use code 564256 to approve. Do NOT share this number with anyone.",
+        "ComBank Digital-User Credentials Change attempted. Please use code 184759 to approve. Do NOT share this number with anyone.",
+        "ComBank Digital-Bill Payment LKR 50.00 attempted. Please use code 243232 to approve. Do NOT share this number with anyone.",
     ])
     fun `identifies OTP messages`(body: String) {
         assertThat(OtpGuard.isOtp(body)).isTrue()

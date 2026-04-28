@@ -5,12 +5,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -33,6 +34,14 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,6 +55,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -56,9 +72,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import lk.salli.data.db.entities.AccountEntity
+import lk.salli.design.logo.BankLogos
 
 // Core SMS reads + the runtime notification perm on API 33+. We bundle them into one
 // system dialog so the user sees a single prompt instead of two in a row.
@@ -84,15 +102,10 @@ private const val PAGE_IMPORT = 3
 private const val PAGE_COUNT = 4
 
 /**
- * Four-page onboarding, monochrome and typography-first.
- *
- *   Welcome    — the Sinhala hello, then the wordmark.
- *   Promise    — three one-line privacy claims (on-device, no cloud, no account).
- *   Permission — single explanation + allow / skip.
- *   Import     — live progress bar that fills in as historical SMS are ingested.
- *
- * The AI-mode picker from the previous onboarding is gone; we ship regex-only in v1 and will
- * reintroduce a mode toggle in Settings when the AI path is real.
+ * Four-page onboarding redesigned for smooth, performant motion and a more
+ * engaging visual experience.  All animation is driven by a single [Animatable]
+ * float per page, updated through [graphicsLayer] — no [AnimatedVisibility]
+ * chains, no manual delay staging, minimal recomposition cost.
  */
 @Composable
 fun OnboardingScreen(
@@ -110,10 +123,6 @@ fun OnboardingScreen(
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         })
     }
-    // Tracks whether we've already asked. If a second request returns denied without the
-    // system dialog ever appearing, the OS is likely enforcing the "restricted setting"
-    // block that Android 13+ applies to sideloaded apps. Surface the help panel so the user
-    // isn't left staring at a page that won't advance.
     var permissionAttempts by remember { mutableStateOf(0) }
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -141,21 +150,24 @@ fun OnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
+            .background(MaterialTheme.colorScheme.background),
     ) {
+        // Warm decorative circles behind everything — subtle, constant-motion feel
+        // as pages slide.  Canvas is cheap; one draw per frame during page transitions.
+        DecorativeCircles(pagerProgress = pagerState.currentPage + pagerState.currentPageOffsetFraction)
+
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
+            beyondViewportPageCount = 1,
         ) { page ->
+            val active = pagerState.settledPage == page
             when (page) {
-                PAGE_WELCOME -> WelcomePage(onNext = next)
-                PAGE_PROMISE -> PromisePage(onNext = next)
+                PAGE_WELCOME -> WelcomePage(active = active, onNext = next)
+                PAGE_PROMISE -> PromisePage(active = active, onNext = next)
                 PAGE_PERMISSION -> PermissionPage(
+                    active = active,
                     granted = permissionsGranted,
-                    // Show the restricted-settings card once a grant attempt has failed AND
-                    // we detect a direct-sideload install. Apps installed via Obtainium /
-                    // F-Droid privileged extension / ADB get the normal permission dialog,
-                    // so the help would confuse more than it helps.
                     showRestrictedHelp = !permissionsGranted && permissionAttempts > 0 &&
                         smsPermissionLikelyBlocked(context),
                     onAllow = { launcher.launch(REQUIRED_PERMS) },
@@ -163,6 +175,7 @@ fun OnboardingScreen(
                     onSkip = onDone,
                 )
                 PAGE_IMPORT -> ImportPage(
+                    active = active,
                     import = state.import,
                     accounts = state.accounts,
                     onDone = onDone,
@@ -175,11 +188,12 @@ fun OnboardingScreen(
             current = pagerState.currentPage,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 18.dp),
+                .padding(
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 18.dp,
+                ),
         )
     }
 
-    // When import finishes, wait a beat so the user can read "all done" before exiting.
     LaunchedEffect(state.import.finished, state.import.error) {
         if (state.import.finished && state.import.error == null &&
             pagerState.currentPage == PAGE_IMPORT
@@ -192,31 +206,121 @@ fun OnboardingScreen(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Animation primitive — one float, zero state machines                       */
+/* -------------------------------------------------------------------------- */
+
+@Composable
+private fun rememberPageProgress(active: Boolean): Float {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(active) {
+        if (active) {
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow,
+                ),
+            )
+        } else {
+            progress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 180),
+            )
+        }
+    }
+    return progress.value
+}
+
+/**
+ * Convenience: content enters from below with a fade.  [delay] shifts the start of the
+ * motion curve so sibling items stagger naturally from the same [progress] float.
+ */
+private fun Modifier.enterFromBottom(progress: Float, delay: Float = 0f): Modifier =
+    graphicsLayer {
+        val effective = ((progress - delay) / (1f - delay)).coerceIn(0f, 1f)
+        alpha = effective
+        translationY = (1f - effective) * 40.dp.toPx()
+    }
+
+private fun Modifier.enterFromBottomTight(progress: Float, delay: Float = 0f): Modifier =
+    graphicsLayer {
+        val effective = ((progress - delay) / (1f - delay)).coerceIn(0f, 1f)
+        alpha = effective
+        translationY = (1f - effective) * 24.dp.toPx()
+    }
+
+private fun Modifier.scaleIn(progress: Float, delay: Float = 0f): Modifier =
+    graphicsLayer {
+        val effective = ((progress - delay) / (1f - delay)).coerceIn(0f, 1f)
+        alpha = effective
+        scaleX = 0.92f + effective * 0.08f
+        scaleY = 0.92f + effective * 0.08f
+    }
+
+/* -------------------------------------------------------------------------- */
+/* Background ambience                                                        */
+/* -------------------------------------------------------------------------- */
+
+@Composable
+private fun DecorativeCircles(pagerProgress: Float) {
+    val accent = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+    val secondary = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.04f)
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        // Three large orbs that drift slowly as the user pages through.
+        // Their centres are a function of pagerProgress so the background feels alive
+        // even when the user's finger isn't on screen.
+        val cx = size.width * 0.5f
+        val cy = size.height * 0.45f
+
+        val drift = pagerProgress * 80f
+
+        drawCircle(
+            color = accent,
+            radius = size.width * 0.55f,
+            center = Offset(cx - 120f + drift, cy - 180f),
+        )
+        drawCircle(
+            color = secondary,
+            radius = size.width * 0.38f,
+            center = Offset(cx + 140f - drift * 0.6f, cy + 200f),
+        )
+        drawCircle(
+            color = accent.copy(alpha = 0.03f),
+            radius = size.width * 0.28f,
+            center = Offset(cx - 40f + drift * 0.3f, cy + 60f),
+        )
+    }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Page indicator                                                             */
 /* -------------------------------------------------------------------------- */
 
 @Composable
 private fun PageIndicator(count: Int, current: Int, modifier: Modifier = Modifier) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier,
     ) {
         repeat(count) { i ->
             val active = i == current
-            val width by animateFloatAsState(
-                targetValue = if (active) 22f else 6f,
-                // Tight tween — the bouncy spring here read as gimmicky on every page change.
-                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+            val width by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (active) 24.dp else 6.dp,
+                animationSpec = tween(durationMillis = 240),
                 label = "dotWidth",
+            )
+            val alpha by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (active) 1f else 0.25f,
+                animationSpec = tween(durationMillis = 240),
+                label = "dotAlpha",
             )
             Box(
                 modifier = Modifier
                     .height(6.dp)
-                    .width(width.dp)
+                    .width(width)
+                    .clip(CircleShape)
                     .background(
-                        color = if (active) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-                        shape = CircleShape,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
                     ),
             )
         }
@@ -227,76 +331,93 @@ private fun PageIndicator(count: Int, current: Int, modifier: Modifier = Modifie
 /* 1 — Welcome                                                                */
 /* -------------------------------------------------------------------------- */
 
-// Shared enter-transition factory — one tween, one easing, consistent across pages so the
-// cadence doesn't vary between steps. Kept small and overlapping; the previous 500-700ms
-// staggers made each element feel like it was waiting for the last one to finish.
-private val enterTween = tween<Float>(durationMillis = 320, easing = FastOutSlowInEasing)
-private val enterIntTween = tween<androidx.compose.ui.unit.IntOffset>(
-    durationMillis = 320,
-    easing = FastOutSlowInEasing,
-)
-private fun slideAndFade() =
-    fadeIn(enterTween) + slideInVertically(enterIntTween) { it / 10 }
-
 @Composable
-private fun WelcomePage(onNext: () -> Unit) {
-    var stage by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        delay(120); stage = 1
-        delay(220); stage = 2
-        delay(180); stage = 3
-        delay(220); stage = 4
-    }
-    PageScaffold {
-        Spacer(Modifier.weight(0.8f))
+private fun WelcomePage(active: Boolean, onNext: () -> Unit) {
+    val progress = rememberPageProgress(active)
 
-        AnimatedVisibility(visible = stage >= 1, enter = slideAndFade()) {
+    PageScaffold {
+        Spacer(Modifier.weight(0.55f))
+
+        // Sinhala greeting — secondary, enters first
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottom(progress, delay = 0f),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                text = "ආයුබෝවන්",
-                fontSize = 64.sp,
+                text = "\u0D86\u0DBA\u0DD4\u0DB6\u0DDC\u0DC0\u0DB1",
+                fontSize = 56.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                letterSpacing = (-0.5).sp,
             )
         }
-        Spacer(Modifier.height(4.dp))
-        AnimatedVisibility(visible = stage >= 2, enter = fadeIn(enterTween)) {
+
+        Spacer(Modifier.height(8.dp))
+
+        // Transliteration
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.12f),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
                 text = "ayubowan",
                 fontSize = 15.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                letterSpacing = 3.sp,
             )
         }
 
-        Spacer(Modifier.height(72.dp))
+        Spacer(Modifier.height(48.dp))
 
-        AnimatedVisibility(visible = stage >= 3, enter = slideAndFade()) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+        // Wordmark + tagline.  A tiny primary-tinted underline appears with the wordmark —
+        // gives the brand mark a little anchor without committing to a logo.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scaleIn(progress, delay = 0.22f),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "Salli",
-                    fontSize = 40.sp,
+                    fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = (-1).sp,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(3.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)),
+                )
+                Spacer(Modifier.height(14.dp))
                 Text(
                     text = "Your money,\nin your pocket.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    lineHeight = 22.sp,
+                    lineHeight = 24.sp,
                 )
             }
         }
 
         Spacer(Modifier.weight(1f))
-        AnimatedVisibility(visible = stage >= 4, enter = fadeIn(enterTween)) {
+
+        // CTA
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.45f),
+        ) {
             PillButton(text = "Get started", onClick = onNext)
         }
     }
@@ -307,69 +428,118 @@ private fun WelcomePage(onNext: () -> Unit) {
 /* -------------------------------------------------------------------------- */
 
 @Composable
-private fun PromisePage(onNext: () -> Unit) {
-    var stage by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        delay(120); stage = 1
-        delay(160); stage = 2
-        delay(140); stage = 3
-        delay(140); stage = 4
-        delay(200); stage = 5
-    }
+private fun PromisePage(active: Boolean, onNext: () -> Unit) {
+    val progress = rememberPageProgress(active)
+
     PageScaffold {
-        Spacer(Modifier.weight(0.4f))
-        AnimatedVisibility(visible = stage >= 1, enter = slideAndFade()) {
+        Spacer(Modifier.weight(0.35f))
+
+        // Headline
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottom(progress, delay = 0f),
+        ) {
             Text(
                 text = "Everything\nstays on\nyour phone.",
-                fontSize = 42.sp,
+                fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 48.sp,
+                lineHeight = 46.sp,
                 color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = (-0.8).sp,
             )
         }
-        Spacer(Modifier.height(36.dp))
 
-        PromiseRow(
-            number = "01",
-            text = "Bank SMS are parsed on-device. They never leave your phone.",
-            visible = stage >= 2,
+        Spacer(Modifier.height(40.dp))
+
+        // Three promise cards — staggered, each anchored by an icon that makes the claim
+        // skimmable in a glance.
+        PromiseCard(
+            icon = Icons.Outlined.PhoneAndroid,
+            label = "On-device",
+            text = "Bank SMS are parsed on this phone. They never leave it.",
+            progress = progress,
+            delay = 0.18f,
         )
-        Spacer(Modifier.height(16.dp))
-        PromiseRow(
-            number = "02",
-            text = "No cloud backend, no login, no account to create.",
-            visible = stage >= 3,
+        Spacer(Modifier.height(12.dp))
+        PromiseCard(
+            icon = Icons.Outlined.CloudOff,
+            label = "No cloud",
+            text = "No backend, no login, no account to create.",
+            progress = progress,
+            delay = 0.28f,
         )
-        Spacer(Modifier.height(16.dp))
-        PromiseRow(
-            number = "03",
-            text = "No ads. No analytics. No telemetry pings.",
-            visible = stage >= 4,
+        Spacer(Modifier.height(12.dp))
+        PromiseCard(
+            icon = Icons.Outlined.VisibilityOff,
+            label = "No tracking",
+            text = "No ads, no analytics, no telemetry pings.",
+            progress = progress,
+            delay = 0.38f,
         )
 
         Spacer(Modifier.weight(1f))
-        AnimatedVisibility(visible = stage >= 5, enter = fadeIn(enterTween)) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.52f),
+        ) {
             PillButton(text = "Continue", onClick = onNext)
         }
     }
 }
 
 @Composable
-private fun PromiseRow(number: String, text: String, visible: Boolean) {
-    AnimatedVisibility(visible = visible, enter = slideAndFade()) {
-        Row(verticalAlignment = Alignment.Top) {
-            Text(
-                text = number,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(32.dp),
+private fun PromiseCard(
+    icon: ImageVector,
+    label: String,
+    text: String,
+    progress: Float,
+    delay: Float,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .enterFromBottomTight(progress, delay = delay)
+            // Background must come BEFORE clip so the rounded shape is honoured for the
+            // ripple too. Padding goes last so it's inside the shape.
+            .clip(RoundedCornerShape(16.dp))
+            .background(scheme.surfaceContainerHighest.copy(alpha = 0.55f))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        // Icon disc — primary-tinted, soft surface around the glyph so it reads as a chip,
+        // not a flat icon.
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(scheme.primary.copy(alpha = 0.12f)),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp),
             )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+                lineHeight = 20.sp,
             )
         }
     }
@@ -381,31 +551,54 @@ private fun PromiseRow(number: String, text: String, visible: Boolean) {
 
 @Composable
 private fun PermissionPage(
+    active: Boolean,
     granted: Boolean,
     showRestrictedHelp: Boolean,
     onAllow: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    var stage by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        delay(120); stage = 1
-        delay(200); stage = 2
-        delay(220); stage = 3
-    }
+    val progress = rememberPageProgress(active)
+
     PageScaffold {
-        Spacer(Modifier.weight(0.4f))
-        AnimatedVisibility(visible = stage >= 1, enter = slideAndFade()) {
+        Spacer(Modifier.weight(0.3f))
+
+        // Visual anchor — a simple shield-like shape built from two overlapping circles
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scaleIn(progress, delay = 0f),
+            contentAlignment = Alignment.Center,
+        ) {
+            PermissionVisual()
+        }
+
+        Spacer(Modifier.height(36.dp))
+
+        // Headline
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottom(progress, delay = 0.12f),
+        ) {
             Text(
-                text = "One\npermission,\nthen we're\ndone.",
-                fontSize = 42.sp,
+                text = "One permission,\nthen we're done.",
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 48.sp,
+                lineHeight = 42.sp,
                 color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = (-0.6).sp,
             )
         }
-        Spacer(Modifier.height(24.dp))
-        AnimatedVisibility(visible = stage >= 2, enter = fadeIn(enterTween)) {
+
+        Spacer(Modifier.height(16.dp))
+
+        // Body
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.22f),
+        ) {
             Text(
                 text = "Salli reads SMS from your banks to build your transaction timeline. " +
                     "Messages stay on this phone.",
@@ -415,21 +608,24 @@ private fun PermissionPage(
             )
         }
 
-        AnimatedVisibility(
-            visible = showRestrictedHelp,
-            enter = fadeIn(enterTween) + slideInVertically(enterIntTween) { it / 6 },
-        ) {
-            Column(modifier = Modifier.padding(top = 20.dp)) {
+        if (showRestrictedHelp) {
+            Spacer(Modifier.height(20.dp))
+            Box(
+                modifier = Modifier.enterFromBottomTight(progress, delay = 0.3f),
+            ) {
                 RestrictedSettingsCard(onOpenAppSettings = onOpenAppSettings)
             }
         }
 
         Spacer(Modifier.weight(1f))
-        AnimatedVisibility(visible = stage >= 3, enter = fadeIn(enterTween)) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+
+        // Actions
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.38f),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 PillButton(
                     text = when {
                         granted -> "Permission granted"
@@ -455,10 +651,102 @@ private fun PermissionPage(
 }
 
 /**
- * Help card for the Android 13+ "restricted settings" roadblock. When the user installs
- * Salli outside Play Store, the OS silently blocks SMS access until they toggle
- * "Allow restricted settings" on the app's info page. The system doesn't surface this
- * anywhere the user would notice — so we explain it inline.
+ * Tiny SMS-bubble cluster, rendered with three overlapping speech-bubble cards that share
+ * the page's primary accent. Each bubble carries a faux row of "characters" rendered as
+ * tiny pills so the illustration reads as a stack of redacted SMS without committing to
+ * any literal text. Pure Compose — adapts to palette and fits any screen density.
+ */
+@Composable
+private fun PermissionVisual() {
+    val primary = MaterialTheme.colorScheme.primary
+    val surface = MaterialTheme.colorScheme.surfaceContainerHighest
+    Box(
+        modifier = Modifier.size(width = 200.dp, height = 140.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Back-most bubble — faded, peeking out from behind.
+        SmsBubble(
+            modifier = Modifier
+                .offset(x = (-46).dp, y = (-26).dp)
+                .size(width = 110.dp, height = 56.dp),
+            tint = surface,
+            contentTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+        )
+        // Middle bubble — a touch more opaque.
+        SmsBubble(
+            modifier = Modifier
+                .offset(x = 38.dp, y = (-4).dp)
+                .size(width = 130.dp, height = 60.dp),
+            tint = surface,
+            contentTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+        )
+        // Front bubble — primary-tinted, the focal point.
+        Box(
+            modifier = Modifier
+                .offset(x = (-12).dp, y = 28.dp)
+                .size(width = 150.dp, height = 64.dp)
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 6.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            primary.copy(alpha = 0.95f),
+                            primary.copy(alpha = 0.75f),
+                        ),
+                    ),
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Sms,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    BubbleLine(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f), width = 92.dp)
+                    BubbleLine(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.55f), width = 64.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmsBubble(
+    modifier: Modifier = Modifier,
+    tint: Color,
+    contentTint: Color,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 6.dp, bottomStart = 20.dp))
+            .background(tint)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            BubbleLine(contentTint, width = 70.dp)
+            BubbleLine(contentTint.copy(alpha = contentTint.alpha * 0.7f), width = 48.dp)
+        }
+    }
+}
+
+@Composable
+private fun BubbleLine(color: Color, width: androidx.compose.ui.unit.Dp) {
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(6.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
+}
+
+/**
+ * Help card for the Android 13+ "restricted settings" roadblock.
  */
 @Composable
 private fun RestrictedSettingsCard(onOpenAppSettings: () -> Unit) {
@@ -523,10 +811,6 @@ private fun openAppInfo(context: android.content.Context) {
 /**
  * Apps that install Salli through a session-based PackageInstaller (Obtainium, F-Droid's
  * privileged extension, ADB, etc.) are exempt from Android 15's SMS permission restriction.
- * If we detect we came in via one of those, there's no point showing the "allow restricted
- * settings" card — the permission dialog will work normally.
- *
- * Returns true when the restriction is likely enforced (direct-sideload install, Android 13+).
  */
 internal fun smsPermissionLikelyBlocked(context: android.content.Context): Boolean {
     if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return false
@@ -538,10 +822,6 @@ internal fun smsPermissionLikelyBlocked(context: android.content.Context): Boole
             context.packageManager.getInstallerPackageName(context.packageName)
         }
     }.getOrNull()
-    // Sideload via a file manager / browser usually sets installer to the default package-
-    // installer UI, which is the case that actually hits restricted settings. Obtainium,
-    // F-Droid (+extension), Aurora, and `adb install` all mark themselves differently or
-    // leave it null.
     val friendlyInstallers = setOf(
         "dev.imranr.obtainium",
         "dev.imranr.obtainium.fdroid",
@@ -560,92 +840,233 @@ internal fun smsPermissionLikelyBlocked(context: android.content.Context): Boole
 
 @Composable
 private fun ImportPage(
+    active: Boolean,
     import: ImportUiState,
     accounts: List<AccountEntity>,
     onDone: () -> Unit,
 ) {
+    val progress = rememberPageProgress(active)
     val fraction = if (import.total <= 0) 0f
     else (import.processed.toFloat() / import.total.toFloat()).coerceIn(0f, 1f)
-    val animatedFraction by animateFloatAsState(
+
+    val animatedFraction by androidx.compose.animation.core.animateFloatAsState(
         targetValue = fraction,
-        animationSpec = tween(400),
+        animationSpec = tween(500),
         label = "importProgress",
     )
+    // Smoothly count the visible numbers up as transactions land \u2014 no jarring jumps when the
+    // importer batches insertions. Same animation length as the bar so the percentage and the
+    // counter agree at every frame.
+    val animatedProcessed by animateIntAsState(
+        targetValue = import.processed,
+        animationSpec = tween(500),
+        label = "importProcessed",
+    )
+    val animatedInserted by animateIntAsState(
+        targetValue = import.inserted,
+        animationSpec = tween(500),
+        label = "importInserted",
+    )
+    val finished = import.finished && import.error == null
 
     PageScaffold {
-        Spacer(Modifier.weight(0.4f))
+        Spacer(Modifier.weight(0.35f))
+
         val title = when {
-            import.finished && import.error == null -> "All done."
+            finished -> "All done."
             import.error != null -> "Hmm, something went wrong."
-            import.total > 0 -> "Reading your\nbank messages…"
-            else -> "Getting ready…"
+            import.total > 0 -> "Reading your\nbank messages..."
+            else -> "Getting ready..."
         }
-        Text(
-            text = title,
-            fontSize = 42.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 48.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = when {
-                import.finished && import.error == null -> "Found ${import.inserted} transactions across ${accounts.size} account${if (accounts.size == 1) "" else "s"}."
-                import.error != null -> import.error
-                import.total > 0 -> "Scanned ${import.processed} of ${import.total} messages · ${import.inserted} transactions so far."
-                else -> "Scanning your inbox for bank alerts…"
-            },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 24.sp,
-        )
-
-        Spacer(Modifier.height(32.dp))
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                .enterFromBottom(progress, delay = 0f),
         ) {
-            LinearProgressIndicator(
-                progress = { animatedFraction },
-                color = MaterialTheme.colorScheme.onSurface,
-                trackColor = androidx.compose.ui.graphics.Color.Transparent,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape),
-                drawStopIndicator = {},
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 44.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = (-0.6).sp,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (finished) {
+                    Spacer(Modifier.width(12.dp))
+                    FinishedTick()
+                }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.12f),
+        ) {
+            Text(
+                text = when {
+                    finished ->
+                        "Found $animatedInserted transactions across ${accounts.size} account${if (accounts.size == 1) "" else "s"}."
+                    import.error != null -> import.error
+                    import.total > 0 ->
+                        "Scanned $animatedProcessed of ${import.total} messages \u00b7 $animatedInserted transactions so far."
+                    else -> "Scanning your inbox for bank alerts..."
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 24.sp,
             )
         }
 
         Spacer(Modifier.height(32.dp))
 
+        // Progress bar — alive, with a subtle glow
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .enterFromBottomTight(progress, delay = 0.2f),
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                ) {
+                    LinearProgressIndicator(
+                        progress = { animatedFraction },
+                        color = MaterialTheme.colorScheme.onSurface,
+                        trackColor = Color.Transparent,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        drawStopIndicator = {},
+                    )
+                }
+                if (import.total > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "${(animatedFraction * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.End),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
         if (accounts.isNotEmpty()) {
-            Text(
-                text = "ACCOUNTS DISCOVERED",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .enterFromBottomTight(progress, delay = 0.3f),
+            ) {
+                Text(
+                    text = "ACCOUNTS DISCOVERED",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(10.dp))
-            accounts.take(4).forEach { a ->
-                DiscoveredAccountRow(a)
+            accounts.take(4).forEachIndexed { idx, a ->
+                DiscoveredAccountChipReveal(account = a, index = idx)
                 Spacer(Modifier.height(8.dp))
             }
         }
 
         Spacer(Modifier.weight(1f))
+
         if (import.finished || import.error != null) {
-            PillButton(text = "Open Salli", onClick = onDone)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .enterFromBottomTight(progress, delay = 0.4f),
+            ) {
+                PillButton(text = "Open Salli", onClick = onDone)
+            }
         }
+    }
+}
+
+/**
+ * Animated checkmark badge shown next to "All done." when import completes. Uses a quick
+ * spring scale-in so it lands with a small bit of life — the only "celebration" moment in
+ * the onboarding flow, kept restrained on purpose.
+ */
+@Composable
+private fun FinishedTick() {
+    val scale = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        scale.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+        )
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+                alpha = scale.value.coerceIn(0f, 1f)
+            }
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+/**
+ * Each discovered account chip animates in independently the first time it composes,
+ * using the account id as the key so a recomposition (progress tick) doesn't replay
+ * the entrance.
+ */
+@Composable
+private fun DiscoveredAccountChipReveal(account: AccountEntity, index: Int) {
+    val chipProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(index * 120L)
+        chipProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = chipProgress.value
+                translationY = (1f - chipProgress.value) * 20.dp.toPx()
+            },
+    ) {
+        DiscoveredAccountRow(account)
     }
 }
 
 @Composable
 private fun DiscoveredAccountRow(a: AccountEntity) {
+    val logoPath = BankLogos.resolve(a.senderAddress)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -654,11 +1075,31 @@ private fun DiscoveredAccountRow(a: AccountEntity) {
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
-        )
+        if (logoPath != null) {
+            AsyncImage(
+                model = BankLogos.asAssetUri(logoPath),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape),
+            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Outlined.AccountBalance,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -668,7 +1109,7 @@ private fun DiscoveredAccountRow(a: AccountEntity) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = a.senderAddress + if (a.accountSuffix != "—") " · ${a.accountSuffix}" else "",
+                text = a.senderAddress + if (a.accountSuffix != "\u2014") " \u00b7 ${a.accountSuffix}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -699,19 +1140,22 @@ private fun PillButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
 ) {
-    val bg =
-        if (enabled) MaterialTheme.colorScheme.inverseSurface
-        else MaterialTheme.colorScheme.surfaceContainerHigh
-    val fg =
-        if (enabled) MaterialTheme.colorScheme.inverseOnSurface
-        else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (enabled) MaterialTheme.colorScheme.inverseSurface
+    else MaterialTheme.colorScheme.surfaceContainerHigh
+    val fg = if (enabled) MaterialTheme.colorScheme.inverseOnSurface
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .height(52.dp)
+            .shadow(
+                elevation = if (enabled) 4.dp else 0.dp,
+                shape = CircleShape,
+                clip = false,
+            )
             .clip(CircleShape)
             .background(bg)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 18.dp),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(

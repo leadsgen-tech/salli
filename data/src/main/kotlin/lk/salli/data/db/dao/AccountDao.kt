@@ -57,18 +57,49 @@ interface AccountDao {
     suspend fun deleteById(id: Long)
 
     /**
-     * Atomically sets the account's cached balance to whatever the most-recent (by body
-     * timestamp) balance-carrying transaction for that account says. One SQL statement — no
-     * read-then-write race, no chance of a stale read.
+     * Atomically recomputes the account's cached balance.
+     *
+     * Strategy:
+     *  - **Anchor:** the most-recent balance-carrying transaction (the SMS body included an
+     *    `Av_Bal` / `Balance available` clause). That row's `balance_minor` is treated as
+     *    ground truth at its timestamp.
+     *  - **Imputed delta:** every newer transaction for this account that came in *without*
+     *    a balance contributes to the cached balance — debits subtract, credits add. Declined
+     *    attempts and transfer-grouped legs (internal transfers, net-zero) are excluded.
+     *
+     * This handles People's Bank debit SMS that ship without `Av_Bal` (2026 vintage) and
+     * any future bank shape that omits the balance — the cached chip stays in sync without
+     * needing a fresh balance-bearing SMS to land.
+     *
+     * If the account has *no* balance-carrying transactions at all (card-only senders like
+     * ComBank `#5166`), the outer SELECT returns NULL and `balance_minor` stays unset.
      */
     @Query(
         """
-        UPDATE accounts
-        SET balance_minor = (
-            SELECT balance_minor FROM transactions
-            WHERE account_id = :accountId AND balance_minor IS NOT NULL
-            ORDER BY timestamp DESC
-            LIMIT 1
+        UPDATE accounts SET balance_minor = (
+            SELECT (
+                SELECT balance_minor FROM transactions
+                WHERE account_id = :accountId AND balance_minor IS NOT NULL
+                ORDER BY timestamp DESC LIMIT 1
+            ) + IFNULL((
+                SELECT SUM(
+                    CASE flow_id
+                        WHEN 0 THEN -amount_minor
+                        WHEN 1 THEN amount_minor
+                        ELSE 0
+                    END
+                )
+                FROM transactions
+                WHERE account_id = :accountId
+                  AND balance_minor IS NULL
+                  AND is_declined = 0
+                  AND transfer_group_id IS NULL
+                  AND timestamp > IFNULL((
+                      SELECT timestamp FROM transactions
+                      WHERE account_id = :accountId AND balance_minor IS NOT NULL
+                      ORDER BY timestamp DESC LIMIT 1
+                  ), 0)
+            ), 0)
         )
         WHERE id = :accountId
         """,

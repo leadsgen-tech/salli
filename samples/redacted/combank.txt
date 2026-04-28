@@ -19,3 +19,13 @@ Credit for Rs. 247,330.00 to 8025675326 at 22:43 at DIGITAL BANKING DIVISION
 We wish to confirm a CRM Deposit at 16:57 for Rs. 150,000.00 through POLGAHAW-CRM1 BR to your account 8*****5326
 
 Dear Customer , We noticed that you have not logged into your ComBank  Digital account for the past 30 days. You can conveniently access your Bank accounts by logging in to ComBank Digital online banking service from wherever you are, 24 hours a day.
+
+Fund transfer request [REF] P 2026-04-16 at 11:47:41 via Combank Online to [NAME] for LKR 15000.00 Inquiries+[PHONE].
+
+Bill Payment in the amount of LKR 547.00 was received on 31/03/2026 from the ComBank Digital.
+
+Dialog Axiata PLC - Mobile  bill payment effected through Combank Digital.  Status - Completed. Reference  [REF]    For inquiries +[PHONE]
+
+Dear Customer, your attempt to login to ComBank Digital failed. For inquiries +[PHONE]
+
+Dear Customer, a scheduled system maintenance will take place on Sunday, 18th May 1:00AM to 5:30AM SL time. During this time, you may experience interruptions on all Credit and Debit Card transactions, Digital Banking & ATM services. We regret any inconvenience caused.

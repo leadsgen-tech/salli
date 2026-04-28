@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,8 +26,10 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Inbox
@@ -66,10 +69,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import lk.salli.app.BuildConfig
 import lk.salli.app.FeatureFlags
 import lk.salli.data.ai.LocalModel
 import lk.salli.data.ai.ModelStatus
 import lk.salli.domain.ParseMode
+
+// Community / repo URLs. Single source of truth so a future fork-and-rename only edits here.
+private const val GITHUB_REPO_URL = "https://github.com/leadsgen-tech/salli"
+private const val BANK_REQUEST_ISSUE_URL =
+    "https://github.com/leadsgen-tech/salli/issues/new?template=bank_support_request.yml"
+
+private fun openUrl(context: android.content.Context, url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }
+}
 
 @Composable
 fun SettingsScreen(
@@ -206,19 +222,24 @@ fun SettingsScreen(
         }
 
         item { Spacer(Modifier.height(16.dp)) }
-        item { SectionLabel("ABOUT") }
+        item { SectionLabel("COMMUNITY") }
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Text("Salli v0.1.0", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Open source, Apache 2.0. All parsing happens on-device. Network is only used " +
-                        "if you enable AI mode, to download the model once.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            BankRequestBanner(
+                onClick = { openUrl(context, BANK_REQUEST_ISSUE_URL) },
+            )
         }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Code,
+                title = "Source on GitHub",
+                subtitle = "Apache 2.0 · audit, fork, contribute",
+                onClick = { openUrl(context, GITHUB_REPO_URL) },
+            )
+        }
+
+        item { Spacer(Modifier.height(16.dp)) }
+        item { SectionLabel("ABOUT") }
+        item { AboutCard() }
     }
 
     if (confirmingDelete) {
@@ -894,5 +915,105 @@ private fun UnknownBadge(count: Int) {
             color = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
         )
+    }
+}
+
+/**
+ * Hero card inviting users to file a bank-support request when their bank isn't parsed yet.
+ * Primary-tinted so it reads as a call-to-action, not just another row. Anchors the
+ * Community section so the contribution path feels first-class rather than buried in About.
+ */
+@Composable
+private fun BankRequestBanner(onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        color = scheme.primaryContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(scheme.primary.copy(alpha = 0.18f)),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AccountBalance,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.size(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Don't see your bank?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "Help us add it — share a few redacted SMS samples.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onPrimaryContainer.copy(alpha = 0.85f),
+                    lineHeight = 18.sp,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * About card — pulls the version straight from BuildConfig so a versionName bump in
+ * gradle is the only place to change the user-visible string.
+ */
+@Composable
+private fun AboutCard() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Salli",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.size(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(
+                        text = "v${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Open source under Apache 2.0. Every parse runs on this device. " +
+                    "The only network call is the optional one-time AI model download.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 20.sp,
+            )
+        }
     }
 }

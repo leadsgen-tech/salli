@@ -36,6 +36,12 @@ object TimeParser {
     // DD/MM/YYYY hh:mm:ss AM|PM — Seylan card debit.
     private val seylan = DateTimeFormatter.ofPattern("d/M/yyyy h:mm:ss a", java.util.Locale.ENGLISH)
 
+    // YYYY-MM-DD HH:MM:SS — ComBank fund-transfer-via-Combank-Online (24h).
+    private val combankFundTransfer = DateTimeFormatter.ofPattern("yyyy-M-d H:mm:ss")
+
+    // DD/MM/YYYY — ComBank "Bill Payment in the amount of … was received on …" (date only).
+    private val combankBillPayment = DateTimeFormatter.ofPattern("d/M/yyyy")
+
     fun parsePeoplesPrimary(timeOfDay: String, date: String): Long? =
         runCatching {
             LocalDateTime.parse("$timeOfDay $date", peoplesPrimary)
@@ -70,5 +76,18 @@ object TimeParser {
         runCatching {
             LocalDateTime.parse("$date $time ${ampm.uppercase()}", seylan)
                 .atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    fun parseCombankFundTransfer(date: String, time: String): Long? =
+        runCatching {
+            LocalDateTime.parse("$date $time", combankFundTransfer)
+                .atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    /** Date-only — Bill Payment confirmation falls back to midnight Colombo. */
+    fun parseCombankBillPayment(date: String): Long? =
+        runCatching {
+            java.time.LocalDate.parse(date, combankBillPayment)
+                .atStartOfDay(colombo).toInstant().toEpochMilli()
         }.getOrNull()
 }

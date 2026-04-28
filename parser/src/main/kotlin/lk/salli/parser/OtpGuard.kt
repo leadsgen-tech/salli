@@ -27,5 +27,15 @@ object OtpGuard {
         RegexOption.IGNORE_CASE,
     )
 
-    fun isOtp(body: String): Boolean = otpWithCode.containsMatchIn(body)
+    // ComBank's transaction-approval prompts use neither "OTP" nor "verification code" —
+    // they read `… attempted. Please use code NNNNNN to approve. Do NOT share this number …`
+    // Matched separately so we don't relax the main `keyword` set into something that catches
+    // arbitrary "code" mentions in transactional SMS.
+    private val approvalCode = Regex(
+        """\bplease\s+use\s+code\s+\d{4,8}\s+to\s+approve\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun isOtp(body: String): Boolean =
+        otpWithCode.containsMatchIn(body) || approvalCode.containsMatchIn(body)
 }

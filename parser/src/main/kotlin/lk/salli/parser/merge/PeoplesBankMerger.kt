@@ -9,7 +9,8 @@ import kotlin.math.abs
  * People's Bank sends **two** SMS for one logical outgoing transaction:
  *
  *  1. Primary debit — `Dear Sir/Madam, Your A/C … has been debited by Rs. 50025.00 (LPAY Tfr …)`
- *     Carries **account + balance + fee-inclusive amount** but no payee.
+ *     Carries **account + fee-inclusive amount** plus an *optional* `Av_Bal` block. Newer SMS
+ *     (observed 2026-04 onwards) drop the balance entirely; the merger must still pair them.
  *
  *  2. Confirmation — `Fund transfer Successful. LKR 50000.00 to LOLC Finance PLC …` or
  *     `Mobile Payment Successful, LKR 100.00 to Mobitel …`
@@ -72,7 +73,13 @@ object PeoplesBankMerger {
         return Pair(primary, confirm)
     }
 
-    /** The primary is the "debited/credited" SMS — recognised by balance + accountSuffix. */
+    /**
+     * The primary is the "debited/credited" SMS — recognised by `accountSuffix` and the
+     * absence of a payee. Balance is intentionally NOT part of the test: People's Bank started
+     * shipping primaries without `Av_Bal` in 2026, and gating on balance would silently break
+     * the merge for every such pair (we'd end up with two rows per transfer plus a stale
+     * cached balance).
+     */
     private fun pickPrimary(a: ParsedTransaction, b: ParsedTransaction): ParsedTransaction? = when {
         isPrimary(a) && isConfirm(b) -> a
         isPrimary(b) && isConfirm(a) -> b
@@ -80,10 +87,10 @@ object PeoplesBankMerger {
     }
 
     private fun isPrimary(p: ParsedTransaction): Boolean =
-        p.balance != null && p.accountNumberSuffix != null && p.merchantRaw == null
+        p.accountNumberSuffix != null && p.merchantRaw == null
 
     private fun isConfirm(p: ParsedTransaction): Boolean =
-        p.balance == null && p.accountNumberSuffix == null && p.merchantRaw != null
+        p.accountNumberSuffix == null && p.merchantRaw != null
 
     private fun merge(
         primary: ParsedTransaction,

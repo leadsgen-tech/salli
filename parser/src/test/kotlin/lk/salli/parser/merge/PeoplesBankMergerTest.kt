@@ -35,6 +35,30 @@ class PeoplesBankMergerTest {
     }
 
     @Test
+    fun `merges primary that arrives without an Av_Bal block (2026 vintage)`() {
+        // Real scenario: confirm "LKR 6500.00 to Commercial Bank PLC", primary "Rs. 6525.00
+        // (LPAY Tfr)" with no Av_Bal. Pre-fix the merger required a non-null balance on the
+        // primary and refused to pair, leaving two rows.
+        val confirm = peoplesFundTransferConfirm(
+            timestamp = 1_000_000_000L,
+            amountMinor = 650_000,
+            merchantRaw = "Commercial Bank PLC",
+        )
+        val primary = peoplesPrimaryDebit(
+            timestamp = 1_000_004_000L, // +4s
+            amountMinor = 652_500,
+            balanceMinor = null,
+        )
+        val result = PeoplesBankMerger.tryMerge(primary, recent = listOf(confirm))
+        assertThat(result).isNotNull()
+        assertThat(result!!.merged.amount.minorUnits).isEqualTo(652_500)
+        assertThat(result.merged.fee?.minorUnits).isEqualTo(2_500)
+        assertThat(result.merged.merchantRaw).isEqualTo("Commercial Bank PLC")
+        assertThat(result.merged.balance).isNull() // primary didn't carry one
+        assertThat(result.merged.type).isEqualTo(TransactionType.ONLINE_TRANSFER)
+    }
+
+    @Test
     fun `merges in reverse order - confirm-then-primary`() {
         val confirm = peoplesFundTransferConfirm(
             timestamp = 1_000_000_000L,
@@ -157,12 +181,12 @@ class PeoplesBankMergerTest {
     private fun peoplesPrimaryDebit(
         timestamp: Long,
         amountMinor: Long,
-        balanceMinor: Long,
+        balanceMinor: Long?,
     ) = ParsedTransaction(
         senderAddress = "PeoplesBank",
         accountNumberSuffix = "280-2001****68",
         amount = Money(amountMinor, Currency.LKR),
-        balance = Money(balanceMinor, Currency.LKR),
+        balance = balanceMinor?.let { Money(it, Currency.LKR) },
         fee = null,
         flow = TransactionFlow.EXPENSE,
         type = TransactionType.MOBILE_PAYMENT,

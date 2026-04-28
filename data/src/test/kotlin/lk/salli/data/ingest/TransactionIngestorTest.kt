@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import lk.salli.data.categorization.KeywordCategorizer
+import lk.salli.data.categorization.TypeCategorizer
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.seed.Seeder
 import org.junit.After
@@ -46,6 +47,7 @@ class TransactionIngestorTest {
         ingestor = TransactionIngestor(
             db = db,
             categorizer = KeywordCategorizer(db.keywords()),
+            typeCategorizer = TypeCategorizer(db.categories()),
             now = { clock },
         )
     }
@@ -111,6 +113,41 @@ class TransactionIngestorTest {
         // Still only one row.
         val allPeoples = db.transactions().recentFromSender("PeoplesBank", 0L)
         assertThat(allPeoples).hasSize(1)
+    }
+
+    @Test
+    fun `PeoplesBank primary without Av_Bal still merges and decrements cached balance`() = runBlocking {
+        // Establish a baseline balance via an earlier credit that DID carry Av_Bal.
+        val creditBody = "Dear Sir/Madam, Your A/C 280-2001****68 has been credited by Rs. 10000.00 (LPAY Tfr @13:53 27/04/2026).[Av_Bal: Rs. 10996.27 at the time of SMS generated]"
+        val rCredit = ingestor.ingest("PeoplesBank", creditBody, receivedAt = clock)
+        assertThat(rCredit).isInstanceOf(IngestResult.Inserted::class.java)
+
+        clock += 24L * 60 * 60 * 1000 // next day
+        // Today: confirm + primary for a fund transfer to Commercial Bank PLC. Primary has
+        // NO `Av_Bal` block — the 2026 vintage People's Bank ships.
+        val confirmBody = "Fund transfer  Successful. LKR 6500.00 to Commercial Bank PLC Account 8014912920 on 2026-04-28 00:21:46. Call 1961"
+        val primaryBody = "Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 6525.00 (LPAY Tfr @00:21 28/04/2026). Thank You- Inquiries Dial: 1961"
+
+        val rConfirm = ingestor.ingest("PeoplesBank", confirmBody, receivedAt = clock)
+        assertThat(rConfirm).isInstanceOf(IngestResult.Inserted::class.java)
+
+        clock += 4_000
+        val rPrimary = ingestor.ingest("PeoplesBank", primaryBody, receivedAt = clock)
+        assertThat(rPrimary).isInstanceOf(IngestResult.Merged::class.java)
+
+        // Exactly one transfer row in DB (besides the original credit).
+        val allPeoples = db.transactions().recentFromSender("PeoplesBank", 0L)
+        assertThat(allPeoples).hasSize(2)
+        val transfer = allPeoples.first { it.merchantRaw == "Commercial Bank PLC" }
+        assertThat(transfer.amountMinor).isEqualTo(652_500) // primary's fee-inclusive amount
+        assertThat(transfer.feeMinor).isEqualTo(2_500)
+        assertThat(transfer.balanceMinor).isNull()
+
+        // Cached balance is the credit's Av_Bal (10996.27) MINUS the merged debit (6525.00) =
+        // 4471.27, even though the debit SMS itself never carried a balance.
+        val account = db.accounts().findBySenderAndSuffix("PeoplesBank", "280-2001..68")
+        assertThat(account).isNotNull()
+        assertThat(account!!.balanceMinor).isEqualTo(447_127)
     }
 
     @Test

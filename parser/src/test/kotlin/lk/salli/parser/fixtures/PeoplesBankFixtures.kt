@@ -203,6 +203,23 @@ object PeoplesBankFixtures {
                 merchantRaw = "Bank Of Ceylon - BOC",
             ),
         ),
+        // 2026-04 onwards: People's Bank started shipping LPAY primaries WITHOUT the
+        // `Av_Bal` block. Pre-fix, this body parsed fine but PeoplesBankMerger refused to
+        // pair it with its confirm (because isPrimary required a non-null balance), so each
+        // transfer landed as two rows + a stale cached balance.
+        ParseCase(
+            label = "peoples_lpay_debit_no_av_bal",
+            sender = "PeoplesBank",
+            body = "Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 6525.00 (LPAY Tfr @00:21 28/04/2026). Thank You- Inquiries Dial: 1961",
+            expected = Expectation.Success(
+                type = TransactionType.MOBILE_PAYMENT,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 652500,
+                currency = Currency.LKR,
+                balanceMinor = null,
+                accountSuffix = "280-2001..68",
+            ),
+        ),
         // --- Informational (must be rejected) ---
         ParseCase(
             label = "peoples_login_alert",

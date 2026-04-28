@@ -228,7 +228,10 @@ private fun AccountStack(
     monthTrend: Trend?,
     monthExpense: Money,
 ) {
-    val withBalance = accounts.filter { it.balance != null }
+    // Show every account that the parser has seen at least one transaction for. Accounts that
+    // never carry a balance in their SMS (ComBank card-level, HSBC card, etc.) used to be
+    // filtered out completely, which made entire banks vanish from Home; the chip itself
+    // gracefully renders without a balance line.
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -247,8 +250,8 @@ private fun AccountStack(
                     clip = false,
                 ),
         )
-        if (withBalance.isNotEmpty()) {
-            AccountChipsRow(accounts = withBalance)
+        if (accounts.isNotEmpty()) {
+            AccountChipsRow(accounts = accounts)
         }
     }
 }
@@ -303,7 +306,6 @@ private fun AccountChip(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    val balance = account.balance ?: return
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -319,11 +321,15 @@ private fun AccountChip(
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = formatMoneyBold(balance),
+            // Card-level accounts (ComBank #5166, HSBC card, etc.) never carry a balance in
+            // their SMS — render the suffix instead so the chip still tells the user which
+            // physical card the row represents.
+            text = account.balance?.let(::formatMoneyBold) ?: account.accountLabel,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onPrimary,
             maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }
