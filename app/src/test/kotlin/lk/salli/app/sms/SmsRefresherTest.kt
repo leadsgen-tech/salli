@@ -354,6 +354,37 @@ class SmsRefresherTest {
     }
 
     @Test
+    fun `a pull that waited out a pass which did nothing takes its Running back`() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val reads = AtomicInteger()
+        val refresher = refresher(
+            HistoricalImporter(
+                readInbox = { reads.incrementAndGet(); listOf(rawSms(1)) },
+                ingestMessage = { _, _, _ ->
+                    started.complete(Unit)
+                    release.await()
+                    // Fails, so the pass settles on Failed rather than Done — the queued caller
+                    // must still not leave a Running of its own standing behind it.
+                    error("provider went away")
+                },
+            ),
+        )
+
+        refresher.refresh()
+        withTimeout(TIMEOUT) { started.await() }
+        refresher.refresh()
+        release.complete(Unit)
+
+        withTimeout(TIMEOUT) { refresher.status.first { it is RefreshStatus.Failed } }
+        // The queued pull waits out the pass, then settles: it never starts a second read, and
+        // the status it reported is either replaced by the real result or handed back.
+        withTimeout(TIMEOUT) { refresher.refreshing.first { !it } }
+        assertThat(refresher.status.value).isInstanceOf(RefreshStatus.Failed::class.java)
+        assertThat(reads.get()).isEqualTo(1)
+    }
+
+    @Test
     fun `an ensure that finds the import already done reports nothing rather than Running`() = runBlocking {
         prefs.setHistoricalImportCompleted(true)
         val refresher = refresher(importerOf())

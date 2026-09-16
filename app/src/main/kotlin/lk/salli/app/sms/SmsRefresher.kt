@@ -116,11 +116,7 @@ class SmsRefresher internal constructor(
     fun refresh() {
         scope.launch {
             if (!mutex.tryLock()) {
-                // Something is already reading the inbox. Say so rather than returning silently
-                // and leaving the indicator claiming a refresh that never happened. Only promote
-                // from Idle: the run in flight owns Running, and its Done must not be clobbered
-                // if it settles between our tryLock and this line.
-                _status.compareAndSet(RefreshStatus.Idle, RefreshStatus.Running)
+                reportSomeoneElseIsReading()
                 return@launch
             }
             try {
@@ -169,17 +165,31 @@ class SmsRefresher internal constructor(
     }
 
     /**
-     * Hands back a [RefreshStatus.Running] that a *queued* caller set on this pass's behalf, in
-     * the case where the pass then decides it has nothing to do.
+     * What a caller does when it finds the pipeline busy: report that something *is* running
+     * rather than returning silently and leaving the indicator describing a refresh that never
+     * happened, then make sure that report doesn't outlive the pass it was made about.
      *
-     * The window is real: [ensureHistoricalImport] holds the mutex across two DataStore reads
-     * before it knows whether to run, and a pull landing in there is told "Running" by
-     * [refresh]'s `tryLock` path. Without this the capsule would spin forever behind a pass that
-     * never started, with [refreshing] false and nothing to clear it.
+     * The promotion is only from [RefreshStatus.Idle] — the pass in flight owns `Running`, and
+     * its `Done` must survive if it settles between our `tryLock` and the swap.
      *
-     * Scoped to [RefreshStatus.Running] so a settled [RefreshStatus.Done] the UI has not read
-     * yet is never thrown away. Safe to call only while holding the mutex — that is what makes
-     * a `Running` here provably stale.
+     * Then we queue on the mutex rather than returning. Whoever held it is finished by the time
+     * we get in, so a `Running` still standing at that point is provably behind nothing and is
+     * handed back. That closes the case this exists for — [ensureHistoricalImport] holding the
+     * lock across two DataStore reads and then deciding not to run at all — without depending on
+     * *when* it decides: if it settles on `Done` we no-op, and if it no-ops we clean up after it.
+     * Waiting costs a parked coroutine and starts no second pass over the inbox.
+     */
+    private suspend fun reportSomeoneElseIsReading() {
+        _status.compareAndSet(RefreshStatus.Idle, RefreshStatus.Running)
+        mutex.withLock { releaseQueuedStatus() }
+    }
+
+    /**
+     * Drops a [RefreshStatus.Running] that no pass is behind any more.
+     *
+     * Scoped to `Running` so a settled [RefreshStatus.Done] the UI has not read yet is never
+     * thrown away. Only correct while holding the mutex — that is what makes a `Running` here
+     * provably stale.
      */
     private fun releaseQueuedStatus() {
         _status.compareAndSet(RefreshStatus.Running, RefreshStatus.Idle)
@@ -199,7 +209,7 @@ class SmsRefresher internal constructor(
     fun resyncAll() {
         scope.launch {
             if (!mutex.tryLock()) {
-                _status.compareAndSet(RefreshStatus.Idle, RefreshStatus.Running)
+                reportSomeoneElseIsReading()
                 return@launch
             }
             try {
