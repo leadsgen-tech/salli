@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.app.R
+import lk.salli.app.sms.refreshOutcome
 import lk.salli.app.features.budgets.BudgetPace
 import lk.salli.app.features.budgets.BudgetUi
 import lk.salli.app.features.budgets.BudgetsViewModel
@@ -113,6 +114,8 @@ fun PlanScreen(
     val goals by goalsViewModel.state.collectAsStateWithLifecycle()
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
     val planning by viewModel.planningSnapshot.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val refreshStatus by viewModel.refreshStatus.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now(ZoneId.of("Asia/Colombo")).toEpochDay() }
     val bringIntoView = remember(upcoming) {
         upcoming.map { it.dueEpochDay }.distinct().associateWith { BringIntoViewRequester() }
@@ -120,6 +123,13 @@ fun PlanScreen(
     val scope = rememberCoroutineScope()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+    lk.salli.design.components.SalliPullToRefresh(
+        isRefreshing = refreshing,
+        onRefresh = viewModel::refresh,
+        outcome = refreshOutcome(refreshStatus),
+        onOutcomeConsumed = viewModel::consumeRefreshStatus,
+        modifier = Modifier.fillMaxSize(),
+    ) {
     LazyColumn(
         contentPadding = PaddingValues(
             start = SalliSpacing.screenGutter,
@@ -294,6 +304,7 @@ fun PlanScreen(
                 )
             }
         }
+    }
     }
 }
 

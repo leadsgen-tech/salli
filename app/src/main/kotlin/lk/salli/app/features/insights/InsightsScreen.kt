@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.app.R
+import lk.salli.app.sms.refreshOutcome
 import lk.salli.design.components.*
 import lk.salli.design.format.MoneyFormat
 import lk.salli.domain.Money
@@ -30,7 +31,14 @@ fun InsightsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
-    SalliPullToRefresh(refreshing, viewModel::refresh, Modifier.fillMaxSize()) {
+    val refreshStatus by viewModel.refreshStatus.collectAsStateWithLifecycle()
+    SalliPullToRefresh(
+        isRefreshing = refreshing,
+        onRefresh = viewModel::refresh,
+        modifier = Modifier.fillMaxSize(),
+        outcome = refreshOutcome(refreshStatus),
+        onOutcomeConsumed = viewModel::consumeRefreshStatus,
+    ) {
         LazyColumn(contentPadding = PaddingValues(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = 132.dp)) {
             item { Header(state.range.label, state.totalSpend, viewModel::onPrevRange, viewModel::onNextRange) }
             if (state.slices.isEmpty() && !state.loading) {

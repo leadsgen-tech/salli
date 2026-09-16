@@ -75,7 +75,9 @@ class InsightsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
+    val refreshStatus = refresher.status
     fun refresh() = refresher.refresh()
+    fun consumeRefreshStatus() = refresher.consume()
 
     private val _range = MutableStateFlow(DateRange.currentMonth())
     val range: StateFlow<DateRange> = _range

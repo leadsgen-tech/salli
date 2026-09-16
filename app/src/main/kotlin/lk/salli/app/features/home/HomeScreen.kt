@@ -47,6 +47,7 @@ import lk.salli.app.features.planning.SafeToSpendViewModel
 import lk.salli.app.features.budgets.BudgetsViewModel
 import lk.salli.app.features.budgets.BudgetUi
 import lk.salli.app.R
+import lk.salli.app.sms.refreshOutcome
 import lk.salli.data.upcoming.UpcomingItem
 import lk.salli.data.upcoming.UpcomingKind
 import lk.salli.data.upcoming.UpcomingRoutes
@@ -103,6 +104,7 @@ fun HomeScreen(
     val planning by planningViewModel.snapshot.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val refreshStatus by viewModel.refreshStatus.collectAsStateWithLifecycle()
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -116,6 +118,8 @@ fun HomeScreen(
     lk.salli.design.components.SalliPullToRefresh(
         isRefreshing = refreshing,
         onRefresh = { viewModel.refresh() },
+        outcome = refreshOutcome(refreshStatus),
+        onOutcomeConsumed = viewModel::consumeRefreshStatus,
         modifier = Modifier.fillMaxSize(),
     ) {
     LazyColumn(

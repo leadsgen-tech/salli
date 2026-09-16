@@ -76,8 +76,7 @@ import lk.salli.design.components.MiniBarChart
 import lk.salli.app.R
 import lk.salli.domain.Money
 import lk.salli.app.nav.ActivityFilterArgs
-import lk.salli.app.sms.RefreshStatus
-import lk.salli.design.components.PullRefreshOutcome
+import lk.salli.app.sms.refreshOutcome
 
 @Composable
 fun TimelineScreen(
@@ -198,19 +197,6 @@ fun TimelineScreen(
             },
         )
     }
-}
-
-@Composable
-private fun refreshOutcome(status: RefreshStatus): PullRefreshOutcome? = when (status) {
-    RefreshStatus.Idle, RefreshStatus.Running -> null
-    is RefreshStatus.Done -> PullRefreshOutcome(
-        message = when {
-            status.inserted == 0 && status.queued == 0 -> stringResource(R.string.activity_refresh_up_to_date)
-            status.queued > 0 -> stringResource(R.string.activity_refresh_new_and_review, status.inserted, status.queued)
-            else -> stringResource(R.string.activity_refresh_new_transactions, status.inserted)
-        },
-    )
-    is RefreshStatus.Failed -> PullRefreshOutcome(stringResource(R.string.activity_refresh_failed), failed = true)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

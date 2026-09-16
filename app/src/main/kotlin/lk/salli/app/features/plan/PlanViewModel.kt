@@ -35,7 +35,13 @@ data class PlanUiState(
 class PlanViewModel @Inject constructor(
     db: SalliDatabase,
     planning: PlanningService,
+    private val refresher: lk.salli.app.sms.SmsRefresher,
 ) : ViewModel() {
+
+    val refreshing = refresher.refreshing
+    val refreshStatus = refresher.status
+    fun refresh() = refresher.refresh()
+    fun consumeRefreshStatus() = refresher.consume()
 
     val upcoming: StateFlow<List<UpcomingItem>> = UpcomingService(db).observe()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
