@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,7 +27,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,6 +52,13 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     val sortAnimation = remember { Animatable(sort) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val view = LocalView.current
+    SideEffect {
+        (context as? Activity)?.window?.let { window ->
+            window.statusBarColor = SalliBrandColors.Cobalt.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+        }
+    }
     var tick by remember { mutableIntStateOf(0) }
     val granted = remember(tick) { SmsPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
@@ -87,7 +98,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 
 @Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
     val haptic = LocalHapticFeedback.current
-    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) }, 0f, Modifier.fillMaxWidth().height(360.dp), setOf(2, 5), reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
+    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) }, 0f, Modifier.fillMaxWidth().height(380.dp), setOf(2, 5), reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
@@ -95,9 +106,9 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 
 @Composable private fun SortAct(progress: Float, granted: Boolean, onProgress: (Float) -> Unit, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) = StageScaffold(lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress), MaterialTheme.colorScheme.onBackground, onSkip) {
     BubbleStage(
-        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) },
+        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) },
         sortProgress = progress,
-        modifier = Modifier.fillMaxWidth().height(230.dp),
+        modifier = Modifier.fillMaxWidth().height(280.dp),
         discarded = setOf(2, 5),
         reducedMotion = LocalReducedMotion.current,
         bubble = { Bubble(BubbleLabels[it]) },
@@ -149,8 +160,8 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 
 @Composable private fun StageScaffold(stage: Color, content: Color, skip: (() -> Unit)?, body: @Composable () -> Unit) {
     val color by animateColorAsState(stage, label = "onboarding stage")
-    Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
-        if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip) { Text("Skip") } }
+    Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.Center) {
+        if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip, colors = ButtonDefaults.textButtonColors(contentColor = if (stage == SalliBrandColors.Cobalt) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.primary)) { Text("Skip") } }
         CompositionLocalProvider(LocalContentColor provides content) { body() }
     }
 }
