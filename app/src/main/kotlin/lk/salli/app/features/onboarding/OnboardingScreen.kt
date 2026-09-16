@@ -11,6 +11,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -52,19 +58,22 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     }
     BackHandler(enabled = importing) {}
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        when (act) {
-            0 -> ChaosAct({ if (replay) onDone() else viewModel.complete(deferHistory = true) }) { sort = 1f; act = 1 }
-            1 -> SortAct(sort, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }) { if (replay) onDone() else viewModel.complete(deferHistory = true) }
-            else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
+        AnimatedContent(act, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "onboarding act") { visibleAct ->
+            when (visibleAct) {
+                0 -> ChaosAct({ if (replay) onDone() else viewModel.complete(deferHistory = true) }) { sort = 1f; act = 1 }
+                1 -> SortAct(sort, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }) { if (replay) onDone() else viewModel.complete(deferHistory = true) }
+                else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
+            }
         }
     }
 }
 
 @Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
+    val haptic = LocalHapticFeedback.current
     BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) }, 0f, Modifier.fillMaxWidth().height(360.dp), setOf(2, 5), bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(18.dp)); Button(onClick = onSort, Modifier.fillMaxWidth()) { Text("Sort them") }
+    Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
 }
 
 @Composable private fun SortAct(progress: Float, granted: Boolean, onProgress: (Float) -> Unit, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) = StageScaffold(lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress), MaterialTheme.colorScheme.onBackground, onSkip) {
@@ -86,9 +95,24 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     val found = if (replay) 890 else state.import.inserted
     Text(if (replay) "Sample history" else "${total} messages from ${state.accounts.size.coerceAtLeast(1)} banks", style = MaterialTheme.typography.headlineSmall)
     Text(if (replay) "A private preview of your year" else "Your history lights up as Salli reads it", style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(16.dp)); HeatGrid(columns = 52, rows = 7, values = FloatArray(364) { if (replay) (it % 7).toFloat() else 0f }, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth())
+    val cells = remember(state.import.previews, replay) {
+        FloatArray(364).also { values ->
+            if (replay) for (i in values.indices) values[i] = (i % 7).toFloat()
+            else state.import.previews.forEach { values[(it.dayEpoch % 364).toInt().coerceAtLeast(0)] += 1f }
+        }
+    }
+    val haptic = LocalHapticFeedback.current
+    var lastInserted by remember { mutableIntStateOf(0) }
+    LaunchedEffect(state.import.inserted) {
+        if (state.import.inserted >= lastInserted + 25) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            lastInserted = state.import.inserted
+        }
+    }
+    Spacer(Modifier.height(16.dp)); HeatGrid(columns = 52, rows = 7, values = cells, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth(), reducedMotion = false)
     Spacer(Modifier.height(12.dp)); SpringOdometer("${found}", style = MaterialTheme.typography.displayLarge)
     Text(if (state.import.running) "Reading ${state.import.processed} of ${total}" else "transactions found")
+    state.import.previews.firstOrNull()?.let { Text((it.title ?: "Transaction") + " · " + it.amountMinor, style = MaterialTheme.typography.bodySmall) }
     if (!replay && !state.import.running && !state.import.finished) Button(onClick = onStart, Modifier.fillMaxWidth()) { Text("Read my history") }
     state.import.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     if (!state.import.running && (replay || state.import.finished || state.import.error != null)) {

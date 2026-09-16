@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.app.sms.HistoricalImporter
+import lk.salli.app.sms.InboxSummary
+import lk.salli.app.sms.TransactionPreview
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.AccountEntity
 import lk.salli.data.prefs.SalliPreferences
@@ -38,6 +40,7 @@ data class ImportUiState(
     val interrupted: Boolean = false,
     /** Deliberately user-safe copy. The underlying exception is only written to Logcat. */
     val error: String? = null,
+    val previews: List<TransactionPreview> = emptyList(),
 )
 
 data class OnboardingState(
@@ -47,6 +50,7 @@ data class OnboardingState(
     val completing: Boolean = false,
     val completionError: String? = null,
     val completionTarget: OnboardingCompletionTarget? = null,
+    val inboxSummary: InboxSummary? = null,
 )
 
 @HiltViewModel
@@ -80,12 +84,14 @@ class OnboardingViewModel @Inject constructor(
     private val completionError = MutableStateFlow<String?>(null)
     private val completionTarget = MutableStateFlow<OnboardingCompletionTarget?>(null)
     private val completionStarted = AtomicBoolean(false)
+    private val inboxSummary = MutableStateFlow<InboxSummary?>(null)
 
     val state: StateFlow<OnboardingState> = combine(
         combine(savedStage, importState) { stageName, import -> stageName to import },
         combine(db.accounts().observeAll().onStart { emit(emptyList()) }, completing) { accounts, isCompleting -> accounts to isCompleting },
         combine(completionError, completionTarget) { error, target -> error to target },
-    ) { stageAndImport, accountsAndCompleting, completion ->
+        inboxSummary,
+    ) { stageAndImport, accountsAndCompleting, completion, summary ->
         val (stageName, import) = stageAndImport
         val (accounts, isCompleting) = accountsAndCompleting
         val (saveError, savedTarget) = completion
@@ -97,6 +103,7 @@ class OnboardingViewModel @Inject constructor(
             completing = isCompleting,
             completionError = saveError,
             completionTarget = savedTarget,
+            inboxSummary = summary,
         )
     }.stateIn(
         viewModelScope,
@@ -124,8 +131,9 @@ class OnboardingViewModel @Inject constructor(
         importState.value = ImportUiState(running = true)
         viewModelScope.launch {
             try {
+                inboxSummary.value = importer.summarize()
                 prefs.setHistoricalImportDeferred(false)
-                importer.import(sinceMillis = null).collect { progress ->
+                importer.import(sinceMillis = null, emitPreviews = true).collect { progress ->
                     importState.value = ImportUiState(
                         running = true,
                         processed = progress.processed,
@@ -136,6 +144,8 @@ class OnboardingViewModel @Inject constructor(
                         duplicates = progress.duplicates,
                         queued = progress.queued,
                         dropped = progress.dropped,
+                        previews = if (progress.preview == null) importState.value.previews
+                            else (importState.value.previews + progress.preview).takeLast(4),
                     )
                 }
                 prefs.setHistoricalImportCompleted(true)
