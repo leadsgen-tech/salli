@@ -50,6 +50,9 @@ data class BarSlice(
     val totalMinor: Long,
 )
 
+data class MerchantInsight(val name: String, val totalMinor: Long, val count: Int, val currency: String)
+data class AccountInsight(val id: Long, val name: String, val totalMinor: Long, val currency: String)
+
 data class InsightsUiState(
     val range: DateRange,
     val totalSpend: Money,
@@ -59,6 +62,8 @@ data class InsightsUiState(
     val topCategory: InsightSlice? = null,
     val transactionCount: Int = 0,
     val loading: Boolean = true,
+    val merchants: List<MerchantInsight> = emptyList(),
+    val accounts: List<AccountInsight> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -115,6 +120,7 @@ class InsightsViewModel @Inject constructor(
             txns.filter { it.accountId !in hidden },
             sixMonth.filter { it.accountId !in hidden },
             categories,
+            accounts.filter { it.id !in hidden },
         )
     }
         .stateIn(
@@ -136,6 +142,7 @@ class InsightsViewModel @Inject constructor(
         txns: List<TransactionEntity>,
         sixMonth: List<TransactionEntity>,
         categories: List<CategoryEntity>,
+        accounts: List<lk.salli.data.db.entities.AccountEntity>,
     ): InsightsUiState {
         val real = txns.filter { !it.isDeclined && it.transferGroupId == null }
         val expense = real.filter { it.flowId == TransactionFlow.EXPENSE.id }
@@ -174,6 +181,15 @@ class InsightsViewModel @Inject constructor(
             .sortedByDescending { it.totalMinor }
 
         val monthlyBars = buildMonthlyBars(sixMonth, catLookup, dominantCurrency, range)
+        val merchants = expenseInCurrency
+            .mapNotNull { tx -> tx.merchantRaw?.trim()?.takeIf { it.isNotEmpty() }?.let { it to tx } }
+            .groupBy({ it.first }, { it.second })
+            .map { (name, rows) -> MerchantInsight(name, rows.sumOf { it.amountMinor }, rows.size, dominantCurrency) }
+            .sortedByDescending { it.totalMinor }.take(5)
+        val accountNames = accounts.associate { it.id to it.displayName }
+        val accountInsights = expenseInCurrency.groupBy { it.accountId }.map { (id, rows) ->
+            AccountInsight(id, accountNames[id] ?: "Account", rows.sumOf { it.amountMinor }, dominantCurrency)
+        }.sortedByDescending { it.totalMinor }
 
         return InsightsUiState(
             range = range,
@@ -184,6 +200,8 @@ class InsightsViewModel @Inject constructor(
             topCategory = slices.firstOrNull(),
             transactionCount = real.size,
             loading = false,
+            merchants = merchants,
+            accounts = accountInsights,
         )
     }
 
