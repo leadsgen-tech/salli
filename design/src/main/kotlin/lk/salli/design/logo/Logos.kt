@@ -78,8 +78,8 @@ object BankLogos {
         "BOCONLINE" to "banks/boc.jpg",
         "COMBANK" to "banks/combank.jpg",
         "COMBANK_Q+" to "banks/combank.jpg",
-        // No People's Bank logo in the bundled set yet — return null so BankAvatar falls
-        // back to a brand-coloured initial rather than miscrediting the bank to BOC.
+        "PEOPLESBANK" to "banks/peoples.png",
+        "PEOPLESCARD" to "banks/peoples.png",
         "SAMPATH" to "banks/sampath.jpg",
         "SAMPATHBANK" to "banks/sampath.jpg",
         "SAMPATHTXN" to "banks/sampath.jpg",

@@ -27,15 +27,17 @@ object MoneyFormat {
     private const val MINUS = "−"
 
     /** 3-digit grouping, exactly two decimals, no currency. Locale-independent on purpose. */
-    private val amountFormat: NumberFormat = NumberFormat.getNumberInstance(Locale.US).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = 2
-        isGroupingUsed = true
+    private val amountFormat: ThreadLocal<NumberFormat> = ThreadLocal.withInitial {
+        NumberFormat.getNumberInstance(Locale.US).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+            isGroupingUsed = true
+        }
     }
 
     /** 3-digit grouping, no decimals — used by the compact form. */
-    private val wholeFormat: NumberFormat = NumberFormat.getIntegerInstance(Locale.US).apply {
-        isGroupingUsed = true
+    private val wholeFormat: ThreadLocal<NumberFormat> = ThreadLocal.withInitial {
+        NumberFormat.getIntegerInstance(Locale.US).apply { isGroupingUsed = true }
     }
 
     /** `"Rs"` for LKR, otherwise the ISO code itself. */
@@ -79,7 +81,7 @@ object MoneyFormat {
     /** @see bare */
     fun bareMinor(minorUnits: Long): String {
         val abs = if (minorUnits == Long.MIN_VALUE) Long.MAX_VALUE else kotlin.math.abs(minorUnits)
-        return amountFormat.format(abs / 100.0)
+        return amountFormat.get().format(abs / 100.0)
     }
 
     /**
@@ -96,7 +98,7 @@ object MoneyFormat {
         return when {
             major >= 1_000_000 -> prefix + trimTrailingZero(major / 1_000_000.0) + "M"
             major >= 1_000 -> prefix + trimTrailingZero(major / 1_000.0) + "k"
-            else -> prefix + wholeFormat.format(major)
+            else -> prefix + wholeFormat.get().format(major)
         }
     }
 

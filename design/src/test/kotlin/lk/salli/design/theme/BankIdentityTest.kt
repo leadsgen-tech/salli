@@ -55,7 +55,7 @@ class BankIdentityTest {
     fun `People's Bank has a brand colour even without a bundled logo`() {
         // The avatar falls back to a brand-coloured initial; that only works if the colour is
         // real. Returning BOC's blue here is the bug this guards.
-        assertThat(BankLogos.resolve("PeoplesBank")).isNull()
+        assertThat(BankLogos.resolve("PeoplesBank")).isEqualTo("banks/peoples.png")
         assertThat(BankBrand.forSender("PeoplesBank")).isEqualTo(BankBrand.Peoples)
         assertThat(BankBrand.forSender("PeoplesBank")).isNotEqualTo(BankBrand.Boc)
     }

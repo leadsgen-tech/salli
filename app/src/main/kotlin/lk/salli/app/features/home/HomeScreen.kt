@@ -234,6 +234,7 @@ private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Lon
                 AccountChip(
                     account = a,
                     color = BankBrand.forSender(a.senderAddress).secondary,
+                    onClick = { onAccountClick(a.id) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -246,6 +247,7 @@ private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Lon
                 AccountChip(
                     account = a,
                     color = BankBrand.forSender(a.senderAddress).secondary,
+                    onClick = { onAccountClick(a.id) },
                     modifier = Modifier.width(160.dp),
                 )
             }
@@ -257,12 +259,14 @@ private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Lon
 private fun AccountChip(
     account: AccountSummary,
     color: Color,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .clickable(onClick = onClick),
     ) {
         Box(Modifier.fillMaxWidth().height(4.dp).background(color))
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {

@@ -43,6 +43,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,16 +61,19 @@ import lk.salli.design.components.DateRangeSelector
 import lk.salli.design.components.EmptyState
 import lk.salli.design.components.TransactionRow
 import lk.salli.domain.Money
+import lk.salli.app.nav.ActivityFilterArgs
 
 @Composable
 fun TimelineScreen(
     onTransactionClick: (Long) -> Unit = {},
+    filters: ActivityFilterArgs = ActivityFilterArgs.NONE,
     viewModel: TimelineViewModel = hiltViewModel(),
 ) {
+    LaunchedEffect(filters) { viewModel.applyFilters(filters) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    var searchOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember(filters) { mutableStateOf(!filters.query.isNullOrBlank()) }
 
     lk.salli.design.components.SalliPullToRefresh(
         isRefreshing = refreshing,
@@ -604,23 +608,8 @@ private fun MonthOffsetPills(
     }
 }
 
-private fun formatMoney(money: Money): String {
-    val symbol = if (money.currency == "LKR") "Rs " else "${money.currency} "
-    val abs = kotlin.math.abs(money.minorUnits)
-    val formatter = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US)
-    val major = abs / 100
-    val cents = abs % 100
-    return "$symbol${formatter.format(major)}.${"%02d".format(cents)}"
-}
+private fun formatMoney(money: Money): String = lk.salli.domain.money.MoneyFormat.format(money)
 
 /** Daily net formatter — prepends "-" for outflow days, keeps it plain for inflow days. */
-private fun formatMoneyNet(minor: Long, currency: String): String {
-    if (minor == 0L) return "Rs 0.00"
-    val symbol = if (currency == "LKR") "Rs " else "$currency "
-    val abs = kotlin.math.abs(minor)
-    val major = abs / 100
-    val cents = abs % 100
-    val formatter = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US)
-    val sign = if (minor < 0) "-" else "+"
-    return "$sign$symbol${formatter.format(major)}.${"%02d".format(cents)}"
-}
+private fun formatMoneyNet(minor: Long, currency: String): String =
+    lk.salli.domain.money.MoneyFormat.formatMinor(minor, currency, signed = true)

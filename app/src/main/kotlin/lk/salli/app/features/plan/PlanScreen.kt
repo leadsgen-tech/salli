@@ -56,7 +56,7 @@ import lk.salli.domain.money.MoneyFormat
  *    they had there. Settings now holds settings; a bill due on Thursday is not a setting.
  *
  * The rest of §7 (the "spoken for this period" hero, the 14-day ribbon, inline Goals cards)
- * needs `UpcomingService`, which does not exist yet. Nothing here is a placeholder: every row
+ * belongs to the full Plan phase. Nothing here is a placeholder: every row
  * is backed by a query, and a section with nothing to say would be absent rather than empty.
  *
  * Budget pace comes straight off [BudgetsViewModel] rather than being recomputed, so Plan and

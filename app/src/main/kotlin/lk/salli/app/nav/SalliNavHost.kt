@@ -149,11 +149,9 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                     },
                 ),
             ) { entry ->
-                // Parsed so the contract is exercised from the day the arguments exist.
-                // TimelineScreen ignores them until its own rewrite consumes them.
-                @Suppress("UNUSED_VARIABLE")
                 val filters = entry.arguments.toActivityFilterArgs()
                 TimelineScreen(
+                    filters = filters,
                     onTransactionClick = { id -> detailTxId = id },
                 )
             }
