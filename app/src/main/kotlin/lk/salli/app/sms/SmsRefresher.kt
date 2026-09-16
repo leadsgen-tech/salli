@@ -103,6 +103,14 @@ class SmsRefresher internal constructor(
     private var ensureJob: Job? = null
 
     /**
+     * The most recent [refresh] / [resyncAll] coroutine, so deterministic tests can join it
+     * rather than watching for a side effect to show up. Only ever read by
+     * [awaitPassIdle]; nothing in production behaviour depends on it.
+     */
+    @Volatile
+    private var lastPass: Job? = null
+
+    /**
      * Clears a settled [RefreshStatus.Done] or [RefreshStatus.Failed] once the UI has shown it.
      * A no-op while a pass is running, so a late call can never hide a fresh result.
      */
@@ -114,7 +122,7 @@ class SmsRefresher internal constructor(
     }
 
     fun refresh() {
-        scope.launch {
+        lastPass = scope.launch {
             if (!mutex.tryLock()) {
                 reportSomeoneElseIsReading()
                 return@launch
@@ -201,13 +209,25 @@ class SmsRefresher internal constructor(
     }
 
     /**
+     * Lets deterministic app tests wait for the most recent [refresh] or [resyncAll] to finish.
+     *
+     * Joining the coroutine is the only honest "it is over" signal: [status] settles a beat
+     * before [refreshing] clears and the mutex unlocks, and the completion preferences are
+     * written after that again. A test that watched any one of those would be asserting against
+     * a pass still in flight.
+     */
+    internal suspend fun awaitPassIdle() {
+        lastPass?.join()
+    }
+
+    /**
      * User-initiated full-inbox resync. Unlike [ensureHistoricalImport] this bypasses the
      * completion pref — useful after a data wipe, or when the user suspects something in
      * the distant past didn't get picked up. Safe: duplicate detector makes re-ingesting a
      * no-op for anything already stored.
      */
     fun resyncAll() {
-        scope.launch {
+        lastPass = scope.launch {
             if (!mutex.tryLock()) {
                 reportSomeoneElseIsReading()
                 return@launch

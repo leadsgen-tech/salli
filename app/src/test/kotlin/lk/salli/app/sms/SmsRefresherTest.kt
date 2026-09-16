@@ -128,9 +128,12 @@ class SmsRefresherTest {
 
         refresher.resyncAll()
 
-        withTimeout(10_000) { prefs.historicalImportCompleted.first { it } }
-        withTimeout(10_000) { prefs.historicalImportDeferred.first { !it } }
-        Unit
+        // Join the pass rather than waiting for the preference to flip: the keys are
+        // process-wide and every sibling test writes them, so a predicate that never becomes
+        // true burns the whole timeout instead of failing.
+        withTimeout(TIMEOUT) { refresher.awaitPassIdle() }
+        assertThat(prefs.historicalImportCompleted.first()).isTrue()
+        assertThat(prefs.historicalImportDeferred.first()).isFalse()
     }
 
     // ---------------------------------------------------------------- status
@@ -158,7 +161,7 @@ class SmsRefresherTest {
         )
 
         refresher.refresh()
-        val done = refresher.awaitStatus<RefreshStatus.Done>()
+        val done = refresher.settle() as RefreshStatus.Done
 
         assertThat(done.inserted).isEqualTo(1)
         assertThat(done.merged).isEqualTo(1)
@@ -177,7 +180,7 @@ class SmsRefresherTest {
 
         refresher.refresh()
 
-        assertThat(refresher.awaitStatus<RefreshStatus.Done>().inserted).isEqualTo(1)
+        assertThat((refresher.settle() as RefreshStatus.Done).inserted).isEqualTo(1)
     }
 
     @Test
@@ -186,7 +189,7 @@ class SmsRefresherTest {
 
         refresher.refresh()
 
-        assertThat(refresher.awaitStatus<RefreshStatus.Done>().inserted).isEqualTo(0)
+        assertThat((refresher.settle() as RefreshStatus.Done).inserted).isEqualTo(0)
     }
 
     @Test
@@ -199,13 +202,12 @@ class SmsRefresherTest {
         )
 
         refresher.refresh()
-        val failed = refresher.awaitStatus<RefreshStatus.Failed>()
+        val failed = refresher.settle() as RefreshStatus.Failed
 
         assertThat(failed.reason).contains("database unavailable")
         assertThat(failed.finishedAt).isEqualTo(FIXED_NOW)
-        // The spinner is cleared in the `finally`, a beat after the status settles.
-        withTimeout(TIMEOUT) { refresher.refreshing.first { !it } }
-        Unit
+        // Joining the pass covers the `finally` too, so this needs no second wait.
+        assertThat(refresher.refreshing.value).isFalse()
     }
 
     @Test
@@ -238,8 +240,8 @@ class SmsRefresherTest {
         assertThat(reads.get()).isEqualTo(1)
 
         release.complete(Unit)
-        withTimeout(TIMEOUT) { refresher.status.first { it is RefreshStatus.Done } }
-        Unit
+        // Joins the last queued pull, which cannot finish until the first pass has released.
+        assertThat(refresher.settle()).isInstanceOf(RefreshStatus.Done::class.java)
     }
 
     @Test
@@ -258,23 +260,23 @@ class SmsRefresherTest {
         // chaining two of those would be a race, not a test.
         refresher.ensureHistoricalImport()
         withTimeout(TIMEOUT) { refresher.awaitHistoricalImportIdle() }
-        assertThat(refresher.awaitStatus<RefreshStatus.Done>().inserted).isEqualTo(1)
+        assertThat((refresher.status.value as RefreshStatus.Done).inserted).isEqualTo(1)
 
         // No consume() in between: a stale Done must not survive the next pass.
         inserts.set(3)
         prefs.setHistoricalImportDeferred(true)
         refresher.resyncAll()
 
-        withTimeout(TIMEOUT) { refresher.status.first { it is RefreshStatus.Done && it.inserted == 3 } }
-        withTimeout(TIMEOUT) { prefs.historicalImportDeferred.first { !it } }
-        Unit
+        assertThat((refresher.settle() as RefreshStatus.Done).inserted).isEqualTo(3)
+        // The pass writes the prefs before it completes, so a plain read is enough.
+        assertThat(prefs.historicalImportDeferred.first()).isFalse()
     }
 
     @Test
     fun `consume clears a settled result exactly once`() = runBlocking {
         val refresher = refresher(importerOf())
         refresher.refresh()
-        refresher.awaitStatus<RefreshStatus.Done>()
+        refresher.settle()
 
         refresher.consume()
         assertThat(refresher.status.value).isEqualTo(RefreshStatus.Idle)
@@ -305,8 +307,7 @@ class SmsRefresherTest {
 
         assertThat(refresher.status.value).isEqualTo(RefreshStatus.Running)
         release.complete(Unit)
-        withTimeout(TIMEOUT) { refresher.status.first { it is RefreshStatus.Done } }
-        Unit
+        assertThat(refresher.settle()).isInstanceOf(RefreshStatus.Done::class.java)
     }
 
     @Test
@@ -376,11 +377,11 @@ class SmsRefresherTest {
         refresher.refresh()
         release.complete(Unit)
 
-        withTimeout(TIMEOUT) { refresher.status.first { it is RefreshStatus.Failed } }
-        // The queued pull waits out the pass, then settles: it never starts a second read, and
-        // the status it reported is either replaced by the real result or handed back.
-        withTimeout(TIMEOUT) { refresher.refreshing.first { !it } }
-        assertThat(refresher.status.value).isInstanceOf(RefreshStatus.Failed::class.java)
+        // Joins the queued pull, which cannot finish until the failing pass has released.
+        assertThat(refresher.settle()).isInstanceOf(RefreshStatus.Failed::class.java)
+        // It waited the pass out without ever starting a second read of its own, and left no
+        // Running of its own standing behind the result.
+        assertThat(refresher.refreshing.value).isFalse()
         assertThat(reads.get()).isEqualTo(1)
     }
 
@@ -407,7 +408,7 @@ class SmsRefresherTest {
         )
 
         refresher.refresh()
-        refresher.awaitStatus<RefreshStatus.Done>()
+        refresher.settle()
 
         // Nothing consumed the Done. An ensure that finds nothing to do must leave it standing:
         // the hand-back only applies to a Running that no pass is behind.
@@ -431,11 +432,11 @@ class SmsRefresherTest {
 
         refresher.resyncAll()
 
-        assertThat(refresher.awaitStatus<RefreshStatus.Done>().inserted).isEqualTo(1)
-        // The completion write trails the status by a hair; wait for it so the pass is fully
-        // finished before tearDown resets the prefs out from under it.
-        withTimeout(TIMEOUT) { prefs.historicalImportCompleted.first { it } }
-        Unit
+        assertThat((refresher.settle() as RefreshStatus.Done).inserted).isEqualTo(1)
+        // Joining the pass covers the completion write too. Waiting on the preference itself was
+        // flaky: DataStore is process-wide, every sibling test writes the same keys in setUp and
+        // tearDown, and a predicate that never becomes true hangs for the whole timeout.
+        assertThat(prefs.historicalImportCompleted.first()).isTrue()
     }
 
     // ---------------------------------------------------------------- helpers
@@ -447,8 +448,18 @@ class SmsRefresherTest {
 
     private fun rawSms(date: Long) = SmsInboxReader.RawSms("COMBANK", "Synthetic $date", date)
 
-    private suspend inline fun <reified T : RefreshStatus> SmsRefresher.awaitStatus(): T =
-        withTimeout(TIMEOUT) { status.first { it is T } } as T
+    /**
+     * Waits for the most recent pass to finish and returns the status it left behind.
+     *
+     * Joining the coroutine is what makes these tests deterministic: `status`, `refreshing`, the
+     * mutex and the completion preferences settle in that order at the tail of a pass, so any
+     * test that watched one of them was asserting mid-flight. It also fails loudly — a wrong
+     * status is an assertion diff, not a timeout with nothing to look at.
+     */
+    private suspend fun SmsRefresher.settle(): RefreshStatus {
+        withTimeout(TIMEOUT) { awaitPassIdle() }
+        return status.value
+    }
 
     private fun refresher(importer: HistoricalImporter) = SmsRefresher(
         importer = importer,
