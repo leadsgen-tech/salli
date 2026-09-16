@@ -26,15 +26,20 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +59,8 @@ import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import lk.salli.design.components.EmptyState
@@ -220,6 +227,7 @@ private fun GoalCard(goal: GoalRow, onAdd: () -> Unit, onEdit: () -> Unit, onArc
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GoalEditorScreen(
     initial: GoalRow?,
@@ -230,12 +238,32 @@ private fun GoalEditorScreen(
     var name by remember(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
     var target by remember(initial?.id) { mutableStateOf(initial?.target?.let { plainAmount(it.minorUnits) }.orEmpty()) }
     var date by remember(initial?.id) { mutableStateOf(initial?.targetDate?.let { isoDate(it) }.orEmpty()) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var account by remember(initial?.id) { mutableStateOf(initial?.linkedAccountId) }
 
     val targetMinor = parseMinor(target)
     val dateMillis = parseDate(date)
-    val dateOk = date.isBlank() || dateMillis != null
-    val valid = name.isNotBlank() && targetMinor != null && dateOk
+    val valid = name.isNotBlank() && targetMinor != null
+
+    if (showDatePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = date.takeIf { it.isNotBlank() }?.let {
+                LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let {
+                        date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    showDatePicker = false
+                }) { Text("Set date") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = pickerState) }
+    }
 
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Column(
@@ -276,15 +304,12 @@ private fun GoalEditorScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("Target date (optional, YYYY-MM-DD)") },
-                singleLine = true,
-                isError = !dateOk,
-                supportingText = if (!dateOk) ({ Text("Use YYYY-MM-DD") }) else null,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) {
+                    Text(if (date.isBlank()) "Choose target date (optional)" else "Target date: ${LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMM yyyy"))}")
+                }
+                if (date.isNotBlank()) TextButton(onClick = { date = "" }) { Text("Clear") }
+            }
             if (accounts.isNotEmpty()) {
                 Text(text = "Count progress from an account balance (optional)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
