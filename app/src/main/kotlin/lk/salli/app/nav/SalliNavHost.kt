@@ -298,8 +298,7 @@ private const val UNLOCKED_STATE_KEY = "salli-unlocked-content"
 
 private fun NavHostController.navigateToTab(dest: Destination) {
     navigate(dest.route) {
-        popUpTo(Destination.HOME.route) { saveState = true }
+        popUpTo(Destination.HOME.route)
         launchSingleTop = true
-        restoreState = true
     }
 }
