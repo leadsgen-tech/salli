@@ -18,6 +18,8 @@ import lk.salli.data.export.DataWiper
 import lk.salli.data.export.TransactionExporter
 import lk.salli.data.ingest.TransactionIngestor
 import lk.salli.data.ingest.UtilityIngestor
+import lk.salli.data.merchant.MerchantStatsService
+import lk.salli.data.upcoming.UpcomingService
 import lk.salli.data.backup.BackupManager
 import lk.salli.data.prefs.SalliPreferences
 import lk.salli.data.split.SplitService
@@ -126,4 +128,15 @@ object AppModule {
         prefs: SalliPreferences,
         planning: PlanningService,
     ): WidgetSummaryService = WidgetSummaryService(db = db, prefs = prefs, planning = planning)
+
+    // The data module carries no Hilt, so its services are constructed here. Both of these also
+    // take a clock / timezone that Hilt has no binding for.
+
+    @Provides
+    @Singleton
+    fun provideUpcomingService(db: SalliDatabase): UpcomingService = UpcomingService(db)
+
+    @Provides
+    @Singleton
+    fun provideMerchantStatsService(db: SalliDatabase): MerchantStatsService = MerchantStatsService(db)
 }

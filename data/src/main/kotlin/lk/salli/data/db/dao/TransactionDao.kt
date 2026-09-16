@@ -156,4 +156,87 @@ interface TransactionDao {
         """,
     )
     suspend fun latestBalanceForAccount(accountId: Long): Long?
+
+    /**
+     * Everything a live import ticker needs about rows it just inserted, in one round trip.
+     * Joined to `categories` so the caller never follows up with a second query per row.
+     *
+     * Ordering is left to the caller: it already knows the order it inserted them in.
+     */
+    @Query(
+        """
+        SELECT t.id AS id,
+               t.sender_address AS sender_address,
+               t.note AS note,
+               t.merchant_raw AS merchant_raw,
+               t.amount_minor AS amount_minor,
+               t.amount_currency AS amount_currency,
+               t.flow_id AS flow_id,
+               t.type_id AS type_id,
+               t.timestamp AS timestamp,
+               c.name AS category_name
+        FROM transactions t
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.id IN (:ids)
+        """,
+    )
+    suspend fun previewsByIds(ids: List<Long>): List<TransactionPreviewRow>
+
+    /**
+     * Lifetime roll-up for one merchant, split by currency so totals are never mixed.
+     *
+     * Counts only what the rest of the app counts as spending — see
+     * [lk.salli.data.transactions.TransactionSpending.counts]: not hidden, not declined, not a
+     * leg of an own transfer, an expense, and not on an account the user switched off in
+     * Settings. Matching is on the trimmed merchant text, case-insensitively, which is the same
+     * key the row title and the merchant logo lookup use.
+     *
+     * Pass an empty [hiddenAccountIds] when no account is hidden.
+     */
+    @Query(
+        """
+        SELECT amount_currency AS currency,
+               COUNT(*) AS tx_count,
+               SUM(amount_minor) AS total_minor,
+               MIN(timestamp) AS first_seen,
+               MAX(timestamp) AS last_seen
+        FROM transactions
+        WHERE is_hidden = 0
+          AND is_declined = 0
+          AND transfer_group_id IS NULL
+          AND flow_id = 0
+          AND account_id NOT IN (:hiddenAccountIds)
+          AND merchant_raw IS NOT NULL
+          AND TRIM(merchant_raw) = :merchantKey COLLATE NOCASE
+        GROUP BY amount_currency
+        ORDER BY tx_count DESC, total_minor DESC
+        """,
+    )
+    suspend fun merchantTotals(merchantKey: String, hiddenAccountIds: List<Long>): List<MerchantTotalRow>
 }
+
+/**
+ * A just-inserted transaction, flattened for the import ticker. Deliberately not the full entity:
+ * the ticker renders a logo, a title, an amount and a day, and nothing else.
+ */
+data class TransactionPreviewRow(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "sender_address") val senderAddress: String?,
+    @ColumnInfo(name = "note") val note: String?,
+    @ColumnInfo(name = "merchant_raw") val merchantRaw: String?,
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
+    @ColumnInfo(name = "amount_currency") val amountCurrency: String,
+    @ColumnInfo(name = "flow_id") val flowId: Int,
+    @ColumnInfo(name = "type_id") val typeId: Int,
+    @ColumnInfo(name = "timestamp") val timestamp: Long,
+    @ColumnInfo(name = "category_name") val categoryName: String?,
+)
+
+/** One merchant's spending in a single currency. See [TransactionDao.merchantTotals]. */
+data class MerchantTotalRow(
+    @ColumnInfo(name = "currency") val currency: String,
+    @ColumnInfo(name = "tx_count") val count: Int,
+    @ColumnInfo(name = "total_minor") val totalMinor: Long,
+    @ColumnInfo(name = "first_seen") val firstSeen: Long,
+    @ColumnInfo(name = "last_seen") val lastSeen: Long,
+)
