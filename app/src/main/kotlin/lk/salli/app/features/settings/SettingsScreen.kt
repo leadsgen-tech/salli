@@ -195,15 +195,6 @@ fun SettingsScreen(
         }
 
         item { Spacer(Modifier.height(8.dp)) }
-        item { SectionLabel("YOU") }
-        item {
-            UserNameTile(
-                name = state.userName,
-                onChange = { viewModel.setUserName(it) },
-            )
-        }
-
-        item { Spacer(Modifier.height(8.dp)) }
 
         item { SectionLabel("ACCOUNTS") }
         if (accounts.isEmpty()) {
@@ -261,7 +252,8 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(8.dp)) }
 
-        item { SectionLabel("SUMMARIES") }
+        item { SectionLabel("ALERTS") }
+        item { PermissionsTiles(onSmsGranted = { viewModel.ensureHistoricalImport() }) }
         item {
             SwitchTile(
                 icon = Icons.Outlined.Notifications,
@@ -304,21 +296,6 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(8.dp)) }
 
-        item { SectionLabel("WIDGET") }
-        item {
-            val hideAmounts by viewModel.widgetHideAmounts.collectAsStateWithLifecycle()
-            SwitchTile(
-                icon = Icons.Outlined.Widgets,
-                title = "Hide amounts on the widget",
-                subtitle = if (hideAmounts) "The home-screen widget shows Rs ••••"
-                else "The home-screen widget shows your numbers",
-                checked = hideAmounts,
-                onToggle = { viewModel.setWidgetHideAmounts(it) },
-            )
-        }
-
-        item { Spacer(Modifier.height(8.dp)) }
-
         item { SectionLabel("SECURITY") }
         item {
             val lock by viewModel.appLockSettings.collectAsStateWithLifecycle()
@@ -340,15 +317,25 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(8.dp)) }
 
-        item { SectionLabel("PERMISSIONS") }
-        item { PermissionsTiles(onSmsGranted = { viewModel.ensureHistoricalImport() }) }
+        item { SectionLabel("WIDGET") }
+        item {
+            val hideAmounts by viewModel.widgetHideAmounts.collectAsStateWithLifecycle()
+            SwitchTile(
+                icon = Icons.Outlined.Widgets,
+                title = "Hide amounts on the widget",
+                subtitle = if (hideAmounts) "The home-screen widget shows Rs ••••"
+                else "The home-screen widget shows your numbers",
+                checked = hideAmounts,
+                onToggle = { viewModel.setWidgetHideAmounts(it) },
+            )
+        }
 
         item { Spacer(Modifier.height(8.dp)) }
-        item { SectionLabel("REVIEW") }
+        item { SectionLabel("YOUR DATA") }
         item {
             SettingsTile(
                 icon = Icons.Outlined.Inbox,
-                title = "Unknown messages",
+                title = "Unparsed messages",
                 subtitle = if (state.unknownSmsCount == 0) "Nothing to review"
                 else "${state.unknownSmsCount} bank SMS Salli couldn't parse",
                 trailing = if (state.unknownSmsCount > 0) {
@@ -358,8 +345,6 @@ fun SettingsScreen(
             )
         }
 
-        item { Spacer(Modifier.height(8.dp)) }
-        item { SectionLabel("YOUR DATA") }
         item {
             val syncing by viewModel.syncing.collectAsStateWithLifecycle()
             SettingsTile(
@@ -1035,57 +1020,6 @@ private fun SettingsTile(
                 Spacer(Modifier.size(8.dp))
                 trailing()
             }
-        }
-    }
-}
-
-@Composable
-private fun UserNameTile(name: String, onChange: (String) -> Unit) {
-    // Own the text locally. The VM-side Flow from DataStore echoes every keystroke back as a
-    // state emission which — if wired straight into `value = name` — stomps on the user's
-    // typing and bounces the cursor. We seed from the VM exactly once (when the first real
-    // value arrives) and then refuse further prop-driven updates; subsequent changes all flow
-    // locally-first via `onChange`.
-    var text by remember { mutableStateOf(name) }
-    var seeded by remember { mutableStateOf(name.isNotEmpty()) }
-    LaunchedEffect(name) {
-        if (!seeded && name.isNotEmpty()) {
-            text = name
-            seeded = true
-        }
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(
-                text = "Your name",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Used in the Home greeting. Stays on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = text,
-                onValueChange = {
-                    text = it
-                    onChange(it)
-                },
-                placeholder = { Text("Your name") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }

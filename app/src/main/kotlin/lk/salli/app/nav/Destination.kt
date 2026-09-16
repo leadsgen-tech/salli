@@ -91,6 +91,8 @@ object Route {
     const val ONBOARDING_REPLAY = "onboarding-replay"
 
     const val UNKNOWN_SMS = "unknown-sms"
+    const val TRANSACTION_DETAIL = "transaction/{txId}"
+    fun transactionDetail(id: Long): String = "transaction/$id"
     const val BILLS = "bills"
     const val FUEL_PASS = "fuel-pass"
     const val RECURRING = "recurring"

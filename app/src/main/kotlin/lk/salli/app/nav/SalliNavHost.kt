@@ -17,11 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,7 +40,7 @@ import lk.salli.app.features.settings.SettingsScreen
 import lk.salli.app.features.timeline.TimelineScreen
 import lk.salli.app.features.split.SplitGroupScreen
 import lk.salli.app.features.split.SplitGroupsScreen
-import lk.salli.app.features.txdetail.TransactionDetailSheet
+import lk.salli.app.features.txdetail.TransactionDetailScreen
 import lk.salli.app.features.unknown.UnknownSmsScreen
 import lk.salli.design.components.FloatingNavBar
 import lk.salli.design.components.ThemeTransitionLayer
@@ -82,11 +79,6 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
     // Resolved here rather than inside FloatingNavBar's `label` lambda: that lambda is a
     // plain function and stringResource is composable.
     val tabLabels = Destination.entries.associateWith { stringResource(it.labelRes) }
-
-    // The transaction detail sheet is hoisted above the NavHost rather than being a route:
-    // the screen that opened it stays composed and visible underneath, and closing is the
-    // sheet's own animation instead of a back-stack pop fighting it. -1 = closed.
-    var detailTxId by rememberSaveable { mutableLongStateOf(-1L) }
 
     // ThemeTransitionLayer snapshots the current frame when a theme toggle fires and
     // animates a circular reveal outward from the toggle's tap point. Inside, we draw the
@@ -130,7 +122,7 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                     onAccountClick = { accountId ->
                         navController.navigate(Route.activity(accountId = accountId))
                     },
-                    onTransactionClick = { id -> detailTxId = id },
+                    onTransactionClick = { id -> navController.navigate(Route.transactionDetail(id)) },
                 )
             }
             composable(
@@ -156,7 +148,7 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                 val filters = entry.arguments.toActivityFilterArgs()
                 TimelineScreen(
                     filters = filters,
-                    onTransactionClick = { id -> detailTxId = id },
+                    onTransactionClick = { id -> navController.navigate(Route.transactionDetail(id)) },
                 )
             }
             composable(Destination.PLAN.route) {
@@ -170,6 +162,17 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                 )
             }
             composable(Destination.INSIGHTS.route) { InsightsScreen() }
+
+            composable(
+                route = Route.TRANSACTION_DETAIL,
+                arguments = listOf(navArgument("txId") { type = NavType.LongType }),
+            ) { entry ->
+                TransactionDetailScreen(
+                    txId = requireNotNull(entry.arguments).getLong("txId"),
+                    onBack = { navController.popBackStack() },
+                    onSplit = { id -> navController.navigate(Route.splitGroups(id)) },
+                )
+            }
 
             composable(Route.BUDGETS) {
                 BudgetsScreen(onBack = { navController.popBackStack() })
@@ -229,17 +232,6 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                 SplitGroupScreen(onBack = { navController.popBackStack() })
             }
 
-        }
-
-        if (detailTxId > 0L) {
-            TransactionDetailSheet(
-                txId = detailTxId,
-                onDismiss = { detailTxId = -1L },
-                onSplit = { txId ->
-                    detailTxId = -1L
-                    navController.navigate(Route.splitGroups(txId))
-                },
-            )
         }
 
         if (showBottomNav) {

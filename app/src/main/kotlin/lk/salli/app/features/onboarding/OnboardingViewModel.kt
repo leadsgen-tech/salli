@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.app.sms.HistoricalImporter
@@ -82,7 +83,7 @@ class OnboardingViewModel @Inject constructor(
 
     val state: StateFlow<OnboardingState> = combine(
         combine(savedStage, importState) { stageName, import -> stageName to import },
-        combine(db.accounts().observeAll(), completing) { accounts, isCompleting -> accounts to isCompleting },
+        combine(db.accounts().observeAll().onStart { emit(emptyList()) }, completing) { accounts, isCompleting -> accounts to isCompleting },
         combine(completionError, completionTarget) { error, target -> error to target },
     ) { stageAndImport, accountsAndCompleting, completion ->
         val (stageName, import) = stageAndImport
