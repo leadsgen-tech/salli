@@ -37,15 +37,33 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
     }
 
     /**
-     * Theme preference. `true` = dark mode, `false` = light (default). Deliberately a flat
-     * boolean instead of a three-state enum — "follow system" is a v2 concern once we're
-     * sure the two palettes feel right on every screen.
+     * Theme preference: System / Light / Dark. [ThemeMode.SYSTEM] is the default — a money app
+     * that ignores the phone's night mode is a money app that blinds you at 2 a.m.
+     *
+     * Installs that only ever used the old flat `dark_theme` toggle fall back to it, so a user
+     * sitting on dark stays on dark instead of being silently handed back to the system. The
+     * migration happens on the first write, never on a read: a read-triggered write races with
+     * process start and would pin genuine "System" users to whatever the boolean happened to be.
+     */
+    val themeMode: Flow<ThemeMode> = store.data.map { prefs ->
+        prefs[KEY_THEME_MODE]?.let(ThemeMode::fromId)
+            ?: if (prefs[KEY_DARK_THEME] == true) ThemeMode.DARK else ThemeMode.SYSTEM
+    }.distinctUntilChanged()
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        store.edit { prefs ->
+            prefs[KEY_THEME_MODE] = mode.id
+            // Keep the legacy boolean coherent for anything still reading it (the widget's
+            // snapshot, a downgrade, an old backup being written out again).
+            prefs[KEY_DARK_THEME] = mode == ThemeMode.DARK
+        }
+    }
+
+    /**
+     * Legacy flat toggle. Retained so the migration above has something to read and so a
+     * downgrade doesn't land on a blank pref; new code reads [themeMode].
      */
     val darkTheme: Flow<Boolean> = store.data.map { prefs -> prefs[KEY_DARK_THEME] ?: false }.distinctUntilChanged()
-
-    suspend fun setDarkTheme(enabled: Boolean) {
-        store.edit { it[KEY_DARK_THEME] = enabled }
-    }
 
     /**
      * Whether the one-time full-inbox historical import has completed. Set true after the
@@ -195,6 +213,7 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
         return PreferencesSnapshot(
             userName = p[KEY_USER_NAME].orEmpty(),
             darkTheme = p[KEY_DARK_THEME] ?: false,
+            themeModeId = p[KEY_THEME_MODE] ?: (if (p[KEY_DARK_THEME] == true) ThemeMode.DARK.id else ThemeMode.SYSTEM.id),
             historicalImportCompleted = p[KEY_HISTORICAL_IMPORT_DONE] ?: false,
             billReminderDays = p[KEY_BILL_REMINDER_DAYS] ?: DEFAULT_BILL_REMINDER_DAYS,
             monthStartDay = p[KEY_MONTH_START_DAY] ?: 1,
@@ -230,6 +249,11 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
             e.clear()
             e[KEY_USER_NAME] = s.userName
             e[KEY_DARK_THEME] = s.darkTheme
+            // A backup old enough to predate the setting can still say "this user was on
+            // dark", and dropping them back to System on restore would be a visible loss.
+            e[KEY_THEME_MODE] = s.themeModeId?.let { ThemeMode.fromId(it) }
+                ?.id
+                ?: (if (s.darkTheme) ThemeMode.DARK else ThemeMode.SYSTEM).id
             e[KEY_HISTORICAL_IMPORT_DONE] = s.historicalImportCompleted
             e[KEY_BILL_REMINDER_DAYS] = s.billReminderDays
             e[KEY_MONTH_START_DAY] = s.monthStartDay.coerceIn(1, 28)
@@ -265,6 +289,7 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
         private val KEY_BILL_REMINDER_DAYS = intPreferencesKey("bill_reminder_days")
         private val KEY_USER_NAME = stringPreferencesKey("user_name")
         private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+        private val KEY_THEME_MODE = intPreferencesKey("theme_mode")
         private val KEY_HISTORICAL_IMPORT_DONE = booleanPreferencesKey("historical_import_done")
         private val KEY_WIDGET_HIDE_AMOUNTS = booleanPreferencesKey("widget_hide_amounts")
         private val KEY_APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
@@ -274,6 +299,27 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
 }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "salli_prefs")
+
+/**
+ * How Salli picks a palette. IDs are persisted and embedded in backups; never renumber them.
+ */
+enum class ThemeMode(val id: Int) {
+    SYSTEM(0),
+    LIGHT(1),
+    DARK(2),
+    ;
+
+    /** Collapses the preference into the single boolean `SalliTheme` actually needs. */
+    fun resolve(systemInDarkMode: Boolean): Boolean = when (this) {
+        SYSTEM -> systemInDarkMode
+        LIGHT -> false
+        DARK -> true
+    }
+
+    companion object {
+        fun fromId(id: Int): ThemeMode = entries.firstOrNull { it.id == id } ?: SYSTEM
+    }
+}
 
 /** Month start day (1..28) and ISO week start day (1 = Monday … 7 = Sunday). */
 data class PeriodSettings(val monthStartDay: Int, val weekStartDay: Int)
@@ -292,6 +338,10 @@ data class AppLockSettings(val enabled: Boolean, val lockAfterSeconds: Int, val 
 data class PreferencesSnapshot(
     val userName: String = "",
     val darkTheme: Boolean = false,
+    // Added with the tri-state theme. Nullable rather than defaulted so a document written
+    // before the setting existed is distinguishable from one that explicitly chose
+    // "System"; [restore] falls back to [darkTheme] for the former.
+    val themeModeId: Int? = null,
     val historicalImportCompleted: Boolean = false,
     val billReminderDays: Int = SalliPreferences.DEFAULT_BILL_REMINDER_DAYS,
     val monthStartDay: Int = 1,

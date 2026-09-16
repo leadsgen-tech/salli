@@ -1,15 +1,7 @@
 package lk.salli.app.features.home
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import lk.salli.design.components.LocalThemeTransition
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,24 +24,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.SimpleDateFormat
@@ -58,7 +44,10 @@ import java.util.Date
 import java.util.Locale
 import lk.salli.app.features.planning.SafeToSpendCard
 import lk.salli.app.features.planning.SafeToSpendViewModel
+import lk.salli.app.R
 import lk.salli.app.ui.TimelineItem
+import lk.salli.design.components.SalliIconButton
+import lk.salli.domain.money.MoneyFormat
 import lk.salli.design.theme.BankBrand
 import lk.salli.design.theme.SalliBrandColors
 import lk.salli.domain.Currency
@@ -77,12 +66,13 @@ fun HomeScreen(
     onTransactionClick: (Long) -> Unit = {},
     onSeeAllActivity: () -> Unit = {},
     onOpenSafeToSpend: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onAccountClick: (Long) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     planningViewModel: SafeToSpendViewModel = hiltViewModel(),
 ) {
     val planning by planningViewModel.snapshot.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val darkTheme by viewModel.darkTheme.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val grouped = remember(state.recent) { groupByDay(state.recent) }
@@ -100,13 +90,13 @@ fun HomeScreen(
         item {
             TopBar(
                 userName = state.userName,
-                darkTheme = darkTheme,
-                onToggleTheme = viewModel::toggleTheme,
+                onOpenSettings = onOpenSettings,
             )
         }
         item { Spacer(Modifier.height(12.dp)) }
         item {
             AccountStack(
+                onAccountClick = onAccountClick,
                 accounts = state.accounts,
                 totalBalance = totalBalance,
                 monthTrend = state.monthTrend,
@@ -155,8 +145,7 @@ fun HomeScreen(
 @Composable
 private fun TopBar(
     userName: String,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val cal = Calendar.getInstance()
     val dateLabel = remember(cal.timeInMillis / (60 * 60 * 1000)) {
@@ -166,7 +155,7 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -181,45 +170,13 @@ private fun TopBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        ThemeToggleButton(darkTheme = darkTheme, onToggle = onToggleTheme)
-    }
-}
-
-@Composable
-private fun ThemeToggleButton(darkTheme: Boolean, onToggle: () -> Unit) {
-    // Tap target records its screen-space centre so ThemeTransitionLayer can kick off the
-    // circular-reveal animation outward from the finger. Falls back to a plain toggle when
-    // the transition controller isn't wired up (e.g. in Compose previews).
-    val transition = LocalThemeTransition.current
-    var center by remember { mutableStateOf(Offset.Zero) }
-    // Show the target mode's icon — dark mode currently → display sun (tap to go light).
-    val icon = if (darkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(48.dp)
-            .onGloballyPositioned { coords ->
-                val pos = coords.positionInRoot()
-                center = Offset(
-                    x = pos.x + coords.size.width / 2f,
-                    y = pos.y + coords.size.height / 2f,
-                )
-            }
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable {
-                if (transition != null) {
-                    transition.request(center) { onToggle() }
-                } else {
-                    onToggle()
-                }
-            },
-    ) {
-        androidx.compose.material3.Icon(
-            imageVector = icon,
-            contentDescription = if (darkTheme) "Switch to light mode" else "Switch to dark mode",
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(20.dp),
+        // The theme toggle used to sit here. Appearance is a setting you change twice a year,
+        // not twice a day, so it moved into Settings (which is what this gear opens) and took
+        // the circular-reveal transition with it.
+        SalliIconButton(
+            icon = Icons.Outlined.Settings,
+            contentDescription = stringResource(R.string.action_settings),
+            onClick = onOpenSettings,
         )
     }
 }
@@ -230,6 +187,7 @@ private fun ThemeToggleButton(darkTheme: Boolean, onToggle: () -> Unit) {
 
 @Composable
 private fun AccountStack(
+    onAccountClick: (Long) -> Unit,
     accounts: List<AccountSummary>,
     totalBalance: Money,
     monthTrend: Trend?,
@@ -252,7 +210,7 @@ private fun AccountStack(
             modifier = Modifier.fillMaxWidth(),
         )
         if (accounts.isNotEmpty()) {
-            AccountChipsRow(accounts = accounts)
+            AccountChipsRow(accounts = accounts, onAccountClick = onAccountClick)
         }
     }
 }
@@ -266,7 +224,7 @@ private fun AccountStack(
  * inaccessible brand-colour surface.
  */
 @Composable
-private fun AccountChipsRow(accounts: List<AccountSummary>) {
+private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Long) -> Unit) {
     if (accounts.size <= 3) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -276,6 +234,7 @@ private fun AccountChipsRow(accounts: List<AccountSummary>) {
                 AccountChip(
                     account = a,
                     color = BankBrand.forSender(a.senderAddress).secondary,
+                    onClick = { onAccountClick(a.id) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -288,6 +247,7 @@ private fun AccountChipsRow(accounts: List<AccountSummary>) {
                 AccountChip(
                     account = a,
                     color = BankBrand.forSender(a.senderAddress).secondary,
+                    onClick = { onAccountClick(a.id) },
                     modifier = Modifier.width(160.dp),
                 )
             }
@@ -299,12 +259,14 @@ private fun AccountChipsRow(accounts: List<AccountSummary>) {
 private fun AccountChip(
     account: AccountSummary,
     color: Color,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .clickable(onClick = onClick),
     ) {
         Box(Modifier.fillMaxWidth().height(4.dp).background(color))
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -324,7 +286,7 @@ private fun AccountChip(
             val display: Money? = account.balance ?: account.activityNet
             if (display != null) {
                 Text(
-                    text = formatMoneyBold(display),
+                    text = MoneyFormat.formatWithMinus(display),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -361,7 +323,7 @@ private fun SummaryCard(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = formatMoneyBold(totalBalance),
+            text = MoneyFormat.formatWithMinus(totalBalance),
             style = MaterialTheme.typography.displayLarge.copy(
                 fontSize = 44.sp,
                 fontWeight = FontWeight.Bold,
@@ -427,65 +389,9 @@ private fun MonthDeltaRow(
             }
         }
         Text(
-            text = "${formatMoneyBold(monthExpense)} spent this period",
+            text = "${MoneyFormat.formatWithMinus(monthExpense)} spent this period",
             style = MaterialTheme.typography.bodyMedium,
             color = mutedFgColor,
-        )
-    }
-}
-
-@Composable
-private fun AccountBalanceStrip(accounts: List<AccountSummary>) {
-    val withBalance = accounts.filter { it.balance != null }
-    if (withBalance.isEmpty()) return
-    // With ≤3 accounts (the common case — most users have a current + savings + maybe a card)
-    // we lay them out evenly so each pill fills the row. With more than 3 it would get
-    // cramped, so we fall back to a horizontal scroller.
-    if (withBalance.size <= 3) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            withBalance.forEach { a ->
-                AccountBalancePill(a = a, modifier = Modifier.weight(1f))
-            }
-        }
-    } else {
-        androidx.compose.foundation.lazy.LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(withBalance, key = { it.id }) { a ->
-                AccountBalancePill(a = a, modifier = Modifier.width(160.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountBalancePill(a: AccountSummary, modifier: Modifier = Modifier) {
-    val balance = a.balance ?: return
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Text(
-            text = a.displayName,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = formatMoneyBold(balance),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
         )
     }
 }
@@ -496,196 +402,6 @@ private fun computeTotalBalance(accounts: List<AccountSummary>): Money {
     val byCurrency = accounts.mapNotNull { it.balance }.groupBy { it.currency }
     val dominant = byCurrency.entries.maxByOrNull { it.value.size } ?: return Money.zero(Currency.LKR)
     return dominant.value.fold(Money.zero(dominant.key)) { acc, m -> acc + m }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Chart                                                                      */
-/* -------------------------------------------------------------------------- */
-
-@Composable
-private fun SpendChart(buckets: List<Long>, modifier: Modifier = Modifier) {
-    val ink = MaterialTheme.colorScheme.onSurface
-    val ghost = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-    val guide = MaterialTheme.colorScheme.outlineVariant
-    val markerFill = MaterialTheme.colorScheme.surfaceContainerLowest
-
-    val seriesKey = buckets.hashCode()
-    val progress by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow),
-        label = "chart-progress-$seriesKey",
-    )
-
-    Canvas(modifier = modifier) {
-        if (buckets.size < 2) return@Canvas
-
-        // Cumulative running total, heavily smoothed. A 5-day moving average knocks the
-        // edge off day-level spikes so the line reads as a trajectory, not a staircase.
-        val cumulative = LongArray(buckets.size)
-        var running = 0L
-        for (i in buckets.indices) {
-            running += buckets[i]
-            cumulative[i] = running
-        }
-        // Two passes of a 7-point moving average — second pass slightly softens the
-        // shoulders left by the first, which is why the curve reads as a ribbon instead of
-        // a sketch.
-        val firstPass = FloatArray(cumulative.size) { i ->
-            val from = (i - 3).coerceAtLeast(0)
-            val to = (i + 3).coerceAtMost(cumulative.size - 1)
-            var sum = 0f
-            for (j in from..to) sum += cumulative[j].toFloat()
-            sum / (to - from + 1).toFloat()
-        }
-        val smooth = FloatArray(cumulative.size) { i ->
-            val from = (i - 2).coerceAtLeast(0)
-            val to = (i + 2).coerceAtMost(cumulative.size - 1)
-            var sum = 0f
-            for (j in from..to) sum += firstPass[j]
-            sum / (to - from + 1).toFloat()
-        }
-        val maxVal = smooth.maxOrNull()?.takeIf { it > 0f } ?: 1f
-
-        val padTop = 20f
-        val padBottom = 28f
-        val chartH = size.height - padTop - padBottom
-        val stepX = size.width / (smooth.size - 1).toFloat()
-
-        fun pointAt(i: Int): Offset {
-            val x = stepX * i
-            val y = padTop + chartH - (smooth[i] / maxVal) * chartH
-            return Offset(x, y)
-        }
-
-        val baselineY = padTop + chartH + 4f
-        val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(3f, 6f))
-        drawLine(
-            color = guide,
-            start = Offset(0f, baselineY),
-            end = Offset(size.width, baselineY),
-            strokeWidth = 1.5f,
-            pathEffect = dash,
-        )
-
-        val drawCount = (smooth.size * progress).coerceAtLeast(2f)
-        val lastIdx = drawCount.toInt().coerceAtMost(smooth.size - 1)
-
-        // Build a smooth cubic-bezier path through the points. Control points sit at 1/3 of
-        // the way from each knot toward its neighbour — classic Catmull-Rom → Bezier. Gives
-        // a continuously-tangent curve that feels "drawn", not segmented.
-        fun smoothPathThrough(upto: Int): Path {
-            val path = Path()
-            if (upto < 1) return path
-            val p0 = pointAt(0)
-            path.moveTo(p0.x, p0.y)
-            val tension = 0.38f  // 0 = linear, 0.5 = Catmull-Rom. Higher = more swoop.
-            for (i in 0 until upto) {
-                val pPrev = pointAt((i - 1).coerceAtLeast(0))
-                val pCurr = pointAt(i)
-                val pNext = pointAt(i + 1)
-                val pNext2 = pointAt((i + 2).coerceAtMost(smooth.size - 1))
-                val c1 = Offset(
-                    x = pCurr.x + (pNext.x - pPrev.x) * tension,
-                    y = pCurr.y + (pNext.y - pPrev.y) * tension,
-                )
-                val c2 = Offset(
-                    x = pNext.x - (pNext2.x - pCurr.x) * tension,
-                    y = pNext.y - (pNext2.y - pCurr.y) * tension,
-                )
-                path.cubicTo(c1.x, c1.y, c2.x, c2.y, pNext.x, pNext.y)
-            }
-            return path
-        }
-
-        // Ghost line — full projection.
-        drawPath(
-            path = smoothPathThrough(smooth.size - 1),
-            color = ghost,
-            style = Stroke(width = 3.5f, cap = StrokeCap.Round),
-        )
-
-        // Ink line — progress-to-date.
-        drawPath(
-            path = smoothPathThrough(lastIdx),
-            color = ink,
-            style = Stroke(width = 4.5f, cap = StrokeCap.Round),
-        )
-
-        // Today marker — dashed vertical + filled ring at the ink-line head.
-        val head = pointAt(lastIdx)
-        drawLine(
-            color = guide,
-            start = Offset(head.x, padTop - 4f),
-            end = Offset(head.x, padTop + chartH + 4f),
-            strokeWidth = 1f,
-            pathEffect = dash,
-        )
-        drawCircle(color = markerFill, radius = 7f, center = head)
-        drawCircle(
-            color = ink,
-            radius = 7f,
-            center = head,
-            style = Stroke(width = 2f),
-        )
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Month pill row                                                             */
-/* -------------------------------------------------------------------------- */
-
-@Composable
-private fun MonthPillRow() {
-    // 3 months leading up to current, + 2 projections — static in v1. Tapping a future pill
-    // doesn't do anything yet; the design intent is to preview the navigation.
-    val now = remember { Calendar.getInstance() }
-    val fmt = remember { SimpleDateFormat("MMM", Locale.getDefault()) }
-    val months = remember {
-        val c = Calendar.getInstance()
-        c.add(Calendar.MONTH, -3)
-        (0..5).map {
-            val label = fmt.format(c.time)
-            c.add(Calendar.MONTH, 1)
-            label
-        }
-    }
-    val currentIdx = 3  // the 4th pill = current month (0..5, offset -3)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-    ) {
-        months.forEachIndexed { i, label ->
-            val isSelected = i == currentIdx
-            val isFuture = i > currentIdx
-            val bg = when {
-                isSelected -> MaterialTheme.colorScheme.inverseSurface
-                else -> Color.Transparent
-            }
-            val fg = when {
-                isSelected -> MaterialTheme.colorScheme.inverseOnSurface
-                isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(32.dp)
-                    .clip(CircleShape)
-                    .background(bg),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = fg,
-                )
-            }
-        }
-    }
-    // Suppress lint — `now` is referenced indirectly via fmt formatting in the remember block.
-    @Suppress("UNUSED_EXPRESSION") now
 }
 
 /* -------------------------------------------------------------------------- */
@@ -769,7 +485,7 @@ private fun DayHeader(label: String, total: Money, topSpacing: androidx.compose.
         val absTotal = Money(kotlin.math.abs(total.minorUnits), total.currency)
         val sign = if (total.minorUnits < 0) "-" else if (total.minorUnits > 0) "+" else ""
         Text(
-            text = "$sign${formatMoneyBold(absTotal)}",
+            text = "$sign${MoneyFormat.formatWithMinus(absTotal)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -795,22 +511,4 @@ private fun SeeAllRow(onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Formatting                                                                 */
-/* -------------------------------------------------------------------------- */
-
-private fun formatMoneyBold(money: Money): String {
-    val symbol = when (money.currency) {
-        "LKR" -> "Rs "
-        "USD" -> "$"
-        else -> "${money.currency} "
-    }
-    val abs = kotlin.math.abs(money.minorUnits)
-    val major = abs / 100
-    val cents = abs % 100
-    val formatter = java.text.NumberFormat.getIntegerInstance(Locale.US)
-    val sign = if (money.minorUnits < 0L) "−" else ""
-    return "$sign$symbol${formatter.format(major)}.${"%02d".format(cents)}"
 }

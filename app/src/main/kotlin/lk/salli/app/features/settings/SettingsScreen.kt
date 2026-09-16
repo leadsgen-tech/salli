@@ -1,6 +1,5 @@
 package lk.salli.app.features.settings
 
-import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -8,9 +7,13 @@ import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.ui.draw.alpha
 import lk.salli.app.security.findFragmentActivity
+import lk.salli.app.R
 import lk.salli.data.prefs.AppLockSettings
+import lk.salli.data.prefs.ThemeMode
+import lk.salli.design.components.LocalThemeTransition
+import lk.salli.design.components.SalliIconButton
+import lk.salli.design.theme.SalliShapeTokens
 import lk.salli.domain.security.AppLockPolicy
-import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Speed
 import android.Manifest
 import android.content.Intent
@@ -40,6 +43,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Code
@@ -50,9 +54,6 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material.icons.outlined.LocalGasStation
-import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Sync
@@ -80,6 +81,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -103,12 +111,8 @@ private fun openUrl(context: android.content.Context, url: String) {
 
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit = {},
     onOpenUnknownSms: () -> Unit = {},
-    onOpenBills: () -> Unit = {},
-    onOpenFuelPass: () -> Unit = {},
-    onOpenRecurring: () -> Unit = {},
-    onOpenGoals: () -> Unit = {},
-    onOpenSplit: () -> Unit = {},
     onReplayIntro: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -117,7 +121,7 @@ fun SettingsScreen(
     val period by viewModel.period.collectAsStateWithLifecycle()
     val summaries by viewModel.summaries.collectAsStateWithLifecycle()
     val spendingLimit by viewModel.spendingLimit.collectAsStateWithLifecycle()
-    val trackers by viewModel.trackers.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     var editingLimit by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -162,14 +166,35 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxSize(),
     ) {
         item {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            )
+            // Settings is a full-screen push off the Home gear now rather than a tab, so it
+            // carries its own back affordance and the bottom nav is hidden while it is open.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 20.dp, top = 4.dp),
+            ) {
+                SalliIconButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    onClick = onBack,
+                )
+                Text(
+                    text = stringResource(R.string.settings_title),
+                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
 
+        item { Spacer(Modifier.height(8.dp)) }
+        item { SectionLabel("APPEARANCE") }
+        item {
+            AppearancePicker(selected = themeMode, onSelect = viewModel::setThemeMode)
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
         item { SectionLabel("YOU") }
         item {
             UserNameTile(
@@ -334,68 +359,6 @@ fun SettingsScreen(
         }
 
         item { Spacer(Modifier.height(8.dp)) }
-        item { SectionLabel("TRACKERS") }
-        item {
-            SettingsTile(
-                icon = Icons.Outlined.ReceiptLong,
-                title = "Bills",
-                subtitle = when (state.openBillCount) {
-                    0 -> "SLT, Dialog, CEB and water bills from SMS"
-                    1 -> "1 bill to pay"
-                    else -> "${state.openBillCount} bills to pay"
-                },
-                trailing = if (state.openBillCount > 0) {
-                    { UnknownBadge(state.openBillCount) }
-                } else null,
-                onClick = onOpenBills,
-            )
-        }
-        item {
-            SettingsTile(
-                icon = Icons.Outlined.LocalGasStation,
-                title = "Fuel Pass",
-                subtitle = if (state.fuelVehicleCount == 0) "Weekly quota per vehicle, from 1919 SMS"
-                else "${state.fuelVehicleCount} vehicle${if (state.fuelVehicleCount == 1) "" else "s"} tracked",
-                onClick = onOpenFuelPass,
-            )
-        }
-        item {
-            SettingsTile(
-                icon = Icons.Outlined.Autorenew,
-                title = "Recurring & subscriptions",
-                subtitle = when {
-                    trackers.recurring == 0 -> "Repeating payments and failing card subscriptions"
-                    trackers.needsAttention > 0 -> "${trackers.recurring} found · ${trackers.needsAttention} need a look"
-                    else -> "${trackers.recurring} found"
-                },
-                trailing = if (trackers.needsAttention > 0) {
-                    { UnknownBadge(trackers.needsAttention) }
-                } else null,
-                onClick = onOpenRecurring,
-            )
-        }
-        item {
-            SettingsTile(
-                icon = Icons.Outlined.Flag,
-                title = "Goals",
-                subtitle = when (trackers.goals) {
-                    0 -> "Save toward a target, a period at a time"
-                    1 -> "1 goal"
-                    else -> "${trackers.goals} goals"
-                },
-                onClick = onOpenGoals,
-            )
-        }
-        item {
-            SettingsTile(
-                icon = Icons.Outlined.Groups,
-                title = "Shared expenses",
-                subtitle = "Split bills with people and see who owes whom",
-                onClick = onOpenSplit,
-            )
-        }
-
-        item { Spacer(Modifier.height(8.dp)) }
         item { SectionLabel("YOUR DATA") }
         item {
             val syncing by viewModel.syncing.collectAsStateWithLifecycle()
@@ -527,6 +490,102 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+/**
+ * System / Light / Dark, as a segmented row.
+ *
+ * "Follow system" is the default and did not exist before: SalliTheme was manual-only, so a
+ * phone in night mode got a white money app at 2 a.m.
+ *
+ * The tap keeps the circular-reveal transition that used to live on Home's top bar. Each
+ * segment reports its own screen-space centre, so the new palette wipes outward from exactly
+ * where the finger landed. With no LocalThemeTransition in the tree (Compose previews) it
+ * degrades to a plain switch rather than failing.
+ */
+@Composable
+private fun AppearancePicker(
+    selected: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+) {
+    val transition = LocalThemeTransition.current
+    val options = listOf(
+        Triple(ThemeMode.SYSTEM, R.string.settings_theme_system, R.string.settings_theme_system_subtitle),
+        Triple(ThemeMode.LIGHT, R.string.settings_theme_light, R.string.settings_theme_light_subtitle),
+        Triple(ThemeMode.DARK, R.string.settings_theme_dark, R.string.settings_theme_dark_subtitle),
+    )
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            options.forEach { (mode, labelRes, _) ->
+                ThemeSegment(
+                    label = stringResource(labelRes),
+                    isSelected = mode == selected,
+                    modifier = Modifier.weight(1f),
+                    onClick = { centre ->
+                        if (mode != selected) {
+                            if (transition != null) {
+                                transition.request(centre) { onSelect(mode) }
+                            } else {
+                                onSelect(mode)
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = stringResource(options.first { it.first == selected }.third),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ThemeSegment(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: (Offset) -> Unit,
+) {
+    var centre by remember { mutableStateOf(Offset.Zero) }
+    val background = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val foreground = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .height(44.dp)
+            .onGloballyPositioned { coords ->
+                val pos = coords.positionInRoot()
+                centre = Offset(
+                    x = pos.x + coords.size.width / 2f,
+                    y = pos.y + coords.size.height / 2f,
+                )
+            }
+            .clip(SalliShapeTokens.pill)
+            .background(background)
+            .clickable(role = Role.RadioButton, onClick = { onClick(centre) })
+            .semantics { selected = isSelected },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = foreground,
         )
     }
 }

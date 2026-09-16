@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -37,6 +38,7 @@ import lk.salli.app.features.fuel.FuelPassScreen
 import lk.salli.app.features.home.HomeScreen
 import lk.salli.app.features.insights.InsightsScreen
 import lk.salli.app.features.onboarding.OnboardingScreen
+import lk.salli.app.features.plan.PlanScreen
 import lk.salli.app.features.settings.SettingsScreen
 import lk.salli.app.features.timeline.TimelineScreen
 import lk.salli.app.features.split.SplitGroupScreen
@@ -46,7 +48,8 @@ import lk.salli.app.features.unknown.UnknownSmsScreen
 import lk.salli.design.components.FloatingNavBar
 import lk.salli.design.components.ThemeTransitionLayer
 
-private val navRoutes: Set<String> = Destination.entries.mapTo(HashSet()) { it.route }
+/** Patterns that show the bottom nav. Everything else is a full-screen push. */
+private val navPatterns: Set<String> = Destination.entries.mapTo(HashSet()) { it.pattern }
 
 @Composable
 fun SalliNavHost(
@@ -73,8 +76,12 @@ fun SalliNavHost(
 private fun UnlockedSalliNavHost(startDestination: String, navController: NavHostController) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val showBottomNav = currentRoute in navRoutes
-    val currentDest = Destination.entries.firstOrNull { it.route == currentRoute }
+    val showBottomNav = currentRoute in navPatterns
+    val currentDest = Destination.entries.firstOrNull { it.pattern == currentRoute }
+
+    // Resolved here rather than inside FloatingNavBar's `label` lambda: that lambda is a
+    // plain function and stringResource is composable.
+    val tabLabels = Destination.entries.associateWith { stringResource(it.labelRes) }
 
     // The transaction detail sheet is hoisted above the NavHost rather than being a route:
     // the screen that opened it stays composed and visible underneath, and closing is the
@@ -114,25 +121,59 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
             composable(Destination.HOME.route) {
                 HomeScreen(
                     onOpenSafeToSpend = { navController.navigate(Route.SAFE_TO_SPEND) },
-                    onSeeAllActivity = { navController.navigateToTab(Destination.TIMELINE) },
+                    onSeeAllActivity = { navController.navigateToTab(Destination.ACTIVITY) },
+                    onOpenSettings = { navController.navigate(Route.SETTINGS) },
+                    onAccountClick = { accountId ->
+                        navController.navigate(Route.activity(accountId = accountId))
+                    },
                     onTransactionClick = { id -> detailTxId = id },
                 )
             }
-            composable(Destination.TIMELINE.route) {
+            composable(
+                route = Destination.ACTIVITY.pattern,
+                arguments = listOf(
+                    navArgument(Route.ARG_ACCOUNT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(Route.ARG_CATEGORY) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(Route.ARG_QUERY) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                val filters = entry.arguments.toActivityFilterArgs()
                 TimelineScreen(
+                    filters = filters,
                     onTransactionClick = { id -> detailTxId = id },
                 )
             }
-            composable(Destination.INSIGHTS.route) { InsightsScreen() }
-            composable(Destination.BUDGETS.route) { BudgetsScreen() }
-            composable(Destination.SETTINGS.route) {
-                SettingsScreen(
-                    onOpenUnknownSms = { navController.navigate(Route.UNKNOWN_SMS) },
+            composable(Destination.PLAN.route) {
+                PlanScreen(
+                    onOpenBudgets = { navController.navigate(Route.BUDGETS) },
                     onOpenBills = { navController.navigate(Route.BILLS) },
-                    onOpenFuelPass = { navController.navigate(Route.FUEL_PASS) },
                     onOpenRecurring = { navController.navigate(Route.RECURRING) },
                     onOpenGoals = { navController.navigate(Route.GOALS) },
                     onOpenSplit = { navController.navigate(Route.splitGroups()) },
+                    onOpenFuelPass = { navController.navigate(Route.FUEL_PASS) },
+                )
+            }
+            composable(Destination.INSIGHTS.route) { InsightsScreen() }
+
+            composable(Route.BUDGETS) {
+                BudgetsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Route.SETTINGS) {
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenUnknownSms = { navController.navigate(Route.UNKNOWN_SMS) },
                     onReplayIntro = { navController.navigate(Route.ONBOARDING_REPLAY) },
                 )
             }
@@ -220,8 +261,9 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                 items = Destination.entries,
                 selected = currentDest,
                 onSelect = { dest -> navController.navigateToTab(dest) },
-                label = { it.label },
+                label = { tabLabels.getValue(it) },
                 icon = { it.icon },
+                selectedIcon = { it.selectedIcon },
                 key = { it.route },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )

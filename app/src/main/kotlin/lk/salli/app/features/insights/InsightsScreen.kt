@@ -1,15 +1,10 @@
 package lk.salli.app.features.insights
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.design.components.EmptyState
 import lk.salli.domain.Money
+import lk.salli.domain.money.MoneyFormat
 
 @Composable
 fun InsightsScreen(
@@ -148,7 +143,7 @@ private fun HeroHeader(
 ) {
     @Suppress("UNUSED_PARAMETER") totalSpend
     @Suppress("UNUSED_PARAMETER") totalIncome
-    // Minimal header — the big spend amount lives inside the LatestInsightsCard now.
+    // Minimal header — the range chevrons and the two totals, nothing else.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -195,25 +190,6 @@ private fun ChevronButton(emoji: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun AnimatedAmount(money: Money) {
-    // Spring the minor units on change so the number settles in instead of snapping.
-    val animated by androidx.compose.animation.core.animateIntAsState(
-        targetValue = money.minorUnits.toInt().coerceAtLeast(0),
-        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-        label = "hero-amount",
-    )
-    val display = Money(animated.toLong(), money.currency)
-    Text(
-        text = formatMoney(display),
-        style = MaterialTheme.typography.displayLarge.copy(
-            fontSize = 56.sp,
-            fontWeight = FontWeight.Bold,
-        ),
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-}
-
 /* -------------------------------------------------------------------------- */
 /* Bubble chart                                                               */
 /* -------------------------------------------------------------------------- */
@@ -245,7 +221,7 @@ private fun SpendingHeader(
         Spacer(Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = formatMoney(totalSpend),
+                text = MoneyFormat.format(totalSpend),
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -553,7 +529,7 @@ private fun BubbleItem(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = formatMoneyShort(Money(bubble.slice.totalMinor, bubble.slice.currency)),
+                text = MoneyFormat.short(Money(bubble.slice.totalMinor, bubble.slice.currency)),
                 fontSize = amountSp,
                 fontWeight = FontWeight.Bold,
                 color = fg,
@@ -567,251 +543,6 @@ private fun BubbleItem(
             )
         }
     }
-}
-
-/** Compact money formatter for bubbles — strips decimals and uses k/M suffixes. */
-private fun formatMoneyShort(money: Money): String {
-    val symbol = when (money.currency) {
-        "LKR" -> "Rs "
-        "USD" -> "$"
-        else -> "${money.currency} "
-    }
-    val major = kotlin.math.abs(money.minorUnits) / 100
-    return when {
-        major >= 1_000_000 -> "$symbol${"%.1f".format(major / 1_000_000.0)}M"
-        major >= 1_000 -> "$symbol${"%.1f".format(major / 1_000.0)}k"
-        else -> "$symbol$major"
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Latest Insights card — dark pill highlight + vertical category stack       */
-/* -------------------------------------------------------------------------- */
-
-@Composable
-private fun LatestInsightsCard(
-    rangeLabel: String,
-    totalSpend: Money,
-    previousSpend: Long?,
-    slices: List<InsightSlice>,
-    modifier: Modifier = Modifier,
-) {
-    // Left column (labels + amount) / Right column (vertical stack of category circles
-    // with the selected one promoted to a dark pill showing its % share).
-    val selectedState = androidx.compose.runtime.remember(slices.hashCode()) {
-        androidx.compose.runtime.mutableStateOf(0)
-    }
-    var selectedIdx = selectedState.value
-    fun setSelected(i: Int) { selectedState.value = i }
-    val selectedSlice = slices.getOrNull(selectedIdx)
-    val monthOnly = rangeLabel.substringBefore(' ')
-    val delta = previousSpend?.let { totalSpend.minorUnits - it } ?: 0L
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            // --- LEFT: label + amount + delta
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 12.dp),
-            ) {
-                Text(
-                    text = "Here's how you've been spending",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    text = "Your Latest Insights",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(18.dp))
-                Text(
-                    text = monthOnly,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Total expenses last month",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = formatMoney(totalSpend),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = if (delta >= 0) "↗" else "↘",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (previousSpend != null && delta != 0L) {
-                    Spacer(Modifier.height(8.dp))
-                    val absDelta = Money(kotlin.math.abs(delta), totalSpend.currency)
-                    Text(
-                        text = "${if (delta >= 0) "+" else "-"}${formatMoney(absDelta)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-            }
-
-            // --- RIGHT: vertical column of circular category chips
-            CategoryColumn(
-                slices = slices,
-                selectedIdx = selectedIdx,
-                onSelect = ::setSelected,
-                selectedSlice = selectedSlice,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CategoryColumn(
-    slices: List<InsightSlice>,
-    selectedIdx: Int,
-    onSelect: (Int) -> Unit,
-    selectedSlice: InsightSlice?,
-) {
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // The selected category gets a wide dark pill showing its emoji + % share.
-        // AnimatedContent crossfades the pill's emoji + % when the selection changes so
-        // the swap feels intentional instead of a hard cut.
-        if (selectedSlice != null) {
-            androidx.compose.animation.AnimatedContent(
-                targetState = selectedSlice,
-                transitionSpec = {
-                    (androidx.compose.animation.fadeIn(tween(220))
-                        + androidx.compose.animation.slideInHorizontally(tween(260)) { it / 4 }
-                    ) togetherWith
-                        (androidx.compose.animation.fadeOut(tween(140))
-                            + androidx.compose.animation.slideOutHorizontally(tween(180)) { -it / 4 })
-                },
-                label = "dark-pill",
-            ) { target ->
-                DarkSelectedPill(slice = target)
-            }
-        }
-        // Remaining categories render as small ink-filled circles, tappable. Each one
-        // runs its own alpha-from-0 entrance on composition so the list reveals itself
-        // smoothly when the selection flips and a new category takes the chip slot.
-        slices.forEachIndexed { i, s ->
-            if (i == selectedIdx) return@forEachIndexed
-            CategoryCircle(
-                slice = s,
-                onClick = { onSelect(i) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun DarkSelectedPill(slice: InsightSlice) {
-    // Animated integer for the percentage so the pill reads as alive.
-    val animPct by androidx.compose.animation.core.animateIntAsState(
-        targetValue = (slice.percent * 100).toInt(),
-        animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
-        label = "pct-${slice.categoryId ?: -1}",
-    )
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.inverseSurface)
-            .padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
-        ) {
-            Text(
-                text = emojiForCategoryName(slice.categoryName),
-                fontSize = 14.sp,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = "$animPct%",
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-        )
-    }
-}
-
-@Composable
-private fun CategoryCircle(slice: InsightSlice, onClick: () -> Unit) {
-    // Scale-in on first appearance so the chip slot doesn't pop.
-    val appear = remember(slice.categoryId) { Animatable(0.7f) }
-    val alpha = remember(slice.categoryId) { Animatable(0f) }
-    LaunchedEffect(slice.categoryId) {
-        kotlinx.coroutines.coroutineScope {
-            launch { appear.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
-            launch { alpha.animateTo(1f, tween(200)) }
-        }
-    }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(30.dp)
-            .graphicsLayer {
-                scaleX = appear.value; scaleY = appear.value; this.alpha = alpha.value
-            }
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(onClick = onClick),
-    ) {
-        Text(
-            text = emojiForCategoryName(slice.categoryName),
-            fontSize = 14.sp,
-        )
-    }
-}
-
-private fun emojiForCategoryName(name: String): String = when {
-    name.equals("Groceries", ignoreCase = true) -> "🛒"
-    name.equals("Food & Dining", ignoreCase = true) -> "🍔"
-    name.equals("Transport", ignoreCase = true) -> "🚕"
-    name.equals("Fuel", ignoreCase = true) -> "⛽"
-    name.equals("Utilities", ignoreCase = true) -> "💡"
-    name.equals("Online Subscriptions", ignoreCase = true) -> "📺"
-    name.equals("Shopping", ignoreCase = true) -> "🛍️"
-    name.equals("Healthcare", ignoreCase = true) -> "🩺"
-    name.equals("Education", ignoreCase = true) -> "📚"
-    name.equals("Entertainment", ignoreCase = true) -> "🎬"
-    name.equals("Rent", ignoreCase = true) -> "🏠"
-    name.equals("Salary", ignoreCase = true) -> "💰"
-    name.equals("Transfers", ignoreCase = true) -> "💸"
-    name.equals("Cash", ignoreCase = true) -> "💵"
-    name.equals("Fees", ignoreCase = true) -> "🧾"
-    else -> "🧾"
 }
 
 /* -------------------------------------------------------------------------- */
@@ -841,7 +572,7 @@ private fun TopCategoryCallout(
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = "${formatMoney(Money(slice.totalMinor, slice.currency))} on ${slice.categoryName} in $monthOnly",
+            text = "${MoneyFormat.format(Money(slice.totalMinor, slice.currency))} on ${slice.categoryName} in $monthOnly",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface,
             lineHeight = 22.sp,
@@ -868,7 +599,7 @@ private fun CategoryRow(slice: InsightSlice) {
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = formatMoney(Money(slice.totalMinor, slice.currency)),
+            text = MoneyFormat.format(Money(slice.totalMinor, slice.currency)),
             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -880,21 +611,4 @@ private fun CategoryRow(slice: InsightSlice) {
             .height(1.dp)
             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     )
-}
-
-/* -------------------------------------------------------------------------- */
-/* Formatting                                                                 */
-/* -------------------------------------------------------------------------- */
-
-private fun formatMoney(money: Money): String {
-    val symbol = when (money.currency) {
-        "LKR" -> "Rs "
-        "USD" -> "$"
-        else -> "${money.currency} "
-    }
-    val abs = kotlin.math.abs(money.minorUnits)
-    val major = abs / 100
-    val cents = abs % 100
-    val formatter = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US)
-    return "$symbol${formatter.format(major)}.${"%02d".format(cents)}"
 }

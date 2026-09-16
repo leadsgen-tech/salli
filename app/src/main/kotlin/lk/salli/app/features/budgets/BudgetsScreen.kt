@@ -1,7 +1,6 @@
 package lk.salli.app.features.budgets
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,33 +23,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.LocalCafe
-import androidx.compose.material.icons.outlined.LocalGroceryStore
-import androidx.compose.material.icons.outlined.LocalHospital
-import androidx.compose.material.icons.outlined.LocalMovies
-import androidx.compose.material.icons.outlined.LocalTaxi
-import androidx.compose.material.icons.outlined.Money
-import androidx.compose.material.icons.outlined.PieChart
-import androidx.compose.material.icons.outlined.Receipt
-import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Savings
-import androidx.compose.material.icons.outlined.School
-import androidx.compose.material.icons.outlined.ShoppingBag
-import androidx.compose.material.icons.outlined.Subscriptions
-import androidx.compose.material.icons.outlined.Toll
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -77,7 +60,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -89,10 +71,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import lk.salli.data.db.entities.AccountEntity
 import lk.salli.data.db.entities.CategoryEntity
+import androidx.compose.ui.res.stringResource
+import lk.salli.app.R
+import lk.salli.design.components.CategoryGlyph
+import lk.salli.design.components.CategoryIcon
 import lk.salli.design.components.EmptyState
+import lk.salli.design.components.SalliIconButton
+import lk.salli.design.components.PaceBar
+import lk.salli.design.components.SalliTone
+import lk.salli.design.components.StatusPill
+import lk.salli.design.theme.LocalSalliColors
+import lk.salli.domain.money.MoneyFormat
 
 @Composable
-fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(
+    onBack: () -> Unit = {},
+    viewModel: BudgetsViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val defaultPeriodStart by viewModel.defaultPeriodStartDay.collectAsStateWithLifecycle()
@@ -112,18 +107,31 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             modifier = Modifier.fillMaxSize(),
         ) {
             item("header") {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                    Text(
-                        text = "Budgets",
-                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurface,
+                // Budgets stopped being a tab and became a push off Plan, so it needs a
+                // visible way back — gesture-back alone leaves a full-screen page looking
+                // like a dead end.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 8.dp, end = 20.dp, top = 4.dp),
+                ) {
+                    SalliIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.action_back),
+                        onClick = onBack,
                     )
-                    Spacer(Modifier.size(2.dp))
-                    Text(
-                        text = "Each budget tracks its own cycle.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                        Text(
+                            text = "Budgets",
+                            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.size(2.dp))
+                        Text(
+                            text = "Each budget tracks its own cycle.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -245,11 +253,12 @@ private fun BudgetCard(budget: BudgetUi, onClick: () -> Unit) {
                 PaceBadge(pace = budget.pace, progress = budget.progress)
             }
             Spacer(Modifier.height(14.dp))
-            // Progress track — with a marker at expected-burn to contextualise the fill.
-            ProgressTrack(
-                progress = budget.progress.coerceIn(0f, 1.2f),
-                expectedFraction = budget.paceExpectedFraction,
-                over = budget.overBudget,
+            // The pace track (fill + expected-burn tick) is a design-module component now, so
+            // Home's hero, Plan and the widget all draw the identical thing.
+            PaceBar(
+                progress = budget.progress,
+                expected = budget.paceExpectedFraction,
+                tone = budget.pace.tone(),
             )
             Spacer(Modifier.height(8.dp))
             Row(
@@ -257,7 +266,7 @@ private fun BudgetCard(budget: BudgetUi, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = formatMoney(budget.totalSpentMinor, budget.currency),
+                    text = MoneyFormat.formatMinor(budget.totalSpentMinor, budget.currency),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -282,61 +291,15 @@ private fun BudgetCard(budget: BudgetUi, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ProgressTrack(progress: Float, expectedFraction: Float, over: Boolean) {
-    val trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val fillColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(8.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(trackColor),
-    ) {
-        LinearProgressIndicator(
-            progress = { progress.coerceIn(0f, 1f) },
-            color = fillColor,
-            trackColor = Color.Transparent,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp),
-        )
-        // Expected-burn marker — a faint 2dp vertical line at the expected pace.
-        if (expectedFraction in 0.02f..0.98f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(expectedFraction.coerceIn(0f, 1f))
-                    .fillMaxSize(),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(12.dp)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun PaceBadge(pace: BudgetPace, progress: Float) {
-    val (label, bg, fg) = when (pace) {
-        BudgetPace.Over -> Triple("OVER", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
-        BudgetPace.Hot -> Triple("HOT", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-        BudgetPace.OnPace -> Triple("ON PACE", MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface)
-        BudgetPace.Under -> Triple("UNDER", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+    val label = when (pace) {
+        BudgetPace.Over -> "Over"
+        BudgetPace.Hot -> "Running hot"
+        BudgetPace.OnPace -> "On pace"
+        BudgetPace.Under -> "Under pace"
     }
     Column(horizontalAlignment = Alignment.End) {
-        Surface(color = bg, shape = RoundedCornerShape(10.dp)) {
-            Text(
-                text = label,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = fg,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
+        StatusPill(text = label, tone = pace.tone())
         Spacer(Modifier.height(4.dp))
         Text(
             text = "${(progress * 100).toInt()}%",
@@ -384,21 +347,12 @@ private fun ScopeMicroChip(scope: AccountScope) {
 
 @Composable
 private fun BudgetLineRow(line: BudgetLineUi) {
-    val color = Color(line.colorSeed)
+    // colorSeed is a palette index now, not a raw ARGB — resolve it through the theme so the
+    // hue is tone-mapped for the active scheme instead of being a 2014 Material swatch.
+    val hue = LocalSalliColors.current.categoryHue(line.colorSeed)
+    val color = hue.accent
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(28.dp)
-                .background(color.copy(alpha = 0.18f), CircleShape),
-        ) {
-            Icon(
-                imageVector = iconForName(line.iconName),
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(14.dp),
-            )
-        }
+        CategoryIcon(iconName = line.iconName, colorSeed = line.colorSeed, size = 28.dp)
         Spacer(Modifier.size(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -419,8 +373,8 @@ private fun BudgetLineRow(line: BudgetLineUi) {
         }
         Spacer(Modifier.size(10.dp))
         Text(
-            text = formatMoney(line.spent.minorUnits, line.cap.currency) +
-                " / " + formatMoney(line.cap.minorUnits, line.cap.currency),
+            text = MoneyFormat.formatMinor(line.spent.minorUnits, line.cap.currency) +
+                " / " + MoneyFormat.formatMinor(line.cap.minorUnits, line.cap.currency),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -578,11 +532,7 @@ private fun BudgetSheet(
                             },
                             label = { Text(cat.name) },
                             leadingIcon = {
-                                Icon(
-                                    imageVector = iconForName(cat.iconName),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
+                                CategoryGlyph(iconName = cat.iconName, size = 16.dp)
                             },
                         )
                     }
@@ -906,7 +856,6 @@ private fun CapRow(
     onValueChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
-    val color = Color(category.colorSeed)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -915,19 +864,11 @@ private fun CapRow(
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(34.dp)
-                .background(color.copy(alpha = 0.18f), CircleShape),
-        ) {
-            Icon(
-                imageVector = iconForName(category.iconName),
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(16.dp),
-            )
-        }
+        CategoryIcon(
+            iconName = category.iconName,
+            colorSeed = category.colorSeed,
+            size = 34.dp,
+        )
         Spacer(Modifier.size(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -992,7 +933,7 @@ private fun CapRow(
 private fun remainingLabel(budget: BudgetUi): String {
     val absMinor = kotlin.math.abs(budget.remainingMinor)
     val prefix = if (budget.remainingMinor < 0) "Over by " else "Left "
-    return "$prefix${formatMoney(absMinor, budget.currency)}"
+    return "$prefix${MoneyFormat.formatMinor(absMinor, budget.currency)}"
 }
 
 private fun parseMajorToMinor(raw: String): Long? {
@@ -1016,31 +957,13 @@ private fun majorString(minor: Long): String {
     return if (cents == 0L) whole.toString() else "$whole.${"%02d".format(cents)}"
 }
 
-private fun formatMoney(minor: Long, currency: String): String {
-    val symbol = if (currency == "LKR") "Rs " else "$currency "
-    val abs = kotlin.math.abs(minor)
-    val major = abs / 100
-    val cents = abs % 100
-    val formatter = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US)
-    return "$symbol${formatter.format(major)}.${"%02d".format(cents)}"
-}
-
-private fun iconForName(name: String): ImageVector = when (name) {
-    "restaurant", "fastfood", "food" -> Icons.Outlined.Restaurant
-    "cafe" -> Icons.Outlined.LocalCafe
-    "grocery", "groceries" -> Icons.Outlined.LocalGroceryStore
-    "transport", "car" -> Icons.Outlined.DirectionsCar
-    "taxi", "ride" -> Icons.Outlined.LocalTaxi
-    "fuel" -> Icons.Outlined.Toll
-    "utilities", "bill" -> Icons.Outlined.Wifi
-    "subscriptions" -> Icons.Outlined.Subscriptions
-    "shopping" -> Icons.Outlined.ShoppingBag
-    "healthcare", "medical" -> Icons.Outlined.LocalHospital
-    "education" -> Icons.Outlined.School
-    "entertainment", "movies" -> Icons.Outlined.LocalMovies
-    "rent", "home" -> Icons.Outlined.Home
-    "salary", "income" -> Icons.Outlined.AttachMoney
-    "cash", "atm" -> Icons.Outlined.Money
-    "fees" -> Icons.Outlined.PieChart
-    else -> Icons.Outlined.Receipt
+/**
+ * One mapping from a budget's pace to a Salli tone, so the badge, the pace bar and anything
+ * Plan renders can never disagree about what "hot" looks like.
+ */
+private fun BudgetPace.tone(): SalliTone = when (this) {
+    BudgetPace.Under -> SalliTone.POSITIVE
+    BudgetPace.OnPace -> SalliTone.NEUTRAL
+    BudgetPace.Hot -> SalliTone.WARNING
+    BudgetPace.Over -> SalliTone.NEGATIVE
 }

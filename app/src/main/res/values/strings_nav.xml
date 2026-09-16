@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bottom navigation. Four tabs, one question each:
+         Home "how am I doing right now?", Activity "what happened?",
+         Plan "what's coming?", Insights "where does it go?". -->
+    <string name="nav_home">Home</string>
+    <string name="nav_activity">Activity</string>
+    <string name="nav_plan">Plan</string>
+    <string name="nav_insights">Insights</string>
+
+    <!-- Top-bar actions -->
+    <string name="action_settings">Settings</string>
+    <string name="action_back">Back</string>
+</resources>

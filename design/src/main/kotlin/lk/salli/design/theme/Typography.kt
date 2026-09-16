@@ -18,12 +18,24 @@ import lk.salli.design.R
  * styles use restrained tracking. Every style opts into tabular numerals so amounts align.
  */
 
+/**
+ * Space Grotesk ships three static weights with the app: 400, 500 and 700. There is no 600
+ * file, so every `FontWeight.SemiBold` request — including the default weight of [display]
+ * below, which most of the scale uses — was resolving to Bold through Compose's nearest-weight
+ * matcher, silently. It is mapped **explicitly** here instead: same pixels, but now it is a
+ * decision rather than a coincidence, and vendoring a real 600 TTF later is a one-line change
+ * that fixes every call site at once.
+ *
+ * Licence: SIL OFL 1.1, text bundled at `res/raw/ofl_space_grotesk.txt`.
+ */
 private val SpaceGrotesk = FontFamily(
     Font(R.font.space_grotesk_regular, FontWeight.Normal),
     Font(R.font.space_grotesk_medium, FontWeight.Medium),
+    Font(R.font.space_grotesk_bold, FontWeight.SemiBold),
     Font(R.font.space_grotesk_bold, FontWeight.Bold),
 )
 
+/** Licence: SIL OFL 1.1, text bundled at `res/raw/ofl_inter.txt`. */
 private val Inter = FontFamily(
     Font(R.font.inter_regular, FontWeight.Normal),
     Font(R.font.inter_medium, FontWeight.Medium),

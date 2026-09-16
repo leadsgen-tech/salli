@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.app.ui.TimelineItem
+import lk.salli.app.nav.ActivityFilterArgs
 import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.TransactionEntity
@@ -92,6 +93,12 @@ class TimelineViewModel @Inject constructor(
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query
+    private val _filters = MutableStateFlow(ActivityFilterArgs.NONE)
+
+    fun applyFilters(filters: ActivityFilterArgs) {
+        _filters.value = filters
+        _query.value = filters.query.orEmpty()
+    }
 
     /** True when the user has set a custom range that doesn't align to a calendar month. */
     private val _customRange = MutableStateFlow(false)
@@ -108,14 +115,17 @@ class TimelineViewModel @Inject constructor(
             else db.transactions().observeInRange(0L, Long.MAX_VALUE)
         }
 
+    private val searchAndFilters = combine(_query, _filters) { query, filters -> query to filters }
+
     val state: StateFlow<TimelineUiState> = combine(
         kotlinx.coroutines.flow.combine(_range, _customRange, monthStartDay) { r, c, d -> Triple(r, c, d) },
-        _query,
+        searchAndFilters,
         txns,
         db.categories().observeAll(),
         db.accounts().observeAll(),
-    ) { rangeAndCustom, query, rows, categories, accounts ->
+    ) { rangeAndCustom, search, rows, categories, accounts ->
         val (range, customRange, startDay) = rangeAndCustom
+        val (query, filters) = search
         // Hidden accounts are a persisted Settings choice (accounts.is_hidden). The legend
         // chips on this screen flip the same flag, so the two places can never disagree.
         val hiddenAccountIds = accounts.filter { it.isHidden }.map { it.id }.toSet()
@@ -138,7 +148,11 @@ class TimelineViewModel @Inject constructor(
         }
         // Everything downstream (totals pills, day groups, chart series) reads from this
         // filtered list. The account toggle is a full filter, not just a chart-mask.
-        val filtered = queryFiltered.filter { it.accountId !in hiddenAccountIds }
+        val filtered = queryFiltered.filter {
+            it.accountId !in hiddenAccountIds &&
+                (filters.accountId == null || it.accountId == filters.accountId) &&
+                (filters.categoryId == null || it.categoryId == filters.categoryId)
+        }
 
         // Pick the dominant currency for the pill totals — we don't sum across currencies.
         val dominantCurrency = filtered
@@ -178,7 +192,9 @@ class TimelineViewModel @Inject constructor(
         // query-scoped range so the user can tap to re-enable a hidden one — compute that
         // from `queryFiltered` (pre-hide) instead.
         val visibleSeries = buildAccountSeries(range, filtered, byAcc, dominantCurrency)
-        val accountsInView = buildAccountSeries(range, queryFiltered, byAcc, dominantCurrency)
+        val accountsInView = buildAccountSeries(range, queryFiltered.filter {
+            filters.accountId == null || it.accountId == filters.accountId
+        }, byAcc, dominantCurrency)
             .map { AccountSummary(id = it.accountId, displayName = it.displayName) }
 
         TimelineUiState(

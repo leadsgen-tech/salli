@@ -45,6 +45,11 @@ class Seeder(private val db: SalliDatabase) {
             db.categories().insertAll(missing)
         }
 
+        // Existing installs carry the old raw-ARGB colour seeds (and, in a couple of cases,
+        // icon names that drifted). Re-point system categories at the design palette. No
+        // schema change: the column's meaning changed, not its type.
+        remapSystemCategoryStyling()
+
         val byName = db.categories().all().associateBy { it.name }
 
         val kwEntities = SeedKeywords.byCategory.flatMap { (categoryName, keywords) ->
@@ -63,6 +68,28 @@ class Seeder(private val db: SalliDatabase) {
         }
 
         recategorizeStale()
+    }
+
+    /**
+     * Moves system categories onto the design module's 12-hue palette (and heals any drifted
+     * icon name) by re-applying [SeedCategories] to rows that already exist.
+     *
+     * Idempotent by construction: it compares before it writes, so a database that is already
+     * correct issues zero updates and every boot after the first costs one SELECT. Only
+     * `is_system = 1` rows are touched — enforced here *and* in the DAO's WHERE clause — so a
+     * category the user created or recoloured keeps whatever they chose.
+     *
+     * Deliberately not a Room migration: `color_seed` changed *meaning* (raw ARGB → palette
+     * index), not type, and a migration cannot know about a palette that lives in `:design`.
+     */
+    private suspend fun remapSystemCategoryStyling() {
+        for (row in db.categories().all()) {
+            if (!row.isSystem) continue
+            val seed = SeedCategories.paletteByName[row.name] ?: continue
+            val icon = SeedCategories.iconByName[row.name] ?: continue
+            if (row.colorSeed == seed && row.iconName == icon) continue
+            db.categories().updateSystemStyling(id = row.id, colorSeed = seed, iconName = icon)
+        }
     }
 
     /**

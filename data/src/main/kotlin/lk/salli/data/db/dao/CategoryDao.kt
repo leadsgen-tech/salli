@@ -31,4 +31,15 @@ interface CategoryDao {
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /**
+     * Re-points a **system** category at a design-token palette slot and icon name. Guarded on
+     * `is_system` so a category the user made (or re-coloured) is never overwritten by a seed
+     * upgrade. Used only by [lk.salli.data.seed.Seeder].
+     */
+    @Query(
+        "UPDATE categories SET color_seed = :colorSeed, icon_name = :iconName " +
+            "WHERE id = :id AND is_system = 1",
+    )
+    suspend fun updateSystemStyling(id: Long, colorSeed: Int, iconName: String)
 }
