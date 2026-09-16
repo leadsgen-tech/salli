@@ -136,7 +136,8 @@ fun TimelineScreen(
                 MiniBarChart(
                     values = state.dailySpend,
                     highlight = state.dailySpend.lastIndex,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    height = 40.dp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
             }
         }
@@ -379,58 +380,26 @@ private fun FilterGroup(title: String, content: @Composable () -> Unit) {
 @Composable
 private fun IncomeExpensePills(income: Money, expense: Money) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 4.dp),
     ) {
-        SummaryPill(
-            label = stringResource(R.string.activity_income_label),
-            amount = formatMoney(income),
-            positive = true,
-            modifier = Modifier.weight(1f),
-        )
-        SummaryPill(
-            label = stringResource(R.string.activity_expense_label),
-            amount = formatMoney(expense),
-            positive = false,
-            modifier = Modifier.weight(1f),
-        )
+        InlineSummary(stringResource(R.string.activity_income_label), formatMoney(income), true)
+        InlineSummary(stringResource(R.string.activity_expense_label), formatMoney(expense), false)
     }
 }
 
 @Composable
-private fun SummaryPill(
+private fun InlineSummary(
     label: String,
     amount: String,
     positive: Boolean,
-    modifier: Modifier = Modifier,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        shape = RoundedCornerShape(14.dp),
-        tonalElevation = 0.dp,
-        modifier = modifier.height(76.dp),
-    ) {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (positive) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
+    Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.width(4.dp))
+    Text(amount, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = if (positive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface)
 }
 
 /* -------------------------------------------------------------------------- */
