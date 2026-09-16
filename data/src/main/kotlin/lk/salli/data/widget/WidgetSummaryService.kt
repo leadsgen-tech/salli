@@ -29,6 +29,7 @@ data class WidgetSummary(
     val hideAmounts: Boolean,
     /** Makes the widget's period line actionable rather than an unexplained month label. */
     val daysRemaining: Int = 0,
+    val budgetLimitMinor: Long? = null,
 ) {
     fun spentTodayText(format: (Money) -> String): String = amountText(spentTodayMinor, currency, format)
     fun periodSpentText(format: (Money) -> String): String = amountText(periodSpentMinor, currency, format)
@@ -68,7 +69,7 @@ class WidgetSummaryService(
         prefs.widgetHideAmounts,
         db.accounts().observeAll(),
         planning.observe(),
-    ) { period, hide, accounts, plan -> Inputs(period.monthStartDay, hide, accounts.filter { it.isHidden }.mapTo(HashSet()) { it.id }, plan.safeToSpend.perDayMinor, plan.currency) }
+    ) { period, hide, accounts, plan -> Inputs(period.monthStartDay, hide, accounts.filter { it.isHidden }.mapTo(HashSet()) { it.id }, plan.safeToSpend.perDayMinor, plan.currency, plan.userLimitMinor) }
         .distinctUntilChanged()
         .flatMapLatest { inputs ->
             val now = clock()
@@ -86,6 +87,7 @@ class WidgetSummaryService(
         val hiddenAccountIds: Set<Long>,
         val safePerDayMinor: Long?,
         val planningCurrency: String,
+        val budgetLimitMinor: Long?,
     )
 
     private fun build(
@@ -106,6 +108,7 @@ class WidgetSummaryService(
             safeToSpendCurrency = inputs.planningCurrency,
             hideAmounts = inputs.hideAmounts,
             daysRemaining = (((cycle.untilMillis - clock()).coerceAtLeast(0L) + DAY_MS - 1) / DAY_MS).toInt(),
+            budgetLimitMinor = inputs.budgetLimitMinor,
         )
     }
 

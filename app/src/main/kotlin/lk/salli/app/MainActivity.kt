@@ -82,13 +82,15 @@ class MainActivity : FragmentActivity() {
                     // Keep the initial graph stable when onboarding saves completion before
                     // navigating. Skipping SMS is a valid, persistent first-run choice.
                     val start = remember {
-                        if (introduced == true) Destination.HOME.route else Route.ONBOARDING
+                        if (introduced == true) intent.getStringExtra(EXTRA_START_ROUTE) ?: Destination.HOME.route else Route.ONBOARDING
                     }
                     SalliNavHost(startDestination = start, appLock = appLock)
                 }
             }
         }
     }
+
+    companion object { const val EXTRA_START_ROUTE = "lk.salli.app.extra.START_ROUTE" }
 
     private fun applyWindowProtection(protect: Boolean) {
         if (protect) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)

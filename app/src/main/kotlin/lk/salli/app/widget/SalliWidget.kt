@@ -2,6 +2,9 @@ package lk.salli.app.widget
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -20,6 +23,8 @@ import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -149,18 +154,12 @@ private fun WidgetContent(context: Context, summary: WidgetSummary?, upcoming: U
             .cornerRadius(16.dp)
             .background(GlanceTheme.colors.surface)
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable(
-                actionStartActivity(
-                    Intent(context, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    },
-                ),
-            ),
+            .clickable(actionStartActivity(homeIntent(context))),
     ) {
         when {
             summary == null -> Text(text = "Salli", style = valueStyle(14))
             compact -> CompactLayout(summary)
-            medium -> MediumLayout(summary, upcoming)
+            medium -> MediumLayout(context, summary, upcoming)
             else -> SmallLayout(summary)
         }
     }
@@ -174,7 +173,7 @@ private fun SmallLayout(summary: WidgetSummary) {
     Text(summary.spentTodayText(format), style = valueStyle(24, true), maxLines = 1)
     // Glance does not expose Compose Canvas. This compact glyph preserves the pace signal at
     // launcher scale without a network or custom font dependency.
-    Text("▰▰▰▰▰▱▱▱▱▱", style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 10.sp), maxLines = 1)
+    Image(provider = ImageProvider(paceBitmap(summary)), contentDescription = "Spending pace", modifier = GlanceModifier.fillMaxWidth().height(6.dp))
     Text(summary.periodSpentText(format) + " spent · " + summary.daysRemaining + " days left", style = labelStyle(), maxLines = 1)
 }
 
@@ -194,12 +193,12 @@ private fun LabelValueRow(label: String, value: String) {
 }
 
 @Composable
-private fun MediumLayout(summary: WidgetSummary, upcoming: UpcomingItem?) {
+private fun MediumLayout(context: Context, summary: WidgetSummary, upcoming: UpcomingItem?) {
     Row(modifier = GlanceModifier.fillMaxWidth()) {
         Column(modifier = GlanceModifier.defaultWeight()) {
             SmallLayout(summary)
         }
-        Column(modifier = GlanceModifier.defaultWeight().padding(start = 10.dp)) {
+        Column(modifier = GlanceModifier.defaultWeight().padding(start = 10.dp).clickable(actionStartActivity(planIntent(context)))) {
             Text("Up next", style = labelStyle(), maxLines = 1)
             if (upcoming == null) Text("Nothing due soon", style = valueStyle(13), maxLines = 2)
             else Text(upcoming.title + (upcoming.amountMinor?.let { " · " + MoneyFormat.format(lk.salli.domain.Money(it, upcoming.currency ?: "LKR")) } ?: ""), style = valueStyle(13), maxLines = 2)
@@ -234,3 +233,26 @@ private fun valueStyle(sizeSp: Int, emphasised: Boolean = false) =
         fontSize = sizeSp.sp,
         fontWeight = FontWeight.Medium,
     )
+
+private fun homeIntent(context: Context) = Intent(context, MainActivity::class.java).apply {
+    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+}
+
+private fun planIntent(context: Context) = Intent(context, MainActivity::class.java).apply {
+    putExtra(MainActivity.EXTRA_START_ROUTE, "plan")
+}
+
+/** Tiny, data-driven pace bitmap: fill is period spending / optional budget limit. */
+private fun paceBitmap(summary: WidgetSummary): Bitmap {
+    val width = 160; val height = 8
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val fraction = (summary.budgetLimitMinor?.takeIf { it > 0L }
+        ?.let { summary.periodSpentMinor.toFloat() / it } ?: 0f).coerceIn(0f, 1f)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.color = android.graphics.Color.rgb(213, 218, 229)
+    canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 4f, 4f, paint)
+    paint.color = android.graphics.Color.rgb(0, 61, 255)
+    canvas.drawRoundRect(0f, 0f, width * fraction, height.toFloat(), 4f, 4f, paint)
+    return bitmap
+}
