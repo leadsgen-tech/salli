@@ -11,10 +11,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
@@ -34,7 +33,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.design.components.stage.BubbleStage
 import lk.salli.design.components.stage.HeatGrid
 import lk.salli.design.components.stage.SpringOdometer
+import lk.salli.design.motion.LocalReducedMotion
 import lk.salli.design.theme.SalliBrandColors
+import kotlinx.coroutines.launch
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
 private val BubbleLabels = listOf("COMBANK\nCard purchase", "BOC\nATM withdrawal", "OTP 482913", "PeoplesBank\nJustPay", "SLTBILL\nRs 11,953", "DIALOG promo", "HNB\nCard alert", "1919\nFuel", "CEB\nBill")
@@ -44,11 +45,27 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     val state by viewModel.state.collectAsStateWithLifecycle()
     var act by rememberSaveable { mutableIntStateOf(if (replay) 0 else state.stage.ordinal.coerceIn(0, 2)) }
     var sort by remember { mutableFloatStateOf(if (replay) 1f else 0f) }
+    val sortAnimation = remember { Animatable(sort) }
+    val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
     val granted = remember(tick) { SmsPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
     val importing = state.import.running
+    fun startSort() {
+        act = 1
+        scope.launch {
+            sortAnimation.snapTo(0f)
+            sortAnimation.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 420f))
+            sort = 1f
+        }
+    }
+    LaunchedEffect(granted, act, replay) {
+        if (!replay && granted && act == 1) {
+            act = 2
+            viewModel.runImport()
+        }
+    }
     LaunchedEffect(state.completionTarget) {
         when (state.completionTarget) {
             OnboardingCompletionTarget.HOME -> { viewModel.consumeCompletion(); onDone() }
@@ -58,10 +75,10 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     }
     BackHandler(enabled = importing) {}
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        AnimatedContent(act, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "onboarding act") { visibleAct ->
-            when (visibleAct) {
-                0 -> ChaosAct({ if (replay) onDone() else viewModel.complete(deferHistory = true) }) { sort = 1f; act = 1 }
-                1 -> SortAct(sort, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }) { if (replay) onDone() else viewModel.complete(deferHistory = true) }
+        Box(Modifier.fillMaxSize()) {
+            when (act) {
+                0 -> ChaosAct({ if (replay) onDone() else viewModel.complete(deferHistory = true) }, ::startSort)
+                1 -> SortAct(sortAnimation.value, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }, { if (replay) onDone() else viewModel.complete(deferHistory = true) })
                 else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
             }
         }
@@ -70,13 +87,22 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 
 @Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
     val haptic = LocalHapticFeedback.current
-    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) }, 0f, Modifier.fillMaxWidth().height(360.dp), setOf(2, 5), bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
+    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) }, 0f, Modifier.fillMaxWidth().height(360.dp), setOf(2, 5), reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
 }
 
 @Composable private fun SortAct(progress: Float, granted: Boolean, onProgress: (Float) -> Unit, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) = StageScaffold(lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress), MaterialTheme.colorScheme.onBackground, onSkip) {
+    BubbleStage(
+        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(142.dp, 54.dp) },
+        sortProgress = progress,
+        modifier = Modifier.fillMaxWidth().height(230.dp),
+        discarded = setOf(2, 5),
+        reducedMotion = LocalReducedMotion.current,
+        bubble = { Bubble(BubbleLabels[it]) },
+        row = { Bubble(if (it == 0) "Keells Super · Groceries" else BubbleLabels[it]) },
+    )
     Text("OTPs and promos: ignored.", style = MaterialTheme.typography.labelLarge)
     Text("One clean timeline.", style = MaterialTheme.typography.displaySmall)
     Text("Sorted on your phone. Nothing leaves it.", style = MaterialTheme.typography.bodyLarge)
@@ -109,7 +135,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
             lastInserted = state.import.inserted
         }
     }
-    Spacer(Modifier.height(16.dp)); HeatGrid(columns = 52, rows = 7, values = cells, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth(), reducedMotion = false)
+    Spacer(Modifier.height(16.dp)); HeatGrid(columns = 52, rows = 7, values = cells, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth(), reducedMotion = LocalReducedMotion.current)
     Spacer(Modifier.height(12.dp)); SpringOdometer("${found}", style = MaterialTheme.typography.displayLarge)
     Text(if (state.import.running) "Reading ${state.import.processed} of ${total}" else "transactions found")
     state.import.previews.firstOrNull()?.let { Text((it.title ?: "Transaction") + " · " + it.amountMinor, style = MaterialTheme.typography.bodySmall) }
