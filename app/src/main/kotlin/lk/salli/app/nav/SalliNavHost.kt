@@ -165,7 +165,13 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                     onOpenFuelPass = { navController.navigate(Route.FUEL_PASS) },
                 )
             }
-            composable(Destination.INSIGHTS.route) { InsightsScreen() }
+            composable(Destination.INSIGHTS.route) {
+                InsightsScreen(
+                    onOpenActivityCategory = { id -> navController.navigate(Route.activity(categoryId = id)) },
+                    onOpenActivityMerchant = { query -> navController.navigate(Route.activity(query = query)) },
+                    onOpenActivityAccount = { id -> navController.navigate(Route.activity(accountId = id)) },
+                )
+            }
 
             composable(
                 route = Route.TRANSACTION_DETAIL,

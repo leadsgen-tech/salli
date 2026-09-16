@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_pull">Pull to check messages</string>
+    <string name="refresh_release">Release to check</string>
+    <string name="refresh_checking">Checking messages…</string>
+    <string name="refresh_retry">Retry</string>
+    <string name="refresh_up_to_date">Up to date</string>
+    <string name="refresh_failed">Couldn’t read messages</string>
+</resources>
