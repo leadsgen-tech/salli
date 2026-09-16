@@ -47,6 +47,10 @@ import lk.salli.design.components.ThemeTransitionLayer
 
 /** Patterns that show the bottom nav. Everything else is a full-screen push. */
 private val navPatterns: Set<String> = Destination.entries.mapTo(HashSet()) { it.pattern }
+private val planSubroutes = setOf(
+    Route.BUDGETS, Route.BILLS, Route.RECURRING, Route.GOALS,
+    Route.FUEL_PASS, Route.SPLIT_GROUPS, Route.SPLIT_GROUP,
+)
 
 @Composable
 fun SalliNavHost(
@@ -73,8 +77,9 @@ fun SalliNavHost(
 private fun UnlockedSalliNavHost(startDestination: String, navController: NavHostController) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val showBottomNav = currentRoute in navPatterns
+    val showBottomNav = currentRoute in navPatterns || currentRoute in planSubroutes
     val currentDest = Destination.entries.firstOrNull { it.pattern == currentRoute }
+        ?: Destination.PLAN.takeIf { currentRoute in planSubroutes }
 
     // Resolved here rather than inside FloatingNavBar's `label` lambda: that lambda is a
     // plain function and stringResource is composable.
@@ -117,7 +122,6 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                     onOpenSettings = { navController.navigate(Route.SETTINGS) },
                     onSeeAllPlan = { navController.navigateToTab(Destination.PLAN) },
                     onOpenUpcoming = { route -> navController.navigate(route) },
-                    onOpenUnknownSms = { navController.navigate(Route.UNKNOWN_SMS) },
                     onOpenBudgets = { navController.navigate(Route.BUDGETS) },
                     onAccountClick = { accountId ->
                         navController.navigate(Route.activity(accountId = accountId))

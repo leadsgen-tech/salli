@@ -95,7 +95,6 @@ fun HomeScreen(
     onAccountClick: (Long) -> Unit = {},
     onSeeAllPlan: () -> Unit = {},
     onOpenUpcoming: (String) -> Unit = {},
-    onOpenUnknownSms: () -> Unit = {},
     onOpenBudgets: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     planningViewModel: SafeToSpendViewModel = hiltViewModel(),
@@ -105,7 +104,6 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
-    val unknownSmsCount by viewModel.unknownSmsCount.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val todayLabel = stringResource(R.string.home_today)
@@ -188,12 +186,10 @@ fun HomeScreen(
         item {
             RightNowLine(
                 upcoming = upcoming,
-                unknownSmsCount = unknownSmsCount,
                 budgets = budgets.budgets,
                 safeTodayMinor = planning?.safeToSpend?.perDayMinor,
                 currency = planning?.currency ?: state.monthExpense.currency,
                 onOpenUpcoming = onOpenUpcoming,
-                onOpenUnknownSms = onOpenUnknownSms,
                 onOpenBudgets = onOpenBudgets,
                 onOpenSafeToSpend = onOpenSafeToSpend,
             )
@@ -519,12 +515,10 @@ private fun UpcomingRow(item: UpcomingItem, onClick: () -> Unit) {
 @Composable
 private fun RightNowLine(
     upcoming: List<UpcomingItem>,
-    unknownSmsCount: Int,
     budgets: List<BudgetUi>,
     safeTodayMinor: Long?,
     currency: String,
     onOpenUpcoming: (String) -> Unit,
-    onOpenUnknownSms: () -> Unit,
     onOpenBudgets: () -> Unit,
     onOpenSafeToSpend: () -> Unit,
 ) {
@@ -538,7 +532,7 @@ private fun RightNowLine(
         budgetsOver = budgets.filter { it.overBudget }.map {
             HeadlineBudget(it.name, -it.remainingMinor, it.currency)
         },
-        unknownSmsCount = unknownSmsCount,
+        unknownSmsCount = 0,
         safeToSpendTodayMinor = safeTodayMinor,
         currency = currency,
     )) ?: return
@@ -546,7 +540,7 @@ private fun RightNowLine(
         HeadlineKind.BILL_OVERDUE -> stringResource(R.string.home_headline_overdue, headline.params.label.orEmpty())
         HeadlineKind.BILL_DUE_TODAY -> stringResource(R.string.home_headline_due_today, headline.params.label.orEmpty())
         HeadlineKind.BUDGET_OVER -> stringResource(R.string.home_headline_budget_over, headline.params.label.orEmpty())
-        HeadlineKind.UNKNOWN_SMS -> stringResource(R.string.home_headline_unknown, headline.params.count)
+        HeadlineKind.UNKNOWN_SMS -> return
         HeadlineKind.SAFE_TO_SPEND -> stringResource(
             R.string.home_headline_safe,
             MoneyFormat.formatMinor(headline.params.amountMinor ?: 0L, currency),
@@ -555,7 +549,7 @@ private fun RightNowLine(
     }
     val action = when (headline.kind) {
         HeadlineKind.BILL_OVERDUE, HeadlineKind.BILL_DUE_TODAY -> { { onOpenUpcoming(UpcomingRoutes.BILLS) } }
-        HeadlineKind.UNKNOWN_SMS -> onOpenUnknownSms
+        HeadlineKind.UNKNOWN_SMS -> return
         HeadlineKind.BUDGET_OVER -> onOpenBudgets
         else -> onOpenSafeToSpend
     }

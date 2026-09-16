@@ -1,5 +1,6 @@
 package lk.salli.app.features.goals
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,14 +71,32 @@ fun GoalsScreen(
     var editing by remember { mutableStateOf<GoalRow?>(null) }
     var contributingTo by remember { mutableStateOf<GoalRow?>(null) }
     var deleting by remember { mutableStateOf<GoalRow?>(null) }
+    BackHandler(enabled = creating || editing != null) {
+        creating = false
+        editing = null
+    }
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    if (creating || editing != null) {
+        GoalEditorScreen(
+            initial = editing,
+            accounts = state.accounts,
+            onBack = { creating = false; editing = null },
+            onSave = { name, target, date, account ->
+                viewModel.saveGoal(editing?.id, name, target, date, account)
+                creating = false
+                editing = null
+            },
+        )
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Goals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
@@ -111,18 +132,6 @@ fun GoalsScreen(
         }
     }
 
-    if (creating || editing != null) {
-        GoalEditorDialog(
-            initial = editing,
-            accounts = state.accounts,
-            onDismiss = { creating = false; editing = null },
-            onSave = { name, target, date, account ->
-                viewModel.saveGoal(editing?.id, name, target, date, account)
-                creating = false
-                editing = null
-            },
-        )
-    }
     contributingTo?.let { goal ->
         ContributionDialog(
             goalName = goal.name,
@@ -212,58 +221,86 @@ private fun GoalCard(goal: GoalRow, onAdd: () -> Unit, onEdit: () -> Unit, onArc
 }
 
 @Composable
-private fun GoalEditorDialog(
+private fun GoalEditorScreen(
     initial: GoalRow?,
     accounts: List<AccountOption>,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onSave: (name: String, targetMinor: Long, targetDate: Long?, linkedAccountId: Long?) -> Unit,
 ) {
-    var name by remember { mutableStateOf(initial?.name.orEmpty()) }
-    var target by remember { mutableStateOf(initial?.target?.let { plainAmount(it.minorUnits) }.orEmpty()) }
-    var date by remember { mutableStateOf(initial?.targetDate?.let { isoDate(it) }.orEmpty()) }
-    var account by remember { mutableStateOf(initial?.linkedAccountId) }
+    var name by remember(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
+    var target by remember(initial?.id) { mutableStateOf(initial?.target?.let { plainAmount(it.minorUnits) }.orEmpty()) }
+    var date by remember(initial?.id) { mutableStateOf(initial?.targetDate?.let { isoDate(it) }.orEmpty()) }
+    var account by remember(initial?.id) { mutableStateOf(initial?.linkedAccountId) }
 
     val targetMinor = parseMinor(target)
     val dateMillis = parseDate(date)
     val dateOk = date.isBlank() || dateMillis != null
     val valid = name.isNotBlank() && targetMinor != null && dateOk
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "New goal" else "Edit goal") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
-                OutlinedTextField(
-                    value = target,
-                    onValueChange = { target = it },
-                    label = { Text("Target (Rs)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize()
+            .padding(top = statusBar, bottom = 100.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = "Back to goals",
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Target date, optional (YYYY-MM-DD)") },
-                    singleLine = true,
-                    isError = !dateOk,
-                )
-                if (accounts.isNotEmpty()) {
-                    Text(text = "Count progress from an account balance (optional)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        FilterChip(selected = account == null, onClick = { account = null }, label = { Text("None") })
-                        accounts.forEach { a ->
-                            FilterChip(selected = account == a.id, onClick = { account = a.id }, label = { Text(a.name) })
-                        }
+            }
+            Text(
+                if (initial == null) "New goal" else "Edit goal",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        ) {
+            Text(
+                "Give this money a purpose.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = target,
+                onValueChange = { target = it },
+                label = { Text("Target amount (Rs)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = date,
+                onValueChange = { date = it },
+                label = { Text("Target date (optional, YYYY-MM-DD)") },
+                singleLine = true,
+                isError = !dateOk,
+                supportingText = if (!dateOk) ({ Text("Use YYYY-MM-DD") }) else null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (accounts.isNotEmpty()) {
+                Text(text = "Count progress from an account balance (optional)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    FilterChip(selected = account == null, onClick = { account = null }, label = { Text("None") })
+                    accounts.forEach { a ->
+                        FilterChip(selected = account == a.id, onClick = { account = a.id }, label = { Text(a.name) })
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (targetMinor != null) onSave(name, targetMinor, dateMillis, account) }, enabled = valid) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+            Button(
+                onClick = { if (targetMinor != null) onSave(name, targetMinor, dateMillis, account) },
+                enabled = valid,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (initial == null) "Create goal" else "Save changes") }
+        }
+    }
 }
 
 @Composable

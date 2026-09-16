@@ -49,7 +49,7 @@ fun FuelPassScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         TopBar(onBack = onBack, vehicles = state.vehicles.size)
 
         if (!state.loading && state.vehicles.isEmpty()) {
@@ -81,7 +81,7 @@ private fun TopBar(onBack: () -> Unit, vehicles: Int) {
             .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(

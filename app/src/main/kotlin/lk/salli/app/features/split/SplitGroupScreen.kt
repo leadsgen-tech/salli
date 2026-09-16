@@ -105,13 +105,13 @@ fun SplitGroupScreen(
     LaunchedEffect(prefill?.transactionId) { if (prefill != null) addingExpense = true }
 
     val group = state.group
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(

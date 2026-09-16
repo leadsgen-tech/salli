@@ -48,7 +48,7 @@ fun BillsScreen(
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val dateFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         TopBar(onBack = onBack, openCount = state.open.size)
 
         if (!state.loading && state.open.isEmpty() && state.paid.isEmpty()) {
@@ -98,7 +98,7 @@ private fun TopBar(onBack: () -> Unit, openCount: Int) {
             .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(

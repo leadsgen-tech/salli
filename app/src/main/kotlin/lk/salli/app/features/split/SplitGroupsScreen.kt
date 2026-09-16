@@ -55,13 +55,13 @@ fun SplitGroupsScreen(
     var creating by remember { mutableStateOf(false) }
     val pending = state.pending
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Shared expenses", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)

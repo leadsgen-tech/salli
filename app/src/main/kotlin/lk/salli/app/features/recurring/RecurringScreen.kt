@@ -55,7 +55,7 @@ fun RecurringScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     val found = state.failing.size + state.dueSoon.size + state.active.size + state.missed.size
-    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = statusBar, bottom = 100.dp)) {
         TopBar(onBack = onBack, subtitle = if (found == 1) "1 found" else "$found found")
 
         if (!state.loading && state.isEmpty) {
@@ -102,7 +102,7 @@ private fun TopBar(onBack: () -> Unit, subtitle: String) {
         modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(

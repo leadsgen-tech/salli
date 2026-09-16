@@ -27,7 +27,6 @@
     <string name="home_headline_overdue">%1$s is overdue</string>
     <string name="home_headline_due_today">%1$s is due today</string>
     <string name="home_headline_budget_over">%1$s is over budget</string>
-    <string name="home_headline_unknown">%1$d messages need a look</string>
     <string name="home_headline_safe">%1$s safe to spend today</string>
     <string name="home_empty_title">Waiting for your first bank alert</string>
     <string name="home_empty_message">Salli reads bank messages on this phone. Your transactions will appear here when an alert arrives.</string>
