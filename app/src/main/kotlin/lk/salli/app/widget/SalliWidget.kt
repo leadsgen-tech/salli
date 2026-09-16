@@ -171,9 +171,9 @@ private val format: (lk.salli.domain.Money) -> String = { MoneyFormat.format(it)
 private fun SmallLayout(summary: WidgetSummary) {
     Text("Spent today", style = labelStyle(), maxLines = 1)
     Text(summary.spentTodayText(format), style = valueStyle(24, true), maxLines = 1)
-    // Glance does not expose Compose Canvas. This compact glyph preserves the pace signal at
-    // launcher scale without a network or custom font dependency.
-    Image(provider = ImageProvider(paceBitmap(summary)), contentDescription = "Spending pace", modifier = GlanceModifier.fillMaxWidth().height(6.dp))
+    if (!summary.hideAmounts && summary.budgetLimitMinor != null) {
+        Image(provider = ImageProvider(paceBitmap(summary)), contentDescription = "Spending pace", modifier = GlanceModifier.fillMaxWidth().height(6.dp))
+    }
     Text(summary.periodSpentText(format) + " spent · " + summary.daysRemaining + " days left", style = labelStyle(), maxLines = 1)
 }
 
@@ -201,7 +201,12 @@ private fun MediumLayout(context: Context, summary: WidgetSummary, upcoming: Upc
         Column(modifier = GlanceModifier.defaultWeight().padding(start = 10.dp).clickable(actionStartActivity(planIntent(context)))) {
             Text("Up next", style = labelStyle(), maxLines = 1)
             if (upcoming == null) Text("Nothing due soon", style = valueStyle(13), maxLines = 2)
-            else Text(upcoming.title + (upcoming.amountMinor?.let { " · " + MoneyFormat.format(lk.salli.domain.Money(it, upcoming.currency ?: "LKR")) } ?: ""), style = valueStyle(13), maxLines = 2)
+            else Text(
+                upcoming.title + (upcoming.amountMinor?.takeUnless { summary.hideAmounts }
+                    ?.let { " · " + MoneyFormat.format(lk.salli.domain.Money(it, upcoming.currency ?: "LKR")) } ?: ""),
+                style = valueStyle(13),
+                maxLines = 2,
+            )
         }
     }
 }
