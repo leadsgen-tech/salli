@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.RecurringSeriesEntity
+import lk.salli.data.upcoming.UpcomingItem
+import lk.salli.data.upcoming.UpcomingService
+import lk.salli.data.planning.PlanningService
+import lk.salli.data.planning.PlanningSnapshot
 
 /**
  * The live counts behind Plan's tracker rows.
@@ -30,7 +34,14 @@ data class PlanUiState(
 @HiltViewModel
 class PlanViewModel @Inject constructor(
     db: SalliDatabase,
+    planning: PlanningService,
 ) : ViewModel() {
+
+    val upcoming: StateFlow<List<UpcomingItem>> = UpcomingService(db).observe()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val planningSnapshot: StateFlow<PlanningSnapshot?> = planning.observe()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val state: StateFlow<PlanUiState> = combine(
         db.bills().observeOpenCount(),

@@ -1,6 +1,18 @@
 package lk.salli.app.features.plan
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
@@ -32,6 +46,26 @@ import lk.salli.app.R
 import lk.salli.app.features.budgets.BudgetPace
 import lk.salli.app.features.budgets.BudgetUi
 import lk.salli.app.features.budgets.BudgetsViewModel
+import lk.salli.app.features.goals.GoalsViewModel
+import lk.salli.app.features.goals.GoalRow
+import lk.salli.data.upcoming.UpcomingItem
+import lk.salli.data.upcoming.UpcomingKind
+import lk.salli.data.upcoming.UpcomingTone
+import lk.salli.design.components.HeroCard
+import lk.salli.design.components.HeroEyebrow
+import lk.salli.design.components.RingProgress
+import lk.salli.design.components.stage.SpringOdometer
+import lk.salli.design.theme.LocalSalliColors
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.launch
+import lk.salli.domain.planning.CommitmentKind
 import lk.salli.design.components.GroupedList
 import lk.salli.design.components.ListDivider
 import lk.salli.design.components.ListRow
@@ -72,9 +106,18 @@ fun PlanScreen(
     onOpenFuelPass: () -> Unit = {},
     viewModel: PlanViewModel = hiltViewModel(),
     budgetsViewModel: BudgetsViewModel = hiltViewModel(),
+    goalsViewModel: GoalsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
+    val goals by goalsViewModel.state.collectAsStateWithLifecycle()
+    val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
+    val planning by viewModel.planningSnapshot.collectAsStateWithLifecycle()
+    val today = remember { LocalDate.now(ZoneId.of("Asia/Colombo")).toEpochDay() }
+    val bringIntoView = remember(upcoming) {
+        upcoming.map { it.dueEpochDay }.distinct().associateWith { BringIntoViewRequester() }
+    }
+    val scope = rememberCoroutineScope()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     LazyColumn(
@@ -96,6 +139,56 @@ fun PlanScreen(
         }
 
         item { Spacer(Modifier.height(SalliSpacing.sm)) }
+        planning?.let { snapshot ->
+            item {
+                val spokenFor = snapshot.safeToSpend.commitments
+                    .filter { it.kind == CommitmentKind.BILL || it.kind == CommitmentKind.RECURRING }
+                    .sumOf { it.amountMinor }
+                HeroCard {
+                    HeroEyebrow(stringResource(R.string.plan_spoken_for))
+                    Spacer(Modifier.height(SalliSpacing.xs))
+                    SpringOdometer(
+                        text = MoneyFormat.formatMinor(spokenFor, snapshot.currency),
+                        style = MaterialTheme.typography.displayMedium,
+                        color = LocalSalliColors.current.onHero,
+                    )
+                    upcoming.firstOrNull()?.let { next ->
+                        Spacer(Modifier.height(SalliSpacing.sm))
+                        Text(
+                            text = stringResource(R.string.plan_next_due, next.title),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalSalliColors.current.onHero.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+        }
+        if (upcoming.isNotEmpty()) {
+            item { SectionHeader(title = stringResource(R.string.plan_up_next)) }
+            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            item {
+                PlanRibbon(today = today, upcoming = upcoming) { day ->
+                    scope.launch { bringIntoView[day]?.bringIntoView() }
+                }
+            }
+            item { Spacer(Modifier.height(SalliSpacing.sm)) }
+            item {
+                GroupedList {
+                    upcoming.forEachIndexed { index, item ->
+                        if (index > 0) ListDivider()
+                        PlanUpcomingRow(
+                            item = item,
+                            modifier = Modifier.bringIntoViewRequester(bringIntoView.getValue(item.dueEpochDay)),
+                            onOpenBills = onOpenBills,
+                            onOpenRecurring = onOpenRecurring,
+                            onOpenFuelPass = onOpenFuelPass,
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+        }
         item { SectionHeader(title = stringResource(R.string.plan_budgets_header)) }
         item { Spacer(Modifier.height(SalliSpacing.xs)) }
         item {
@@ -116,6 +209,27 @@ fun PlanScreen(
                         subtitle = stringResource(R.string.plan_budgets_all_subtitle),
                         onClick = onOpenBudgets,
                     )
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+        item {
+            SectionHeader(
+                title = stringResource(R.string.plan_goals_title),
+                actionLabel = stringResource(R.string.plan_goals_all),
+                onAction = onOpenGoals,
+            )
+        }
+        val liveGoals = goals.goals.filter { !it.isArchived }
+        if (liveGoals.isNotEmpty()) {
+            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(SalliSpacing.sm),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                ) {
+                    liveGoals.forEach { goal -> GoalPreview(goal, onOpenGoals) }
                 }
             }
         }
@@ -158,17 +272,6 @@ fun PlanScreen(
                 )
                 ListDivider()
                 TrackerRow(
-                    icon = Icons.Outlined.Flag,
-                    title = stringResource(R.string.plan_goals_title),
-                    subtitle = if (state.goalCount == 0) {
-                        stringResource(R.string.plan_goals_empty)
-                    } else {
-                        pluralStringResource(R.plurals.plan_goals_count, state.goalCount, state.goalCount)
-                    },
-                    onClick = onOpenGoals,
-                )
-                ListDivider()
-                TrackerRow(
                     icon = Icons.Outlined.Groups,
                     title = stringResource(R.string.plan_split_title),
                     subtitle = stringResource(R.string.plan_split_subtitle),
@@ -190,6 +293,108 @@ fun PlanScreen(
                     onClick = onOpenFuelPass,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PlanRibbon(today: Long, upcoming: List<UpcomingItem>, onSelect: (Long) -> Unit) {
+    val byDay = remember(upcoming) { upcoming.groupBy { it.dueEpochDay } }
+    val weekday = remember { DateTimeFormatter.ofPattern("EEE", Locale.getDefault()) }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(SalliSpacing.xs),
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+    ) {
+        repeat(14) { offset ->
+            val day = today + offset
+            val date = LocalDate.ofEpochDay(day)
+            val items = byDay[day].orEmpty()
+            val dotColor = when {
+                items.any { it.kind == UpcomingKind.BILL } -> LocalSalliColors.current.warning
+                items.any { it.kind == UpcomingKind.FUEL_ELIGIBLE } -> LocalSalliColors.current.positive
+                items.isNotEmpty() -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(SalliSpacing.xxs),
+                modifier = Modifier
+                    .width(48.dp)
+                    .background(
+                        if (offset == 0) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.background,
+                        RoundedCornerShape(16.dp),
+                    )
+                    .clickable(enabled = items.isNotEmpty()) { onSelect(day) }
+                    .padding(vertical = SalliSpacing.xs),
+            ) {
+                Text(
+                    date.format(weekday),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Box(Modifier.size(5.dp).background(dotColor, CircleShape))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanUpcomingRow(
+    item: UpcomingItem,
+    modifier: Modifier,
+    onOpenBills: () -> Unit,
+    onOpenRecurring: () -> Unit,
+    onOpenFuelPass: () -> Unit,
+) {
+    val subtitle = when (item.kind) {
+        UpcomingKind.BILL -> stringResource(R.string.plan_kind_bill)
+        UpcomingKind.RECURRING -> stringResource(R.string.plan_kind_recurring)
+        UpcomingKind.FUEL_ELIGIBLE -> stringResource(R.string.plan_kind_fuel_eligible)
+        UpcomingKind.FUEL_RESET -> stringResource(R.string.plan_kind_fuel_reset)
+    }
+    val action = when (item.kind) {
+        UpcomingKind.BILL -> onOpenBills
+        UpcomingKind.RECURRING -> onOpenRecurring
+        UpcomingKind.FUEL_ELIGIBLE, UpcomingKind.FUEL_RESET -> onOpenFuelPass
+    }
+    ListRow(
+        title = item.title,
+        subtitle = subtitle,
+        modifier = modifier,
+        trailing = item.amountMinor?.let { amount ->
+            { Text(MoneyFormat.formatMinor(amount, item.currency ?: "LKR")) }
+        },
+        showChevron = true,
+        onClick = action,
+    )
+}
+
+@Composable
+private fun GoalPreview(goal: GoalRow, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.width(170.dp).clickable(onClick = onClick),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(SalliSpacing.xs),
+            modifier = Modifier.padding(SalliSpacing.md),
+        ) {
+            RingProgress(progress = goal.percent / 100f)
+            Text(goal.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            Text(
+                stringResource(
+                    R.string.plan_goal_saved_of_target,
+                    MoneyFormat.short(goal.saved),
+                    MoneyFormat.short(goal.target),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

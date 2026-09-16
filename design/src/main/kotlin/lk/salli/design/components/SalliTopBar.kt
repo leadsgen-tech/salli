@@ -69,6 +69,7 @@ fun SalliIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

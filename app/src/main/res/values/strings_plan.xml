@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="plan_spoken_for">Spoken for this period</string>
+    <string name="plan_next_due">Next: %1$s</string>
+    <string name="plan_up_next">Up next</string>
+    <string name="plan_goals_all">See all</string>
+    <string name="plan_goal_saved_of_target">%1$s of %2$s</string>
+    <string name="plan_kind_bill">Bill</string>
+    <string name="plan_kind_recurring">Recurring</string>
+    <string name="plan_kind_fuel_eligible">Fuel Pass eligible</string>
+    <string name="plan_kind_fuel_reset">Fuel Pass reset</string>
     <string name="plan_title">Plan</string>
 
     <!-- Budgets, rendered inline: Plan is where you set caps, not a menu that leads to one. -->
