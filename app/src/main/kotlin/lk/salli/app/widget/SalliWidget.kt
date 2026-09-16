@@ -44,6 +44,9 @@ import lk.salli.app.MainActivity
 import lk.salli.data.widget.WidgetSummary
 import lk.salli.data.widget.WidgetSummaryService
 import lk.salli.design.format.MoneyFormat
+import lk.salli.design.theme.fallbackScheme
+import lk.salli.data.upcoming.UpcomingItem
+import kotlinx.coroutines.flow.first
 
 /**
  * Home-screen widget. Small (about 2×1): spent today and this period. Medium (about 4×2): the
@@ -68,9 +71,15 @@ class SalliWidget : GlanceAppWidget() {
             Log.e(TAG, "Couldn't load widget summary", error)
             null
         }
+        val upcoming = try {
+            EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+                .upcomingService().observe().first().firstOrNull()
+        } catch (_: Exception) {
+            null
+        }
         provideContent {
             GlanceTheme(colors = WidgetColors) {
-                WidgetContent(context, summary)
+                WidgetContent(context, summary, upcoming)
             }
         }
     }
@@ -115,6 +124,7 @@ class SalliWidgetReceiver : GlanceAppWidgetReceiver() {
 @InstallIn(SingletonComponent::class)
 interface WidgetEntryPoint {
     fun widgetSummaryService(): WidgetSummaryService
+    fun upcomingService(): lk.salli.data.upcoming.UpcomingService
     fun widgetUpdateCoordinator(): WidgetUpdateCoordinator
 }
 
@@ -122,30 +132,15 @@ private fun widgetEntryPoint(context: Context): WidgetEntryPoint = EntryPointAcc
     .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
 
 private val WidgetColors = ColorProviders(
-    light = lightColorScheme(
-        primary = Color(0xFF003DFF),
-        onPrimary = Color.White,
-        tertiaryContainer = Color(0xFFDFFF32),
-        onTertiaryContainer = Color(0xFF111407),
-        surface = Color(0xFFFFFFFF),
-        onSurface = Color(0xFF0A0D14),
-        onSurfaceVariant = Color(0xFF596170),
-    ),
-    dark = darkColorScheme(
-        primary = Color(0xFF91A5FF),
-        onPrimary = Color(0xFF001A66),
-        tertiaryContainer = Color(0xFFDFFF32),
-        onTertiaryContainer = Color(0xFF111407),
-        surface = Color(0xFF111723),
-        onSurface = Color(0xFFF4F6FC),
-        onSurfaceVariant = Color(0xFFB8C0CF),
-    ),
+    light = fallbackScheme(isDark = false),
+    dark = fallbackScheme(isDark = true),
 )
 
 @Composable
-private fun WidgetContent(context: Context, summary: WidgetSummary?) {
+private fun WidgetContent(context: Context, summary: WidgetSummary?, upcoming: UpcomingItem?) {
     val size = LocalSize.current
-    val medium = size.width >= SalliWidget.MEDIUM.width && size.height >= SalliWidget.MEDIUM.height
+    val compact = size.height < 80.dp
+    val medium = !compact && size.width >= SalliWidget.MEDIUM.width
     Column(
         verticalAlignment = Alignment.CenterVertically,
         modifier = GlanceModifier
@@ -163,7 +158,8 @@ private fun WidgetContent(context: Context, summary: WidgetSummary?) {
     ) {
         when {
             summary == null -> Text(text = "Salli", style = valueStyle(14))
-            medium -> MediumLayout(summary)
+            compact -> CompactLayout(summary)
+            medium -> MediumLayout(summary, upcoming)
             else -> SmallLayout(summary)
         }
     }
@@ -173,9 +169,14 @@ private val format: (lk.salli.domain.Money) -> String = { MoneyFormat.format(it)
 
 @Composable
 private fun SmallLayout(summary: WidgetSummary) {
-    LabelValueRow("Spent today", summary.spentTodayText(format))
-    Spacer(GlanceModifier.height(2.dp))
-    LabelValueRow("This period", summary.periodSpentText(format))
+    Text("Spent today", style = labelStyle(), maxLines = 1)
+    Text(summary.safeToSpendTodayText(format), style = valueStyle(24, true), maxLines = 1)
+    Text(summary.periodSpentText(format) + " spent · " + summary.periodLabel, style = labelStyle(), maxLines = 1)
+}
+
+@Composable
+private fun CompactLayout(summary: WidgetSummary) {
+    Text("Safe today · " + summary.safeToSpendTodayText(format), style = valueStyle(13, true), maxLines = 1)
 }
 
 @Composable
@@ -187,18 +188,19 @@ private fun LabelValueRow(label: String, value: String) {
 }
 
 @Composable
-private fun MediumLayout(summary: WidgetSummary) {
+private fun MediumLayout(summary: WidgetSummary, upcoming: UpcomingItem?) {
     Row(modifier = GlanceModifier.fillMaxWidth()) {
-        Metric("Spent today", summary.spentTodayText(format), GlanceModifier.defaultWeight())
-        Metric("This period", summary.periodSpentText(format), GlanceModifier.defaultWeight())
+        Column(modifier = GlanceModifier.defaultWeight()) {
+            Text("Spent today", style = labelStyle(), maxLines = 1)
+            Text(summary.safeToSpendTodayText(format), style = valueStyle(24, true), maxLines = 1)
+            Text(summary.periodSpentText(format) + " spent · " + summary.periodLabel, style = labelStyle(), maxLines = 1)
+        }
+        Column(modifier = GlanceModifier.defaultWeight().padding(start = 10.dp)) {
+            Text("Up next", style = labelStyle(), maxLines = 1)
+            if (upcoming == null) Text("Nothing due soon", style = valueStyle(13), maxLines = 2)
+            else Text(upcoming.title + (upcoming.amountMinor?.let { " · " + MoneyFormat.format(lk.salli.domain.Money(it, upcoming.currency ?: "LKR")) } ?: ""), style = valueStyle(13), maxLines = 2)
+        }
     }
-    Spacer(GlanceModifier.height(8.dp))
-    Metric(
-        "Safe to spend today",
-        summary.safeToSpendTodayText(format),
-        GlanceModifier.fillMaxWidth(),
-        emphasised = true,
-    )
 }
 
 @Composable

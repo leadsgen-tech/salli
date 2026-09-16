@@ -118,5 +118,5 @@ private val DarkScheme = darkColorScheme(
     surfaceTint = Color.Transparent,
 )
 
-internal fun fallbackScheme(isDark: Boolean): ColorScheme =
+fun fallbackScheme(isDark: Boolean): ColorScheme =
     if (isDark) DarkScheme else LightScheme

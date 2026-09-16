@@ -6,6 +6,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:description="@string/widget_description"
     android:initialLayout="@layout/glance_default_loading_layout"
+    android:previewImage="@drawable/widget_preview"
     android:minWidth="110dp"
     android:minHeight="40dp"
     android:minResizeWidth="110dp"
