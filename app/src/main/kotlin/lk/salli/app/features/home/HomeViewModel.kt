@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import lk.salli.app.ui.TimelineItem
 import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
@@ -55,7 +54,7 @@ data class Trend(
     /**
      * Per-bucket values inside the *current* period — one entry per day for week/month
      * views. The ordering is chronological (oldest on the left, today on the right), which
-     * matches how the Sparkline composable draws it.
+     * matches how MiniBarChart draws it.
      */
     val buckets: List<Long> = emptyList(),
 ) {
@@ -257,18 +256,6 @@ class HomeViewModel @Inject constructor(
         initialValue = HomeUiState(),
     )
 
-    val darkTheme: StateFlow<Boolean> = prefs.darkTheme.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
-        initialValue = false,
-    )
-
-    fun toggleTheme() {
-        viewModelScope.launch {
-            prefs.setDarkTheme(!darkTheme.value)
-        }
-    }
-
     /**
      * Sum [txns] expenses by day into a fixed-length bucket array starting at [startMs] and
      * running [days] days forward. Zero-fills days with no spend so sparklines keep a
@@ -292,7 +279,6 @@ class HomeViewModel @Inject constructor(
         }
         return out.toList()
     }
-
 
     private companion object {
         const val DAY_MS = 24L * 60 * 60 * 1000

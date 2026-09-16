@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test:
-    name: Parser, domain + data tests
+    name: Unit tests (parser, domain, data, design, app)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Run unit tests
-        run: ./gradlew :parser:test :domain:test :data:test --no-daemon
+        run: ./gradlew :parser:test :domain:test :data:test :design:testDebugUnitTest :app:testDebugUnitTest --no-daemon
 
       - name: Upload test reports on failure
         if: failure()
@@ -51,6 +51,8 @@ jobs:
             parser/build/reports/tests/
             domain/build/reports/tests/
             data/build/reports/tests/
+            design/build/reports/tests/
+            app/build/reports/tests/
           retention-days: 7
 
 # APK builds are handled by release.yml on v* tags (and via manual dispatch for

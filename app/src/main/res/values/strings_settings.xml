@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+
+    <string name="settings_appearance_header">Appearance</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system_subtitle">Follows your phone\'s light and dark setting</string>
+    <string name="settings_theme_light_subtitle">Always light, whatever the phone does</string>
+    <string name="settings_theme_dark_subtitle">Always dark, whatever the phone does</string>
+</resources>

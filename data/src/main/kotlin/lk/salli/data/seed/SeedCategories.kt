@@ -6,26 +6,61 @@ import lk.salli.data.db.entities.CategoryEntity
  * Seed categories shipped with the app on first install. IDs are assigned by Room; the order
  * here determines what the user sees by default. All keep `isSystem = true` so they can't be
  * deleted (though they can be renamed / re-coloured).
+ *
+ * **`colorSeed` is a palette index, not an ARGB colour.** It used to hold raw 2014 Material
+ * hues (`0xFF4CAF50`) which were never tone-mapped, so every category looked like it came from
+ * a different app and dark mode got the light-mode hue at full chroma. Now it names a slot in
+ * the design module's 12-hue ramp (`SalliColors.categoryPalette`), which ships a tuned
+ * light/dark container pair per hue. User-created categories may still carry an arbitrary ARGB
+ * seed; `SalliColors.categoryHue` folds any Int into the ramp, so both kinds resolve.
+ *
+ * The first eleven spending categories each get their own hue. Salary reuses the green
+ * (it's income and never shares a chart with Groceries), and the four money-plumbing
+ * categories deliberately share the neutral slot — transfers, cash, fees and "other" are
+ * exactly the rows that should not shout.
+ *
+ * [Seeder] re-applies these on upgrade, so changing an index here migrates existing installs.
  */
 object SeedCategories {
+
+    // Palette slots — see SalliColors.categoryPalette for the hues themselves.
+    private const val GREEN = 0
+    private const val AMBER = 1
+    private const val COBALT = 2
+    private const val CLAY = 3
+    private const val OCHRE = 4
+    private const val VIOLET = 5
+    private const val MAGENTA = 6
+    private const val RED = 7
+    private const val INDIGO = 8
+    private const val TEAL = 9
+    private const val SLATE = 10
+    private const val NEUTRAL = 11
+
     val all: List<CategoryEntity> = listOf(
-        CategoryEntity(name = "Groceries", iconName = "shopping_cart", colorSeed = 0xFF4CAF50.toInt()),
-        CategoryEntity(name = "Food & Dining", iconName = "restaurant", colorSeed = 0xFFFF9800.toInt()),
-        CategoryEntity(name = "Transport", iconName = "directions_car", colorSeed = 0xFF2196F3.toInt()),
-        CategoryEntity(name = "Fuel", iconName = "local_gas_station", colorSeed = 0xFF795548.toInt()),
-        CategoryEntity(name = "Utilities", iconName = "bolt", colorSeed = 0xFFFFC107.toInt()),
-        CategoryEntity(name = "Online Subscriptions", iconName = "subscriptions", colorSeed = 0xFF9C27B0.toInt()),
-        CategoryEntity(name = "Shopping", iconName = "shopping_bag", colorSeed = 0xFFE91E63.toInt()),
-        CategoryEntity(name = "Healthcare", iconName = "medical_services", colorSeed = 0xFFF44336.toInt()),
-        CategoryEntity(name = "Education", iconName = "school", colorSeed = 0xFF3F51B5.toInt()),
-        CategoryEntity(name = "Entertainment", iconName = "movie", colorSeed = 0xFF673AB7.toInt()),
-        CategoryEntity(name = "Rent", iconName = "home", colorSeed = 0xFF607D8B.toInt()),
-        CategoryEntity(name = "Salary", iconName = "payments", colorSeed = 0xFF009688.toInt()),
-        CategoryEntity(name = "Transfers", iconName = "swap_horiz", colorSeed = 0xFF9E9E9E.toInt()),
-        CategoryEntity(name = "Cash", iconName = "local_atm", colorSeed = 0xFF757575.toInt()),
-        CategoryEntity(name = "Fees", iconName = "receipt_long", colorSeed = 0xFFB71C1C.toInt()),
-        CategoryEntity(name = "Other", iconName = "category", colorSeed = 0xFF455A64.toInt()),
+        CategoryEntity(name = "Groceries", iconName = "shopping_cart", colorSeed = GREEN),
+        CategoryEntity(name = "Food & Dining", iconName = "restaurant", colorSeed = AMBER),
+        CategoryEntity(name = "Transport", iconName = "directions_car", colorSeed = COBALT),
+        CategoryEntity(name = "Fuel", iconName = "local_gas_station", colorSeed = CLAY),
+        CategoryEntity(name = "Utilities", iconName = "bolt", colorSeed = OCHRE),
+        CategoryEntity(name = "Online Subscriptions", iconName = "subscriptions", colorSeed = VIOLET),
+        CategoryEntity(name = "Shopping", iconName = "shopping_bag", colorSeed = MAGENTA),
+        CategoryEntity(name = "Healthcare", iconName = "medical_services", colorSeed = RED),
+        CategoryEntity(name = "Education", iconName = "school", colorSeed = INDIGO),
+        CategoryEntity(name = "Entertainment", iconName = "movie", colorSeed = TEAL),
+        CategoryEntity(name = "Rent", iconName = "home", colorSeed = SLATE),
+        CategoryEntity(name = "Salary", iconName = "payments", colorSeed = GREEN),
+        CategoryEntity(name = "Transfers", iconName = "swap_horiz", colorSeed = NEUTRAL),
+        CategoryEntity(name = "Cash", iconName = "local_atm", colorSeed = NEUTRAL),
+        CategoryEntity(name = "Fees", iconName = "receipt_long", colorSeed = NEUTRAL),
+        CategoryEntity(name = "Other", iconName = "category", colorSeed = NEUTRAL),
     )
+
+    /** Name → palette index, for [Seeder]'s idempotent upgrade remap. */
+    val paletteByName: Map<String, Int> = all.associate { it.name to it.colorSeed }
+
+    /** Name → Material icon name, so the same upgrade pass can heal drifted icons. */
+    val iconByName: Map<String, String> = all.associate { it.name to it.iconName }
 
     // Stable 0-based indices that keyword seed data will reference as (arbitrary) ordinals.
     // Actual DB IDs come from autoGenerate; the seeder resolves names → IDs after insertion.

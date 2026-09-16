@@ -70,30 +70,58 @@ object MerchantLogos {
  * of the respective banks; we use them purely for recognition in the UI.
  */
 object BankLogos {
+    // Keys are UPPER-CASED sender IDs. Senders arrive dirty from the provider (trailing
+    // newlines, mixed case for ComBank_Q+ and Genie), so [resolve] normalises before the
+    // lookup rather than every caller remembering to.
     private val mappings: Map<String, String> = mapOf(
         "BOC" to "banks/boc.jpg",
         "BOCONLINE" to "banks/boc.jpg",
         "COMBANK" to "banks/combank.jpg",
-        "ComBank_Q+" to "banks/combank.jpg",
-        // No People's Bank logo in the bundled set yet — return null so the UI falls back
-        // to the generic bank icon rather than miscrediting the transaction to BOC.
+        "COMBANK_Q+" to "banks/combank.jpg",
+        // No People's Bank logo in the bundled set yet — return null so BankAvatar falls
+        // back to a brand-coloured initial rather than miscrediting the bank to BOC.
         "SAMPATH" to "banks/sampath.jpg",
+        "SAMPATHBANK" to "banks/sampath.jpg",
+        "SAMPATHTXN" to "banks/sampath.jpg",
+        "SAMPCCTXN" to "banks/sampath.jpg",
         "HNB" to "banks/hnb.jpg",
         "NTB" to "banks/ntb.jpg",
+        "NTBSMS" to "banks/ntb.jpg",
+        "NATIONSSMS" to "banks/ntb.jpg",
         "DFCC" to "banks/dfcc.jpg",
         "DFCCINFO" to "banks/dfcc.jpg",
+        "DFCC INFO" to "banks/dfcc.jpg",
+        "DFCC ALERTS" to "banks/dfcc.jpg",
+        "DFCC BANK" to "banks/dfcc.jpg",
         "SEYLAN" to "banks/seylan.jpg",
         "SEYLANBANK" to "banks/seylan.jpg",
         "NSB" to "banks/nsb.jpg",
+        "NSBSMS" to "banks/nsb.jpg",
         "NDB" to "banks/ndb.jpg",
-        "NDBCARD" to "banks/ndb.jpg",
+        "NDBBANK" to "banks/ndb.jpg",
+        "NDB CARD" to "banks/ndb.jpg",
+        "NDB ALERTS" to "banks/ndb.jpg",
         "HSBC" to "banks/hsbc.jpg",
+        "HSBCLK" to "banks/hsbc.jpg",
         "STANCHART" to "banks/standard.jpg",
+        "SCB" to "banks/standard.jpg",
+        "SCBSMS" to "banks/standard.jpg",
         "AMANABANK" to "banks/amana-bank.jpg",
         "FRIMISMS" to "banks/frimi.jpg",
-        "Genie" to "banks/genie.jpg",
+        "FRIMI" to "banks/frimi.jpg",
+        "GENIE" to "banks/genie.jpg",
+        // Cargills and Union have no template yet, but their SMS does arrive and
+        // lands in the Unknown queue, so the logo is still worth showing.
+        "CARGILLS" to "banks/cargills-bank.jpg",
+        "CARGILLSBNK" to "banks/cargills-bank.jpg",
+        "CBC" to "banks/cargills-bank.jpg",
+        "UNIONBANK" to "banks/union-bank.jpg",
+        "UBSMS" to "banks/union-bank.jpg",
     )
 
-    fun resolve(sender: String?): String? = mappings[sender]
+    fun resolve(sender: String?): String? {
+        val key = sender?.trim()?.uppercase() ?: return null
+        return mappings[key]
+    }
     fun asAssetUri(relativePath: String): String = "file:///android_asset/$relativePath"
 }

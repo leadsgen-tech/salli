@@ -75,13 +75,11 @@ dependencies {
     // Coil — also referenced from app-level screens (Subscriptions) that render merchant logos.
     implementation(libs.coil.compose)
 
-    // Haze — SalliNavHost wraps the NavHost with Modifier.haze(...) to feed the floating pill.
-    implementation(libs.haze)
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.window)
     implementation(libs.androidx.work.runtime.ktx)
@@ -101,9 +99,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material3.adaptive)
-    implementation(libs.androidx.compose.material3.adaptive.layout)
-    implementation(libs.androidx.compose.material3.adaptive.navigation)
     implementation(libs.androidx.compose.material.icons.extended)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
@@ -113,12 +108,20 @@ dependencies {
     ksp(libs.hilt.compiler)
     ksp(libs.hilt.compiler.androidx)
 
-    implementation(libs.vico.compose.m3)
-
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.truth)
     testImplementation("junit:junit:4.13.2")
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("androidx.test:core:1.6.1")
+}
+
+// M3 Expressive is still annotated @ExperimentalMaterial3ExpressiveApi in material3 1.4.x, so
+// the opt-in is module-wide rather than sprinkled over every call site.
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+        )
+    }
 }

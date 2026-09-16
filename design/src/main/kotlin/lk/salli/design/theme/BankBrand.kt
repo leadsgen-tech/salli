@@ -72,16 +72,98 @@ data class BankBrand(
             secondary = Color(0xFFB91C1C),
         )
 
-        fun forSender(sender: String?): BankBrand = when (sender) {
-            "COMBANK" -> Combank
+        // National Savings Bank — deep blue; their gold mark is illegible at avatar size.
+        val Nsb = BankBrand(
+            primary = Color(0xFF1D4ED8),
+            secondary = Color(0xFF172554),
+        )
+
+        // National Development Bank — indigo.
+        val Ndb = BankBrand(
+            primary = Color(0xFF4F46E5),
+            secondary = Color(0xFF3730A3),
+        )
+
+        // Standard Chartered — green stop first, blue as the companion.
+        val StanChart = BankBrand(
+            primary = Color(0xFF0F8A5F),
+            secondary = Color(0xFF0B5E7D),
+        )
+
+        // Amana Bank — emerald.
+        val Amana = BankBrand(
+            primary = Color(0xFF10B981),
+            secondary = Color(0xFF065F46),
+        )
+
+        // FriMi (Nations Trust's wallet) — magenta, distinct from NTB's teal on purpose.
+        val Frimi = BankBrand(
+            primary = Color(0xFFDB2777),
+            secondary = Color(0xFF9D174D),
+        )
+
+        // Genie (Dialog Finance) — Dialog's red.
+        val Genie = BankBrand(
+            primary = Color(0xFFE11D48),
+            secondary = Color(0xFF9F1239),
+        )
+
+        // Cargills Bank — their green.
+        val Cargills = BankBrand(
+            primary = Color(0xFF16A34A),
+            secondary = Color(0xFF14532D),
+        )
+
+        // Union Bank — crimson.
+        val Union = BankBrand(
+            primary = Color(0xFFDC2626),
+            secondary = Color(0xFF7F1D1D),
+        )
+
+        // Pan Asia — violet.
+        val PanAsia = BankBrand(
+            primary = Color(0xFF7C3AED),
+            secondary = Color(0xFF4C1D95),
+        )
+
+        // Citizens Development Business Finance — amber.
+        val Cdb = BankBrand(
+            primary = Color(0xFFD97706),
+            secondary = Color(0xFF92400E),
+        )
+
+        /**
+         * Sender IDs arrive dirty — the provider hands over `"COMBANK\n"` as readily as
+         * `"COMBANK"`, and a few real senders are mixed-case (`ComBank_Q+`, `Genie`). Trim and
+         * upper-case before matching, once, here, rather than at every call site.
+         *
+         * A bank with no entry falls back to [Default] rather than to a neighbour's colour:
+         * a wrong bank colour is worse than a neutral one.
+         */
+        fun forSender(sender: String?): BankBrand = when (sender?.trim()?.uppercase()) {
+            // Every alias below is one the parser actually matches: the lists mirror
+            // `senderPatterns` on each BankTemplate and `Templates.knownBankSenders` for the
+            // banks we recognise but cannot yet parse. Inventing IDs here would show a
+            // confident brand colour for a bank that never sends under that name.
+            "COMBANK", "COMBANK_Q+" -> Combank
             "BOC", "BOCONLINE" -> Boc
-            "PeoplesBank" -> Peoples
-            "SAMPATH" -> Sampath
+            "PEOPLESBANK", "PEOPLESCARD" -> Peoples
+            "SAMPATH", "SAMPATHBANK", "SAMPATHTXN", "SAMPCCTXN" -> Sampath
             "HNB" -> Hnb
-            "NTB" -> Ntb
-            "DFCC", "DFCCINFO" -> Dfcc
+            "NTB", "NTBSMS", "NATIONSSMS" -> Ntb
+            "DFCC", "DFCCINFO", "DFCC INFO", "DFCC ALERTS", "DFCC BANK" -> Dfcc
             "SEYLAN", "SEYLANBANK" -> Seylan
-            "HSBC" -> Hsbc
+            "HSBC", "HSBCLK" -> Hsbc
+            "NSB", "NSBSMS" -> Nsb
+            "NDB", "NDBBANK", "NDB CARD", "NDB ALERTS" -> Ndb
+            "STANCHART", "SCB", "SCBSMS" -> StanChart
+            "AMANABANK" -> Amana
+            "FRIMISMS", "FRIMI" -> Frimi
+            "GENIE" -> Genie
+            "CARGILLS", "CARGILLSBNK", "CBC" -> Cargills
+            "UNIONBANK", "UBSMS" -> Union
+            "PANASIA", "PANASIABANK", "PAN ASIA" -> PanAsia
+            "CDB", "CDBSMS" -> Cdb
             else -> Default
         }
     }

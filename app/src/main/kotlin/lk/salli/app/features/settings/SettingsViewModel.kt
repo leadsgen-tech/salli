@@ -1,6 +1,5 @@
 package lk.salli.app.features.settings
 
-import lk.salli.data.db.entities.RecurringSeriesEntity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -31,6 +30,7 @@ import lk.salli.data.db.entities.AccountEntity
 import lk.salli.data.export.DataWiper
 import lk.salli.data.export.TransactionExporter
 import lk.salli.data.prefs.SalliPreferences
+import lk.salli.data.prefs.ThemeMode
 import androidx.fragment.app.FragmentActivity
 import lk.salli.app.security.AppLockController
 import lk.salli.data.prefs.AppLockSettings
@@ -60,14 +60,6 @@ data class SettingsUiState(
     val openBillCount: Int = 0,
     val fuelVehicleCount: Int = 0,
     val pendingRestore: PendingRestore? = null,
-)
-
-/** Counts behind the Trackers tiles. */
-data class TrackerCounts(
-    val recurring: Int = 0,
-    /** Series that are failing or due within a week. */
-    val needsAttention: Int = 0,
-    val goals: Int = 0,
 )
 
 @HiltViewModel
@@ -127,17 +119,20 @@ class SettingsViewModel @Inject constructor(
 
     fun setSpendingLimit(limitMinor: Long?) = viewModelScope.launch { prefs.setMonthlySpendingLimitMinor(limitMinor) }
 
-    val trackers: StateFlow<TrackerCounts> = combine(
-        db.recurring().observeAll(),
-        db.goals().observeGoals(),
-    ) { series, goals ->
-        val live = series.filter { it.userState != RecurringSeriesEntity.DISMISSED && it.isDetected }
-        TrackerCounts(
-            recurring = live.size,
-            needsAttention = live.count { it.status == "FAILING" || it.status == "DUE_SOON" },
-            goals = goals.count { !it.isArchived },
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackerCounts())
+    // ---- Appearance ------------------------------------------------------------------
+
+    /**
+     * System / Light / Dark. Kept out of [state] because that `combine` is already at its
+     * five-flow ceiling, and because the theme is the one setting the whole activity re-reads
+     * — a dedicated flow keeps that dependency visible.
+     */
+    val themeMode: StateFlow<ThemeMode> = prefs.themeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
+
+    fun setThemeMode(mode: ThemeMode) {
+        if (themeMode.value == mode) return
+        viewModelScope.launch { prefs.setThemeMode(mode) }
+    }
 
     fun setMonthStartDay(day: Int) = viewModelScope.launch { prefs.setMonthStartDay(day) }
     fun setWeekStartDay(isoDay: Int) = viewModelScope.launch { prefs.setWeekStartDay(isoDay) }

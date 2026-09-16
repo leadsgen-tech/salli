@@ -11,14 +11,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import lk.salli.design.format.MoneyFormat
+import lk.salli.design.theme.LocalSalliColors
 import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
+import lk.salli.domain.money.MoneyFormat
 
 /**
- * Row-scale amount. Flow-coloured: income uses the accessible tertiary green; expenses
- * stay on the default `onSurface` because a wall of red would be deafening in a spending app;
- * transfers go to `onSurfaceVariant` (quiet); declined reads struck-through in the muted tone.
+ * Row-scale amount, coloured by what kind of money it is — not by whether it's big.
+ *
+ * Income takes the `income` token; expenses stay plain ink (a spending app where every row is
+ * red is a wall of alarm and nothing stands out); transfers and fees go quiet; declined reads
+ * struck through.
  */
 @Composable
 fun AmountText(
@@ -28,11 +31,12 @@ fun AmountText(
     style: TextStyle = MaterialTheme.typography.titleMedium,
     modifier: Modifier = Modifier,
 ) {
+    val salli = LocalSalliColors.current
     val color = when {
-        isDeclined -> MaterialTheme.colorScheme.onSurfaceVariant
-        flow == TransactionFlow.INCOME -> MaterialTheme.colorScheme.tertiary
-        flow == TransactionFlow.TRANSFER -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.onSurface
+        isDeclined -> salli.transfer
+        flow == TransactionFlow.INCOME -> salli.income
+        flow == TransactionFlow.TRANSFER -> salli.transfer
+        else -> salli.expense
     }
     val sign = when {
         isDeclined -> ""
@@ -40,11 +44,9 @@ fun AmountText(
         flow == TransactionFlow.TRANSFER -> ""
         else -> "−"
     }
-    val body = MoneyFormat.format(money, signed = false)
-    val text = if (sign.isEmpty()) body else "$sign$body"
 
     Text(
-        text = text,
+        text = sign + MoneyFormat.format(money),
         color = color,
         style = style.copy(fontWeight = FontWeight.Medium),
         textDecoration = if (isDeclined) TextDecoration.LineThrough else TextDecoration.None,
@@ -53,32 +55,50 @@ fun AmountText(
 }
 
 /**
- * Billboard-scale amount for account cards and the home hero. Currency sits as a tiny
- * superscript-like prefix in `onSurfaceVariant`; the number itself is Space Grotesk display
- * weight and tight tracking for a clear financial hierarchy.
+ * Billboard-scale amount for the hero. The currency sits as a small prefix in the muted tone
+ * so the digits own the line; the digits themselves are Space Grotesk with tabular figures,
+ * which is what keeps a number from jittering sideways when it animates.
  */
 @Composable
 fun HeroAmountText(
     money: Money,
     modifier: Modifier = Modifier,
-    negative: Boolean = money.minorUnits < 0,
     style: TextStyle = MaterialTheme.typography.displaySmall,
+    color: androidx.compose.ui.graphics.Color = androidx.compose.material3.LocalContentColor.current,
+    currencyColor: androidx.compose.ui.graphics.Color = color.copy(alpha = 0.7f),
+    isDeclined: Boolean = false,
 ) {
-    val color = if (negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     Row(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = modifier,
     ) {
         Text(
-            text = money.currency,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = MoneyFormat.symbol(money.currency),
+            color = currencyColor,
             style = MaterialTheme.typography.labelLarge,
         )
         Text(
-            text = MoneyFormat.formatBare(money),
+            text = MoneyFormat.bare(money),
             color = color,
             style = style.copy(fontWeight = FontWeight.Medium),
+            textDecoration = if (isDeclined) TextDecoration.LineThrough else TextDecoration.None,
         )
+    }
+}
+
+@SalliPreview
+@Composable
+private fun AmountTextPreview() {
+    PreviewFrame {
+        AmountText(money = Money(428_000, "LKR"), flow = TransactionFlow.EXPENSE)
+        AmountText(money = Money(24_500_000, "LKR"), flow = TransactionFlow.INCOME)
+        AmountText(money = Money(1_000_000, "LKR"), flow = TransactionFlow.TRANSFER)
+        AmountText(
+            money = Money(1_240_000, "LKR"),
+            flow = TransactionFlow.EXPENSE,
+            isDeclined = true,
+        )
+        HeroAmountText(money = Money(8_420_000, "LKR"))
     }
 }

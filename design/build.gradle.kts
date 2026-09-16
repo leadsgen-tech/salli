@@ -39,5 +39,25 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.coil.compose)
-    implementation(libs.haze)
+    // LocalLifecycleOwner, for re-reading the system animator scale on resume.
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.truth)
+}
+
+// M3 Expressive is still annotated @ExperimentalMaterial3ExpressiveApi in material3 1.4.x, so
+// the opt-in is module-wide rather than sprinkled over every call site.
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+        )
+    }
+}
+
+// JUnit 5 for the design module's pure-JVM token tests.
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }

@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import lk.salli.data.db.entities.CategoryEntity
 import lk.salli.data.db.entities.TransactionEntity
 import lk.salli.domain.Money
+import lk.salli.domain.money.MoneyFormat
 import lk.salli.domain.TransactionFlow
 import lk.salli.domain.TransactionType
 
@@ -29,7 +30,6 @@ data class TimelineItem(
     val flow: TransactionFlow,
     val type: TransactionType,
     val icon: ImageVector,
-    val emoji: String,
     val merchantRaw: String?,
     val isDeclined: Boolean,
     val timestamp: Long,
@@ -88,7 +88,7 @@ private fun ownTransferItem(
     val fee = (from.amountMinor - to.amountMinor).takeIf { it > 0 }
     val subtitle = buildList {
         add("$fromName → $toName")
-        fee?.let { add("Fee " + formatRupees(it, from.amountCurrency)) }
+        fee?.let { add("Fee " + MoneyFormat.formatMinor(it, from.amountCurrency)) }
     }.joinToString(" · ")
     return TimelineItem(
         id = from.id,
@@ -100,7 +100,6 @@ private fun ownTransferItem(
         flow = TransactionFlow.TRANSFER,
         type = TransactionType.ONLINE_TRANSFER,
         icon = Icons.Outlined.SwapHoriz,
-        emoji = "🔁",
         merchantRaw = null,
         isDeclined = false,
         timestamp = maxOf(from.timestamp, to.timestamp),
@@ -141,7 +140,7 @@ fun TransactionEntity.toTimelineItem(
             accountDisplayName?.let { add(it) }
         }
         feeMinor?.takeIf { it > 0 }?.let { fee ->
-            add("Fee " + formatRupees(fee, amountCurrency))
+            add("Fee " + MoneyFormat.formatMinor(fee, amountCurrency))
         }
     }
     return TimelineItem(
@@ -152,39 +151,10 @@ fun TransactionEntity.toTimelineItem(
         flow = flow,
         type = type,
         icon = iconFor(type),
-        emoji = emojiFor(type),
         merchantRaw = merchantRaw,
         isDeclined = isDeclined,
         timestamp = timestamp,
     )
-}
-
-/** Single source of truth for the emoji used in transaction avatars. Both Home and
- *  Timeline read from here so the two screens never drift apart. */
-fun emojiFor(type: TransactionType): String = when (type) {
-    TransactionType.POS -> "🛍️"
-    TransactionType.ATM -> "💵"
-    TransactionType.CDM -> "🏦"
-    TransactionType.CHEQUE -> "📄"
-    // All electronic-funds transfer channels share one glyph.
-    TransactionType.ONLINE_TRANSFER,
-    TransactionType.CEFT,
-    TransactionType.SLIPS -> "💸"
-    TransactionType.MOBILE_PAYMENT -> "📱"
-    TransactionType.FEE -> "🧾"
-    TransactionType.DECLINED -> "🚫"
-    TransactionType.BALANCE_CORRECTION -> "🔧"
-    TransactionType.OTHER -> "🧾"
-}
-
-/** Compact rupee formatter used for secondary subtitle fragments (like the fee line). */
-private fun formatRupees(minor: Long, currency: String): String {
-    val symbol = if (currency == "LKR") "Rs " else "$currency "
-    val abs = kotlin.math.abs(minor)
-    val major = abs / 100
-    val cents = abs % 100
-    val formatter = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US)
-    return "$symbol${formatter.format(major)}.${"%02d".format(cents)}"
 }
 
 private fun deriveTitle(

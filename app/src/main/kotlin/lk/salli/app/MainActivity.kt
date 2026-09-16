@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,6 +33,7 @@ import lk.salli.app.nav.Destination
 import lk.salli.app.nav.Route
 import lk.salli.app.nav.SalliNavHost
 import lk.salli.data.prefs.SalliPreferences
+import lk.salli.data.prefs.ThemeMode
 import lk.salli.design.theme.SalliTheme
 
 // FragmentActivity (a ComponentActivity) because BiometricPrompt hosts itself in a fragment.
@@ -59,7 +61,11 @@ class MainActivity : FragmentActivity() {
         )
 
         setContent {
-            val dark by prefs.darkTheme.collectAsState(initial = false)
+            // Tri-state preference collapsed at the last possible moment: SYSTEM has to be
+            // resolved inside composition so the app repaints when the phone flips into
+            // night mode, rather than only on the next cold start.
+            val themeMode by prefs.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val dark = themeMode.resolve(isSystemInDarkTheme())
             val introduced by prefs.onboardingCompleted.collectAsState(initial = null)
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {

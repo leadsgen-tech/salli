@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plan_title">Plan</string>
+
+    <!-- Budgets, rendered inline: Plan is where you set caps, not a menu that leads to one. -->
+    <string name="plan_budgets_header">Budgets</string>
+    <string name="plan_budgets_all">All budgets</string>
+    <string name="plan_budgets_all_subtitle">Create, edit and set caps</string>
+    <string name="plan_budgets_empty_title">Budgets</string>
+    <string name="plan_budgets_empty_subtitle">Set a cap and Salli tracks the pace against it</string>
+    <!-- "Rs 42k of Rs 60k" -->
+    <string name="plan_budget_spent_of_cap">%1$s of %2$s</string>
+
+    <string name="plan_pace_under">Under pace</string>
+    <string name="plan_pace_on">On pace</string>
+    <string name="plan_pace_hot">Running hot</string>
+    <string name="plan_pace_over">Over</string>
+
+    <!-- The five rows promoted out of the Settings "Trackers" section. Subtitles are the
+         same live strings Settings showed, so nothing reads differently after the move. -->
+    <string name="plan_more_header">More</string>
+
+    <string name="plan_bills_title">Bills</string>
+    <string name="plan_bills_empty">SLT, Dialog, CEB and water bills from SMS</string>
+    <plurals name="plan_bills_open">
+        <item quantity="one">%d bill to pay</item>
+        <item quantity="other">%d bills to pay</item>
+    </plurals>
+
+    <string name="plan_fuel_title">Fuel Pass</string>
+    <string name="plan_fuel_empty">Weekly quota per vehicle, from 1919 SMS</string>
+    <plurals name="plan_fuel_vehicles">
+        <item quantity="one">%d vehicle tracked</item>
+        <item quantity="other">%d vehicles tracked</item>
+    </plurals>
+
+    <string name="plan_recurring_title">Recurring &amp; subscriptions</string>
+    <string name="plan_recurring_empty">Repeating payments and failing card subscriptions</string>
+    <string name="plan_recurring_found">%1$d found</string>
+    <!-- "12 found - 2 need a look" -->
+    <string name="plan_recurring_found_attention">%1$d found · %2$d need a look</string>
+
+    <string name="plan_goals_title">Goals</string>
+    <string name="plan_goals_empty">Save toward a target, a period at a time</string>
+    <plurals name="plan_goals_count">
+        <item quantity="one">%d goal</item>
+        <item quantity="other">%d goals</item>
+    </plurals>
+
+    <string name="plan_split_title">Shared expenses</string>
+    <string name="plan_split_subtitle">Split bills with people and see who owes whom</string>
+</resources>

@@ -35,7 +35,7 @@ class SalliPreferencesTest {
         try {
             delay(400)
             prefs.setUserName("someone")
-            prefs.setDarkTheme(true)
+            prefs.setThemeMode(ThemeMode.DARK)
             prefs.setSummaryHour(21)
             prefs.setBillReminderDays(5)
             delay(400)
@@ -49,7 +49,7 @@ class SalliPreferencesTest {
             jobs.forEach { it.cancel() }
             prefs.setMonthStartDay(1)
             prefs.setUserName("")
-            prefs.setDarkTheme(false)
+            prefs.setThemeMode(ThemeMode.SYSTEM)
             prefs.setSummaryHour(SalliPreferences.DEFAULT_SUMMARY_HOUR)
             prefs.setBillReminderDays(SalliPreferences.DEFAULT_BILL_REMINDER_DAYS)
         }
