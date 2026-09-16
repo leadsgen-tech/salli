@@ -99,13 +99,13 @@ fun <T> FloatingNavBar(
         modifier = modifier,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = SalliSpacing.sm,
-                    end = SalliSpacing.sm,
-                    bottom = navBarInset + SalliSpacing.xs,
-                    top = SalliSpacing.xs,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = SalliSpacing.sm,
+                        end = SalliSpacing.sm,
+                        bottom = navBarInset + SalliSpacing.xs,
+                    top = 0.dp,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -120,7 +120,8 @@ fun <T> FloatingNavBar(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 3.dp),
+                        .height(50.dp)
+                        .padding(horizontal = 4.dp),
                 ) {
                     items.forEach { item ->
                         val isSelected = selected != null && key(item) == key(selected)
@@ -192,8 +193,9 @@ private fun NavItem(
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             })
-            .padding(horizontal = 2.dp, vertical = 1.dp)
-            .width(68.dp),
+            .padding(horizontal = 2.dp)
+            .width(64.dp)
+            .height(48.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
