@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,6 +54,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import lk.salli.design.motion.LocalReducedMotion
@@ -110,14 +113,14 @@ fun <T> FloatingNavBar(
                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                 shape = RoundedCornerShape(24.dp),
                 shadowElevation = 2.dp,
-                modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.widthIn(max = 360.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = SalliSpacing.xs),
+                        .padding(horizontal = 4.dp, vertical = 3.dp),
                 ) {
                     items.forEach { item ->
                         val isSelected = selected != null && key(item) == key(selected)
@@ -148,6 +151,7 @@ private fun NavItem(
     onClick: () -> Unit,
 ) {
     val salli = LocalSalliColors.current
+    val haptic = LocalHapticFeedback.current
     val lozenge by animateColorAsState(
         targetValue = if (selected) salli.positive else Color.Transparent,
         animationSpec = tween(durationMillis = if (reducedMotion) 0 else 220),
@@ -184,15 +188,18 @@ private fun NavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = SalliSpacing.xs, vertical = SalliSpacing.xxs)
-            .width(72.dp),
+            .clickable(role = Role.Tab, onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            })
+            .padding(horizontal = 2.dp, vertical = 1.dp)
+            .width(68.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .scale(scale.value)
-                .size(width = 48.dp, height = 28.dp)
+                .size(width = 44.dp, height = 26.dp)
                 .clip(CircleShape)
                 .background(lozenge),
         ) {
