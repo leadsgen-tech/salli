@@ -122,8 +122,12 @@ class SmsRefresher internal constructor(
     }
 
     fun refresh() {
+        // Claim ownership at the call site. If this check runs only after dispatch to IO,
+        // a pull made during an active pass can be scheduled after that pass unlocks and
+        // unexpectedly start a second inbox scan.
+        val ownsPass = mutex.tryLock()
         lastPass = scope.launch {
-            if (!mutex.tryLock()) {
+            if (!ownsPass) {
                 reportSomeoneElseIsReading()
                 return@launch
             }
@@ -227,8 +231,9 @@ class SmsRefresher internal constructor(
      * no-op for anything already stored.
      */
     fun resyncAll() {
+        val ownsPass = mutex.tryLock()
         lastPass = scope.launch {
-            if (!mutex.tryLock()) {
+            if (!ownsPass) {
                 reportSomeoneElseIsReading()
                 return@launch
             }
