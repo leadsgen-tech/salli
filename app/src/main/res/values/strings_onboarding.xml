@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_sort_them">Sort them</string>
+    <string name="onboarding_open_salli">Open Salli</string>
+    <string name="onboarding_allow_sms">Allow SMS access</string>
+    <string name="onboarding_read_history">Read my history</string>
+    <string name="onboarding_review_unknown">Review %1$d unknown messages</string>
+</resources>
