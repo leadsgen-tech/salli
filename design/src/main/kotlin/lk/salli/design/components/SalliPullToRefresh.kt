@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +53,11 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.pow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import lk.salli.design.components.stage.CapsulePhase
+import lk.salli.design.components.stage.StatusCapsule
+
+/** A settled inbox pass result supplied by the app layer. The design module never knows SMS. */
+data class PullRefreshOutcome(val message: String, val failed: Boolean = false)
 
 /**
  * Pull-to-refresh: a chewy pill that squashes and stretches with the drag. At rest it's a
@@ -68,6 +74,8 @@ fun SalliPullToRefresh(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    outcome: PullRefreshOutcome? = null,
+    onOutcomeConsumed: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -194,6 +202,18 @@ fun SalliPullToRefresh(
             armed = thresholdArmed,
             isRefreshing = phase == Phase.Refreshing,
         )
+        if (outcome != null) {
+            LaunchedEffect(outcome) {
+                delay(if (outcome.failed) 2_200L else 1_100L)
+                onOutcomeConsumed()
+            }
+            StatusCapsule(
+                phase = if (outcome.failed) CapsulePhase.Failed else CapsulePhase.Done,
+                distanceFraction = 1f,
+                message = outcome.message,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+            )
+        }
     }
 }
 

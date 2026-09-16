@@ -10,4 +10,10 @@
     <string name="transaction_detail_original_message">Original message</string>
     <string name="transaction_detail_exclude">Exclude</string>
     <string name="transaction_detail_include">Include</string>
+    <string name="transaction_detail_title">Transaction</string>
+    <string name="transaction_detail_back">Back</string>
+    <string name="transaction_detail_account">Account</string>
+    <string name="transaction_detail_balance">Balance after</string>
+    <string name="transaction_detail_fee">Fee</string>
+    <string name="transaction_detail_split">Split this</string>
 </resources>

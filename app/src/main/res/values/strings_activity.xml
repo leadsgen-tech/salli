@@ -12,4 +12,20 @@
     <string name="activity_nothing_here">Nothing in this range</string>
     <string name="activity_nothing_here_message">Try a different date range or check for new bank messages.</string>
     <string name="activity_month_picker">Choose date range</string>
+    <string name="activity_filters">Filters</string>
+    <string name="activity_filters_account">Accounts</string>
+    <string name="activity_filters_category">Categories</string>
+    <string name="activity_filters_type">Type</string>
+    <string name="activity_filters_all">All</string>
+    <string name="activity_filters_spending">Spending</string>
+    <string name="activity_filters_income">Income</string>
+    <string name="activity_filters_transfers">Transfers</string>
+    <string name="activity_filters_transfers_toggle">Show own transfers</string>
+    <string name="activity_filters_done">Done</string>
+    <string name="activity_filters_clear">Clear</string>
+    <string name="activity_category_action">Category</string>
+    <string name="activity_refresh_up_to_date">Up to date</string>
+    <string name="activity_refresh_new_transactions">%1$d new transactions</string>
+    <string name="activity_refresh_new_and_review">%1$d new, %2$d to review</string>
+    <string name="activity_refresh_failed">Couldn’t read messages</string>
 </resources>

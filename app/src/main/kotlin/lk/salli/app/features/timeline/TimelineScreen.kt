@@ -35,6 +35,8 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +44,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +76,8 @@ import lk.salli.design.components.MiniBarChart
 import lk.salli.app.R
 import lk.salli.domain.Money
 import lk.salli.app.nav.ActivityFilterArgs
+import lk.salli.app.sms.RefreshStatus
+import lk.salli.design.components.PullRefreshOutcome
 
 @Composable
 fun TimelineScreen(
@@ -75,12 +88,17 @@ fun TimelineScreen(
     LaunchedEffect(filters) { viewModel.applyFilters(filters) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val refreshStatus by viewModel.refreshStatus.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var searchOpen by remember(filters) { mutableStateOf(!filters.query.isNullOrBlank()) }
+    var filtersOpen by remember { mutableStateOf(false) }
+    var categoryTarget by remember { mutableStateOf<Long?>(null) }
 
     lk.salli.design.components.SalliPullToRefresh(
         isRefreshing = refreshing,
         onRefresh = { viewModel.refresh() },
+        outcome = refreshOutcome(refreshStatus),
+        onOutcomeConsumed = viewModel::consumeRefreshStatus,
         modifier = Modifier.fillMaxSize(),
     ) {
     LazyColumn(
@@ -94,6 +112,9 @@ fun TimelineScreen(
                 onOpenSearch = { searchOpen = true },
                 onCloseSearch = { searchOpen = false; viewModel.clearQuery() },
                 onQueryChange = { viewModel.onQueryChanged(it) },
+                activeFilterCount = listOfNotNull(state.selectedAccountId, state.selectedCategoryId).size +
+                    if (state.type != ActivityType.ALL) 1 else 0,
+                onOpenFilters = { filtersOpen = true },
             )
         }
         if (!searchOpen) {
@@ -145,22 +166,93 @@ fun TimelineScreen(
                     )
                 }
                 items(group.items, key = { it.id }) { row ->
-                    TransactionRow(
-                        title = row.title,
-                        subtitle = row.subtitle,
-                        amount = row.amount,
-                        flow = row.flow,
-                        leadingIcon = row.icon,
-                        merchantRaw = row.merchantRaw,
-                        timestamp = row.timestamp,
-                        isDeclined = row.isDeclined,
-                        isOwnTransfer = row.isOwnTransfer,
-                        modifier = Modifier.clickable { onTransactionClick(row.id) },
+                    CategorySwipeRow(
+                        row = row,
+                        onClick = { onTransactionClick(row.id) },
+                        onCategory = { categoryTarget = row.id },
                     )
                 }
             }
         }
     }
+    }
+    if (filtersOpen) {
+        ActivityFilterSheet(
+            state = state,
+            selectedAccountId = state.selectedAccountId,
+            selectedCategoryId = state.selectedCategoryId,
+            onDismiss = { filtersOpen = false },
+            onApply = { account, category, type, transfers ->
+                viewModel.updateFilters(account, category, type, transfers)
+                filtersOpen = false
+            },
+        )
+    }
+    categoryTarget?.let { transactionId ->
+        ActivityCategoryPicker(
+            categories = state.categories,
+            onDismiss = { categoryTarget = null },
+            onPick = { categoryId ->
+                viewModel.changeCategory(transactionId, categoryId)
+                categoryTarget = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun refreshOutcome(status: RefreshStatus): PullRefreshOutcome? = when (status) {
+    RefreshStatus.Idle, RefreshStatus.Running -> null
+    is RefreshStatus.Done -> PullRefreshOutcome(
+        message = when {
+            status.inserted == 0 && status.queued == 0 -> stringResource(R.string.activity_refresh_up_to_date)
+            status.queued > 0 -> stringResource(R.string.activity_refresh_new_and_review, status.inserted, status.queued)
+            else -> stringResource(R.string.activity_refresh_new_transactions, status.inserted)
+        },
+    )
+    is RefreshStatus.Failed -> PullRefreshOutcome(stringResource(R.string.activity_refresh_failed), failed = true)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> Unit, onCategory: () -> Unit) {
+    val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+        if (value == SwipeToDismissBoxValue.EndToStart) onCategory()
+        false
+    })
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                contentAlignment = Alignment.CenterEnd,
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary).padding(end = 28.dp),
+            ) { Icon(Icons.Outlined.Label, contentDescription = stringResource(R.string.activity_category_action), tint = MaterialTheme.colorScheme.onPrimary) }
+        },
+        content = {
+            TransactionRow(
+                title = row.title, subtitle = row.subtitle, amount = row.amount, flow = row.flow,
+                leadingIcon = row.icon, merchantRaw = row.merchantRaw, timestamp = row.timestamp,
+                isDeclined = row.isDeclined, isOwnTransfer = row.isOwnTransfer,
+                modifier = Modifier.clickable { onClick() },
+            )
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivityCategoryPicker(
+    categories: List<lk.salli.data.db.entities.CategoryEntity>,
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(20.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.activity_category_action), style = MaterialTheme.typography.titleLarge)
+            categories.forEach { category ->
+                TextButton(onClick = { onPick(category.id) }, modifier = Modifier.fillMaxWidth()) { Text(category.name) }
+            }
+        }
     }
 }
 
@@ -171,6 +263,8 @@ private fun TimelineTopBar(
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
+    activeFilterCount: Int,
+    onOpenFilters: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -224,7 +318,73 @@ private fun TimelineTopBar(
                     contentDescription = stringResource(R.string.activity_search),
                 )
             }
+            IconButton(onClick = onOpenFilters) {
+                Icon(Icons.Outlined.Tune, contentDescription = stringResource(R.string.activity_filters))
+            }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivityFilterSheet(
+    state: TimelineUiState,
+    selectedAccountId: Long?,
+    selectedCategoryId: Long?,
+    onDismiss: () -> Unit,
+    onApply: (Long?, Long?, ActivityType, Boolean) -> Unit,
+) {
+    var account by remember(selectedAccountId) { mutableStateOf(selectedAccountId) }
+    var category by remember(selectedCategoryId) { mutableStateOf(selectedCategoryId) }
+    var type by remember(state.type) { mutableStateOf(state.type) }
+    var transfers by remember(state.showOwnTransfers) { mutableStateOf(state.showOwnTransfers) }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 24.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(stringResource(R.string.activity_filters), style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = { account = null; category = null; type = ActivityType.ALL; transfers = true }) {
+                    Text(stringResource(R.string.activity_filters_clear))
+                }
+            }
+            FilterGroup(stringResource(R.string.activity_filters_account)) {
+                state.accountsInView.forEach { item ->
+                    FilterChip(selected = account == item.id, onClick = { account = if (account == item.id) null else item.id }, label = { Text(item.displayName) })
+                }
+            }
+            FilterGroup(stringResource(R.string.activity_filters_category)) {
+                state.categories.forEach { item ->
+                    FilterChip(selected = category == item.id, onClick = { category = if (category == item.id) null else item.id }, label = { Text(item.name) })
+                }
+            }
+            FilterGroup(stringResource(R.string.activity_filters_type)) {
+                listOf(
+                    ActivityType.ALL to R.string.activity_filters_all,
+                    ActivityType.SPENDING to R.string.activity_filters_spending,
+                    ActivityType.INCOME to R.string.activity_filters_income,
+                    ActivityType.TRANSFERS to R.string.activity_filters_transfers,
+                ).forEach { (value, label) ->
+                    FilterChip(selected = type == value, onClick = { type = value }, label = { Text(stringResource(label)) })
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.activity_filters_transfers_toggle), modifier = Modifier.weight(1f))
+                Switch(checked = transfers, onCheckedChange = { transfers = it })
+            }
+            TextButton(onClick = { onApply(account, category, type, transfers) }, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.activity_filters_done))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterGroup(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) { content() }
     }
 }
 

@@ -21,6 +21,7 @@ import lk.salli.app.nav.ActivityFilterArgs
 import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.TransactionEntity
+import lk.salli.data.db.entities.CategoryEntity
 import lk.salli.domain.Currency
 import lk.salli.domain.DateRange
 import lk.salli.domain.Money
@@ -59,7 +60,14 @@ data class TimelineUiState(
     val cycleStartMillis: Long = 0L,
     /** One absolute spending total per day in the selected period, for Activity's quiet bar row. */
     val dailySpend: List<Long> = emptyList(),
+    val categories: List<CategoryEntity> = emptyList(),
+    val type: ActivityType = ActivityType.ALL,
+    val showOwnTransfers: Boolean = true,
+    val selectedAccountId: Long? = null,
+    val selectedCategoryId: Long? = null,
 )
+
+enum class ActivityType { ALL, SPENDING, INCOME, TRANSFERS }
 
 data class AccountSummary(
     val id: Long,
@@ -75,7 +83,9 @@ class TimelineViewModel @Inject constructor(
 ) : ViewModel() {
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
+    val refreshStatus: StateFlow<lk.salli.app.sms.RefreshStatus> = refresher.status
     fun refresh() = refresher.refresh()
+    fun consumeRefreshStatus() = refresher.consume()
 
     private val _range = MutableStateFlow(DateRange.currentMonth())
     val range: StateFlow<DateRange> = _range
@@ -96,10 +106,24 @@ class TimelineViewModel @Inject constructor(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query
     private val _filters = MutableStateFlow(ActivityFilterArgs.NONE)
+    private val _type = MutableStateFlow(ActivityType.ALL)
+    private val _showOwnTransfers = MutableStateFlow(true)
 
     fun applyFilters(filters: ActivityFilterArgs) {
         _filters.value = filters
         _query.value = filters.query.orEmpty()
+    }
+
+    fun updateFilters(accountId: Long?, categoryId: Long?, type: ActivityType, showOwnTransfers: Boolean) {
+        _filters.value = ActivityFilterArgs(accountId = accountId, categoryId = categoryId, query = _query.value)
+        _type.value = type
+        _showOwnTransfers.value = showOwnTransfers
+    }
+
+    fun changeCategory(transactionId: Long, categoryId: Long) {
+        viewModelScope.launch {
+            db.transactions().setUserCategory(transactionId, categoryId, System.currentTimeMillis())
+        }
     }
 
     /** True when the user has set a custom range that doesn't align to a calendar month. */
@@ -117,7 +141,9 @@ class TimelineViewModel @Inject constructor(
             else db.transactions().observeInRange(0L, Long.MAX_VALUE)
         }
 
-    private val searchAndFilters = combine(_query, _filters) { query, filters -> query to filters }
+    private val searchAndFilters = combine(_query, _filters, _type, _showOwnTransfers) { query, filters, type, transfers ->
+        FilterInputs(query, filters, type, transfers)
+    }
 
     val state: StateFlow<TimelineUiState> = combine(
         kotlinx.coroutines.flow.combine(_range, _customRange, monthStartDay) { r, c, d -> Triple(r, c, d) },
@@ -127,7 +153,7 @@ class TimelineViewModel @Inject constructor(
         db.accounts().observeAll(),
     ) { rangeAndCustom, search, rows, categories, accounts ->
         val (range, customRange, startDay) = rangeAndCustom
-        val (query, filters) = search
+        val (query, filters, type, showOwnTransfers) = search
         // Hidden accounts are a persisted Settings choice (accounts.is_hidden). The legend
         // chips on this screen flip the same flag, so the two places can never disagree.
         val hiddenAccountIds = accounts.filter { it.isHidden }.map { it.id }.toSet()
@@ -153,7 +179,14 @@ class TimelineViewModel @Inject constructor(
         val filtered = queryFiltered.filter {
             it.accountId !in hiddenAccountIds &&
                 (filters.accountId == null || it.accountId == filters.accountId) &&
-                (filters.categoryId == null || it.categoryId == filters.categoryId)
+                (filters.categoryId == null || it.categoryId == filters.categoryId) &&
+                (showOwnTransfers || it.transferGroupId == null) &&
+                when (type) {
+                    ActivityType.ALL -> true
+                    ActivityType.SPENDING -> it.flowId == TransactionFlow.EXPENSE.id
+                    ActivityType.INCOME -> it.flowId == TransactionFlow.INCOME.id
+                    ActivityType.TRANSFERS -> it.transferGroupId != null
+                }
         }
 
         // Pick the dominant currency for the pill totals — we don't sum across currencies.
@@ -213,6 +246,11 @@ class TimelineViewModel @Inject constructor(
             accountsInView = accountsInView,
             hiddenAccountIds = hiddenAccountIds,
             dailySpend = buildDailySpend(range, filtered, dominantCurrency),
+            categories = categories,
+            type = type,
+            showOwnTransfers = showOwnTransfers,
+            selectedAccountId = filters.accountId,
+            selectedCategoryId = filters.categoryId,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -347,3 +385,10 @@ class TimelineViewModel @Inject constructor(
         }
     }
 }
+
+private data class FilterInputs(
+    val query: String,
+    val filters: ActivityFilterArgs,
+    val type: ActivityType,
+    val showOwnTransfers: Boolean,
+)
