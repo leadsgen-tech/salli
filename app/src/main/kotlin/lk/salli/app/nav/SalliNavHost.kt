@@ -89,8 +89,7 @@ private fun UnlockedSalliNavHost(
         if (routeRequestId > 0 && routeRequest == Destination.PLAN.route && currentRoute != Destination.PLAN.route) {
             navController.navigate(Destination.PLAN.route) {
                 launchSingleTop = true
-                popUpTo(Destination.HOME.route) { saveState = true }
-                restoreState = true
+                popUpTo(Destination.HOME.route)
             }
         }
     }
