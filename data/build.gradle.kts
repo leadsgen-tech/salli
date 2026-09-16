@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -38,12 +39,11 @@ dependencies {
     // FileProvider for exporter share intents.
     implementation(libs.androidx.core.ktx)
 
-    // DataStore — one tiny prefs file for settings like parse mode.
+    // DataStore — one tiny prefs file for settings like the user's display name.
     implementation(libs.androidx.datastore.preferences)
 
-    // WorkManager — model download runs as a CoroutineWorker with foreground service,
-    // so the :data orchestrator needs the runtime API to enqueue/observe work.
-    implementation(libs.androidx.work.runtime.ktx)
+    // JSON backup document (entities are @Serializable).
+    implementation(libs.kotlinx.serialization.json)
 
     // Robolectric-based Room tests use classic JUnit4; kotlinx-coroutines-test exposes
     // runBlocking/runTest for the suspend DAOs.

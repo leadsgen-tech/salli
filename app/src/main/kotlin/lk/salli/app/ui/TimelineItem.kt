@@ -33,7 +33,81 @@ data class TimelineItem(
     val merchantRaw: String?,
     val isDeclined: Boolean,
     val timestamp: Long,
+    /** Both legs of a movement between the user's own accounts, folded into one row. */
+    val isOwnTransfer: Boolean = false,
+    /** The other leg's transaction id when [isOwnTransfer]; lets detail views show both. */
+    val counterpartId: Long? = null,
 )
+
+/**
+ * Maps a list of rows to timeline items, folding each complete internal-transfer pair into a
+ * single "Own transfer" row positioned where its first leg was. A leg whose partner is outside
+ * the list (other day, other range) stays a single row with the directional subtitle.
+ */
+fun List<TransactionEntity>.toTimelineItems(
+    categoriesById: Map<Long, CategoryEntity>,
+    accountsById: Map<Long, lk.salli.data.db.entities.AccountEntity>,
+): List<TimelineItem> {
+    val legsByGroup = filter { it.transferGroupId != null }.groupBy { it.transferGroupId!! }
+    val consumed = HashSet<Long>()
+    val out = ArrayList<TimelineItem>(size)
+    for (row in this) {
+        if (row.id in consumed) continue
+        val gid = row.transferGroupId
+        val pair = gid?.let { legsByGroup[it] }
+        if (pair != null && pair.size == 2) {
+            // Both legs carry flow TRANSFER once paired, so direction is recovered from the
+            // amounts: the sending side is the larger leg (its bank deducted the fee). Equal
+            // amounts fall back to insertion order.
+            val sorted = pair.sortedWith(compareByDescending<TransactionEntity> { it.amountMinor }.thenBy { it.id })
+            val from = sorted[0]
+            val to = sorted[1]
+            consumed.add(from.id); consumed.add(to.id)
+            out.add(ownTransferItem(from, to, accountsById))
+        } else {
+            val counterpartName = pair?.firstOrNull { it.id != row.id }?.let { accountsById[it.accountId]?.displayName }
+            out.add(
+                row.toTimelineItem(
+                    category = row.categoryId?.let { categoriesById[it] },
+                    accountDisplayName = accountsById[row.accountId]?.displayName,
+                    counterpartAccountName = counterpartName,
+                ),
+            )
+        }
+    }
+    return out
+}
+
+private fun ownTransferItem(
+    from: TransactionEntity,
+    to: TransactionEntity,
+    accountsById: Map<Long, lk.salli.data.db.entities.AccountEntity>,
+): TimelineItem {
+    val fromName = accountsById[from.accountId]?.displayName ?: from.senderAddress ?: "Account"
+    val toName = accountsById[to.accountId]?.displayName ?: to.senderAddress ?: "Account"
+    val fee = (from.amountMinor - to.amountMinor).takeIf { it > 0 }
+    val subtitle = buildList {
+        add("$fromName → $toName")
+        fee?.let { add("Fee " + formatRupees(it, from.amountCurrency)) }
+    }.joinToString(" · ")
+    return TimelineItem(
+        id = from.id,
+        title = "Own transfer",
+        subtitle = subtitle,
+        // What actually moved between the accounts is the credited amount; the fee is
+        // surfaced separately so the row never reads as spending.
+        amount = Money(to.amountMinor, to.amountCurrency),
+        flow = TransactionFlow.TRANSFER,
+        type = TransactionType.ONLINE_TRANSFER,
+        icon = Icons.Outlined.SwapHoriz,
+        emoji = "🔁",
+        merchantRaw = null,
+        isDeclined = false,
+        timestamp = maxOf(from.timestamp, to.timestamp),
+        isOwnTransfer = true,
+        counterpartId = to.id,
+    )
+}
 
 fun TransactionEntity.toTimelineItem(
     category: CategoryEntity?,

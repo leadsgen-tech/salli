@@ -31,6 +31,15 @@ import lk.salli.parser.util.TimeParser
  *
  *  4. **ATM Withdrawal e-Receipt** — multi-line, ten fields including an explicit Txn Fee.
  *
+ *  5. **Payment notice** — `You received LKR 10,000 from <NAME>` plus a trilingual disclaimer.
+ *     HNB sends this to the *person being paid* when an HNB customer pays them. The money lands
+ *     in the recipient's own bank, which sends its own credit SMS, and the recipient often has
+ *     no HNB account at all. Booking it would invent an HNB account and double-count the
+ *     credit, so it is recognised and dropped.
+ *
+ *  6. **Credit-card alert** (provisional, reconstructed from format evidence, no real sample yet)
+ *     `… **1234 :<merchant> (Apprx) LKR <amt> (DD-MMM-YYYY hh:mm:ss AM) Av.Bal : LKR <bal>`
+ *
  * OTPs from this sender are caught by the global OtpGuard so we don't dispatch them here.
  */
 object HnbTemplate : BankTemplate {
@@ -73,8 +82,53 @@ object HnbTemplate : BankTemplate {
         RegexOption.DOT_MATCHES_ALL,
     )
 
+    // Shape 5 — payment notice to the payee. Only the first line matters; disclaimers vary.
+    private val received = Regex(
+        """^You\s+received\s+(LKR|USD|EUR|GBP)\s+([\d,]+(?:\.\d{1,2})?)\s+from\s+(.+?)\s*(?:\n|$)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // Shape 6 — credit-card alert (provisional). Anchored on the "(Apprx)" token which no other
+    // HNB shape uses; the Av.Bal tail is optional.
+    private val creditCard = Regex(
+        """\*\*(\d{4})\s*:\s*(.+?)\s+\(Apprx\)\s+([A-Z]{3})\s+([\d,]+\.\d{2})\s*""" +
+            """\((\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M)\)""" +
+            """(?:.*?Av\.Bal\s*:\s*LKR\s+([\d,]+\.\d{2}))?""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+
     override fun tryParse(body: String, receivedAt: Long): ParseResult? {
         val trimmed = body.trim()
+
+        if (received.containsMatchIn(trimmed)) {
+            return ParseResult.Informational("HNB payment notice (money lands in the recipient's own bank)")
+        }
+
+        creditCard.find(trimmed)?.let { m ->
+            val card = m.groupValues[1]
+            val merchant = m.groupValues[2].trim()
+            val currency = Currency.normalize(m.groupValues[3])
+            val amountStr = m.groupValues[4]
+            val stamp = m.groupValues[5]
+            val balanceStr = m.groupValues[6]
+            val sameCurrency = currency == Currency.LKR
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "HNB",
+                    accountNumberSuffix = card,
+                    amount = Money.ofMajor(amountStr, currency),
+                    balance = if (sameCurrency && balanceStr.isNotBlank()) Money.ofMajor(balanceStr, Currency.LKR) else null,
+                    fee = null,
+                    flow = TransactionFlow.EXPENSE,
+                    type = TransactionType.POS,
+                    merchantRaw = merchant,
+                    location = null,
+                    timestamp = TimeParser.parseHnbCard(stamp) ?: receivedAt,
+                    isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
 
         accountTxn.find(trimmed)?.let { m ->
             val (amountStr, direction, account, date, time, reason, balanceStr) = m.destructured

@@ -60,8 +60,15 @@ interface AccountDao {
     @Query("UPDATE accounts SET balance_minor = :balance WHERE id = :id")
     suspend fun updateBalance(id: Long, balance: Long?)
 
+    @Query("UPDATE accounts SET is_hidden = :hidden WHERE id = :id")
+    suspend fun setHidden(id: Long, hidden: Boolean)
+
     @Query("DELETE FROM accounts WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /** Placeholder accounts (no account number seen) that no longer hold any transaction. */
+    @Query("DELETE FROM accounts WHERE account_suffix = :placeholderSuffix AND id NOT IN (SELECT DISTINCT account_id FROM transactions)")
+    suspend fun deleteEmptyPlaceholders(placeholderSuffix: String): Int
 
     /**
      * Atomically recomputes the account's cached balance.

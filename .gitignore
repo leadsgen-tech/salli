@@ -33,3 +33,7 @@ signing.properties
 
 # Logs
 *.log
+.factory/
+
+# Coverage reports written next to raw inbox dumps by RawInboxRunner
+*.report.txt

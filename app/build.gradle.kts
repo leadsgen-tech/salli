@@ -16,9 +16,18 @@ android {
         targetSdk = 35
         versionCode = 4
         versionName = "0.3.1"
+        manifestPlaceholders["salliAppLabel"] = "@string/app_name"
     }
 
     buildTypes {
+        debug {
+            // Optional isolated install for visual QA on a daily-use phone. It has its
+            // own database, preferences and permissions; the owner's app is untouched.
+            if (providers.gradleProperty("salliPreview").orNull == "true") {
+                applicationIdSuffix = ".preview"
+                manifestPlaceholders["salliAppLabel"] = "Salli Preview"
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -48,6 +57,10 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -73,6 +86,14 @@ dependencies {
     implementation(libs.androidx.window)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.datastore.preferences)
+    // App lock: ProcessLifecycleOwner tells AppLockController when Salli leaves and returns.
+    implementation(libs.androidx.lifecycle.process)
+    // App lock prompt (fingerprint, face or the device PIN/pattern). Pulls in androidx.fragment,
+    // which MainActivity needs as a FragmentActivity.
+    implementation(libs.androidx.biometric)
+    // Home-screen widget.
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -94,9 +115,10 @@ dependencies {
 
     implementation(libs.vico.compose.m3)
 
-    // MediaPipe LLM Inference — runs the downloaded Qwen .task file on-device.
-    implementation(libs.mediapipe.tasks.genai)
-
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.truth)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("androidx.test:core:1.6.1")
 }

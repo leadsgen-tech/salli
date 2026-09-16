@@ -42,10 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -58,26 +56,31 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import lk.salli.app.features.planning.SafeToSpendCard
+import lk.salli.app.features.planning.SafeToSpendViewModel
 import lk.salli.app.ui.TimelineItem
+import lk.salli.design.theme.BankBrand
+import lk.salli.design.theme.SalliBrandColors
 import lk.salli.domain.Currency
 import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
 
 /**
- * Home — monochrome, typography-first.
+ * Home — a concise financial dashboard.
  *
  * The whole screen boils down to: who are you, how much did you spend this month, what does
  * the shape of that spending look like, and what were the last few transactions. Everything
- * else (accounts, budgets, insights) lives one tap away in its own tab. This page should feel
- * like flipping open a diary — big number, one chart, a short list.
+ * else (accounts, budgets, insights) lives one tap away in its own tab.
  */
 @Composable
 fun HomeScreen(
     onTransactionClick: (Long) -> Unit = {},
     onSeeAllActivity: () -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
+    onOpenSafeToSpend: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
+    planningViewModel: SafeToSpendViewModel = hiltViewModel(),
 ) {
+    val planning by planningViewModel.snapshot.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val darkTheme by viewModel.darkTheme.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
@@ -110,7 +113,10 @@ fun HomeScreen(
                 monthExpense = state.monthExpense,
             )
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        item { Spacer(Modifier.height(16.dp)) }
+        planning?.let { snap ->
+            item(key = "safe-to-spend") { SafeToSpendCard(snapshot = snap, onClick = onOpenSafeToSpend) }
+        }
         item { Spacer(Modifier.height(20.dp)) }
         if (grouped.isNotEmpty()) {
             grouped.forEachIndexed { i, group ->
@@ -130,6 +136,7 @@ fun HomeScreen(
                         leadingIcon = row.icon,
                         merchantRaw = row.merchantRaw,
                         isDeclined = row.isDeclined,
+                        isOwnTransfer = row.isOwnTransfer,
                         modifier = Modifier.clickable { onTransactionClick(row.id) },
                     )
                 }
@@ -190,7 +197,7 @@ private fun ThemeToggleButton(darkTheme: Boolean, onToggle: () -> Unit) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(36.dp)
+            .size(48.dp)
             .onGloballyPositioned { coords ->
                 val pos = coords.positionInRoot()
                 center = Offset(
@@ -199,7 +206,7 @@ private fun ThemeToggleButton(darkTheme: Boolean, onToggle: () -> Unit) {
                 )
             }
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable {
                 if (transition != null) {
                     transition.request(center) { onToggle() }
@@ -212,7 +219,7 @@ private fun ThemeToggleButton(darkTheme: Boolean, onToggle: () -> Unit) {
             imageVector = icon,
             contentDescription = if (darkTheme) "Switch to light mode" else "Switch to dark mode",
             tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -235,20 +242,14 @@ private fun AccountStack(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SummaryCard(
             totalBalance = totalBalance,
             monthTrend = monthTrend,
             monthExpense = monthExpense,
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 6.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    clip = false,
-                ),
+            modifier = Modifier.fillMaxWidth(),
         )
         if (accounts.isNotEmpty()) {
             AccountChipsRow(accounts = accounts)
@@ -261,25 +262,20 @@ private fun AccountStack(
  *  - 1–3 accounts → each takes equal weight, fills the row
  *  - 4+          → horizontal scroller with fixed-width chips
  *
- * Colour cycles through three semantic tints so visually distinct accounts stand apart
- * (green / orange / terracotta) in both palettes.
+ * A bank-colour edge keeps account identity visible without turning the whole card into an
+ * inaccessible brand-colour surface.
  */
 @Composable
 private fun AccountChipsRow(accounts: List<AccountSummary>) {
-    val accountColors = listOf(
-        MaterialTheme.colorScheme.tertiary,
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.error,
-    )
     if (accounts.size <= 3) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            accounts.forEachIndexed { i, a ->
+            accounts.forEach { a ->
                 AccountChip(
                     account = a,
-                    color = accountColors[i % accountColors.size],
+                    color = BankBrand.forSender(a.senderAddress).secondary,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -289,10 +285,9 @@ private fun AccountChipsRow(accounts: List<AccountSummary>) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(accounts, key = { it.id }) { a ->
-                val i = accounts.indexOfFirst { it.id == a.id }
                 AccountChip(
                     account = a,
-                    color = accountColors[i % accountColors.size],
+                    color = BankBrand.forSender(a.senderAddress).secondary,
                     modifier = Modifier.width(160.dp),
                 )
             }
@@ -308,33 +303,35 @@ private fun AccountChip(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(color)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest),
     ) {
-        Text(
-            text = account.displayName,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(2.dp))
+        Box(Modifier.fillMaxWidth().height(4.dp).background(color))
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+                text = account.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
         // Single line, same style for every account. Real balances come from BOC's
         // `Av_Bal` / People's Bank's anchor-plus-delta imputation; for senders that never
         // ship a balance (ComBank cards, the Q+ account) we fall back to the signed net of
         // tracked activity. A card with only outflows reads as `−Rs 45,385.00`, an account
         // with mixed flow as `Rs 14,153.28` — same visual, no extra labels.
-        val display: Money? = account.balance ?: account.activityNet
-        if (display != null) {
-            Text(
-                text = formatMoneyBold(display),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimary,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
+            val display: Money? = account.balance ?: account.activityNet
+            if (display != null) {
+                Text(
+                    text = formatMoneyBold(display),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -346,32 +343,16 @@ private fun SummaryCard(
     monthExpense: Money,
     modifier: Modifier = Modifier,
 ) {
-    val animatedMinor by androidx.compose.animation.core.animateIntAsState(
-        targetValue = totalBalance.minorUnits.toInt().coerceAtLeast(0),
-        animationSpec = androidx.compose.animation.core.tween(
-            durationMillis = 900,
-            easing = androidx.compose.animation.core.FastOutSlowInEasing,
-        ),
-        label = "summary-balance",
-    )
-    val display = Money(animatedMinor.toLong(), totalBalance.currency)
-
-    // Theme-aware card: in light mode the dark ink (inverseSurface) works; in dark mode
-    // inverseSurface is the Atomic Orange accent — we don't want the summary to be orange
-    // because it clashes with the orange peek pill and floods the composition. Detect by
-    // background luminance (cheaper than passing a flag down) and pick a neutral dark card.
-    val scheme = MaterialTheme.colorScheme
-    val isLight = scheme.background.luminance() > 0.5f
-    val cardBg = if (isLight) scheme.inverseSurface else scheme.surfaceContainerHighest
-    val cardFg = if (isLight) scheme.inverseOnSurface else scheme.onSurface
-    val cardFgMuted = cardFg.copy(alpha = 0.72f)
+    val cardBg = SalliBrandColors.Cobalt
+    val cardFg = SalliBrandColors.OnCobalt
+    val cardFgMuted = cardFg.copy(alpha = 0.76f)
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
             .padding(horizontal = 24.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
         Text(
             text = "Total balance",
@@ -380,12 +361,13 @@ private fun SummaryCard(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = formatMoneyBold(display),
+            text = formatMoneyBold(totalBalance),
             style = MaterialTheme.typography.displayLarge.copy(
                 fontSize = 44.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = cardFg,
+            maxLines = 1,
         )
         Spacer(Modifier.height(10.dp))
         MonthDeltaRow(
@@ -406,37 +388,46 @@ private fun MonthDeltaRow(
 ) {
     val delta = monthTrend?.percentDelta
     val isUp = monthTrend?.isUp ?: false
-    val arrowBg =
-        if (delta != null && !isUp) MaterialTheme.colorScheme.tertiary
-        else MaterialTheme.colorScheme.primary
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    val arrowBg = if (delta != null && !isUp) {
+        SalliBrandColors.AcidLime
+    } else {
+        SalliBrandColors.OnCobalt.copy(alpha = 0.18f)
+    }
+    val arrowFg = if (delta != null && !isUp) {
+        SalliBrandColors.OnAcidLime
+    } else {
+        SalliBrandColors.OnCobalt
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (delta != null) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(arrowBg),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(arrowBg),
+                ) {
+                    Text(
+                        text = if (isUp) "↑" else "↓",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = arrowFg,
+                    )
+                }
                 Text(
-                    text = if (isUp) "↑" else "↓",
+                    text = "${if (isUp) "+" else "-"}${kotlin.math.abs(delta)}% vs previous period",
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    color = fgColor,
                 )
             }
-            Text(
-                text = "${if (isUp) "+" else "-"}${kotlin.math.abs(delta)}%",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = fgColor,
-            )
         }
         Text(
-            text = "(${formatMoneyBold(monthExpense)} this month)",
+            text = "${formatMoneyBold(monthExpense)} spent this period",
             style = MaterialTheme.typography.bodyMedium,
             color = mutedFgColor,
         )
@@ -792,15 +783,16 @@ private fun SeeAllRow(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = "See all activity",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }
@@ -819,5 +811,6 @@ private fun formatMoneyBold(money: Money): String {
     val major = abs / 100
     val cents = abs % 100
     val formatter = java.text.NumberFormat.getIntegerInstance(Locale.US)
-    return "$symbol${formatter.format(major)}.${"%02d".format(cents)}"
+    val sign = if (money.minorUnits < 0L) "−" else ""
+    return "$sign$symbol${formatter.format(major)}.${"%02d".format(cents)}"
 }

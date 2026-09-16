@@ -2,6 +2,7 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -14,6 +15,7 @@ import androidx.room.PrimaryKey
  * [amountCurrency]. Balance and fee currencies are always equal to [amountCurrency] — no column
  * duplication needed.
  */
+@Serializable
 @Entity(
     tableName = "transactions",
     indices = [

@@ -1,0 +1,9 @@
+# Bank of Ceylon online/card OTPs — sender: BOCONLINE
+# Every message from this sender is an OTP; kept so the OtpGuard has real negatives.
+# Canonical fixtures: parser/src/test/kotlin/lk/salli/parser/fixtures/BocOnlineFixtures.kt
+
+Dear Valued Customer, Please use 273546 as your OTP for Log-in to BOC Flex. This OTP is valid only for 2 minutes. DO NOT share this OTP with third party.
+
+Dear user, Please use OTP  314815 to proceed your transaction.
+
+425401 is the one-time password (OTP) to your online payment LKR 1,287.00 from BOC Card 2462 at CARGILLS R. Thank you. Bank of Ceylon

@@ -1,0 +1,27 @@
+# Bank of Ceylon — sender: BOC
+# Redaction: account numbers masked to the last 3 digits (bank already masks), amounts and balances are plausible fakes, cheque numbers zeroed where sensitive.
+# Canonical fixtures: parser/src/test/kotlin/lk/salli/parser/fixtures/BocFixtures.kt
+
+Online Transfer Debit Rs 1,234.56 From A/C No XXXXXXXXXX999. Balance available Rs 9,876.54 - Thank you for banking with BOC
+
+Online Transfer Credit Rs 5,000.00 To A/C No XXXXXXXXXX999. Balance available Rs 14,876.54 - Thank you for banking with BOC
+
+CEFT Transfer Debit Rs 500.25 From A/C No XXXXXXXXXX999. Balance available Rs 14,376.29 - Thank you for banking with BOC
+
+CEFT Transfer Credit Rs 3,250.00 To A/C No XXXXXXXXXX999. Balance available Rs 17,626.29 - Thank you for banking with BOC
+
+Transfer Credit Rs 2,500.00 To A/C No XXXXXXXXXX999. Balance available Rs 20,126.29 - Thank you for banking with BOC
+
+ATM Withdrawal Rs 4,000.00 From A/C No XXXXXXXXXX999. Balance available Rs 16,126.29 - Thank you for banking with BOC
+
+ATM Cash Deposit Rs 10,000.00 To A/C No XXXXXXXXXX999. Balance available Rs 26,126.29 - Thank you for banking with BOC
+
+Cheque Deposit Rs 25,000.00 To A/C No XXXXXXXXXX999. Balance available Rs 51,126.29 - Thank you for banking with BOC
+
+Online Transfer Debit Rs 58.00 From A/C No XXXXXXXXXX999. Balance available Rs 51,068.29 - Thank you for banking with BOC
+
+CEFT Transfer Debit Rs 1,250,000.00 From A/C No XXXXXXXXXX999. Balance available Rs 250.10 - Thank you for banking with BOC
+
+Dear Customer, Self-declaration forms for YA 2025/26 valid up to 31 March 2026. Submit new declaration forms to the bank to avoid WHT deductions.
+
+Cash Cheque Debit  CHQ/NO 123456 Rs 180000.00 From A/C No XXXXXXXXXX870. Balance available Rs 12345.67 - Thank you for banking with BOC

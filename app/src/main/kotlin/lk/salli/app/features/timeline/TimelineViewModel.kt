@@ -15,8 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import lk.salli.app.ui.TimelineItem
-import lk.salli.app.ui.toTimelineItem
+import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.TransactionEntity
 import lk.salli.domain.Currency
@@ -53,6 +54,8 @@ data class TimelineUiState(
     /** Every account that has at least one transaction in range — for the filter menu. */
     val accountsInView: List<AccountSummary> = emptyList(),
     val hiddenAccountIds: Set<Long> = emptySet(),
+    /** Start of the cycle containing today; the month pills label offsets from this. */
+    val cycleStartMillis: Long = 0L,
 )
 
 data class AccountSummary(
@@ -65,6 +68,7 @@ data class AccountSummary(
 class TimelineViewModel @Inject constructor(
     private val db: SalliDatabase,
     private val refresher: lk.salli.app.sms.SmsRefresher,
+    prefs: lk.salli.data.prefs.SalliPreferences,
 ) : ViewModel() {
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
@@ -73,11 +77,21 @@ class TimelineViewModel @Inject constructor(
     private val _range = MutableStateFlow(DateRange.currentMonth())
     val range: StateFlow<DateRange> = _range
 
+    /** The user's month start day (1 = calendar month). Cycles, pills and stepping follow it. */
+    private val monthStartDay: StateFlow<Int> = prefs.monthStartDay
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1)
+
+    init {
+        // A changed start day resets to the current cycle; a custom picked range is kept.
+        viewModelScope.launch {
+            prefs.monthStartDay.collect { day ->
+                if (!_customRange.value) _range.value = DateRange.cycleFor(System.currentTimeMillis(), day)
+            }
+        }
+    }
+
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query
-
-    /** Account IDs the user has toggled off in the chart legend. Empty = show all. */
-    private val _hiddenAccounts = MutableStateFlow<Set<Long>>(emptySet())
 
     /** True when the user has set a custom range that doesn't align to a calendar month. */
     private val _customRange = MutableStateFlow(false)
@@ -95,15 +109,16 @@ class TimelineViewModel @Inject constructor(
         }
 
     val state: StateFlow<TimelineUiState> = combine(
-        kotlinx.coroutines.flow.combine(_range, _hiddenAccounts, _customRange) { r, h, c ->
-            Triple(r, h, c)
-        },
+        kotlinx.coroutines.flow.combine(_range, _customRange, monthStartDay) { r, c, d -> Triple(r, c, d) },
         _query,
         txns,
         db.categories().observeAll(),
         db.accounts().observeAll(),
-    ) { rangeAndFilters, query, rows, categories, accounts ->
-        val (range, hiddenAccountIds, customRange) = rangeAndFilters
+    ) { rangeAndCustom, query, rows, categories, accounts ->
+        val (range, customRange, startDay) = rangeAndCustom
+        // Hidden accounts are a persisted Settings choice (accounts.is_hidden). The legend
+        // chips on this screen flip the same flag, so the two places can never disagree.
+        val hiddenAccountIds = accounts.filter { it.isHidden }.map { it.id }.toSet()
         val byCat = categories.associateBy { it.id }
         val byAcc = accounts.associateBy { it.id }
 
@@ -140,25 +155,23 @@ class TimelineViewModel @Inject constructor(
             it.flowId == TransactionFlow.EXPENSE.id && it.amountCurrency == dominantCurrency
         }.sumOf { it.amountMinor }
 
-        // For each transaction that's part of a transfer group, find its paired transaction's
-        // account-display-name. One hop — powers the "Source → Destination" subtitle.
-        val counterpartByTxId: Map<Long, String> = run {
-            val byGroup = filtered
-                .filter { it.transferGroupId != null }
-                .groupBy { it.transferGroupId!! }
-            filtered.mapNotNull { row ->
-                val gid = row.transferGroupId ?: return@mapNotNull null
-                val pair = byGroup[gid] ?: return@mapNotNull null
-                val other = pair.firstOrNull { it.id != row.id } ?: return@mapNotNull null
-                val name = byAcc[other.accountId]?.displayName ?: return@mapNotNull null
-                row.id to name
-            }.toMap()
-        }
-
-        val groups = filtered
+        // Fold internal-transfer pairs over the whole range first, then bucket by day: a
+        // People's debit at 23:00 and the BOC credit next morning are one movement and must
+        // become one row, which a per-day fold would have split back into two.
+        val items = filtered.toTimelineItems(byCat, byAcc)
+        val netByBucket = filtered.groupBy { dayBucket(it.timestamp) }
+            .mapValues { (_, rows) -> netOf(rows, dominantCurrency) }
+        val groups = items
             .groupBy { dayBucket(it.timestamp) }
             .toSortedMap(compareByDescending { it })
-            .map { (bucketStart, list) -> buildGroup(bucketStart, list, byCat, byAcc, counterpartByTxId, dominantCurrency) }
+            .map { (bucketStart, list) ->
+                TimelineGroup(
+                    label = labelFor(bucketStart),
+                    items = list,
+                    netMinor = netByBucket[bucketStart] ?: 0L,
+                    currency = dominantCurrency,
+                )
+            }
 
         // `filtered` already excludes hidden accounts, so the chart's visible series comes
         // straight from it. For the legend we want every account that HAS activity in the
@@ -176,7 +189,8 @@ class TimelineViewModel @Inject constructor(
             totalExpense = Money(expense, dominantCurrency),
             transactionCount = filtered.size,
             isEmpty = groups.isEmpty(),
-            monthOffset = if (customRange) null else monthOffsetFrom(range),
+            monthOffset = if (customRange) null else DateRange.cycleMonthOffset(range, startDay),
+            cycleStartMillis = DateRange.cycleFor(System.currentTimeMillis(), startDay).fromMillis,
             series = visibleSeries,
             accountsInView = accountsInView,
             hiddenAccountIds = hiddenAccountIds,
@@ -193,11 +207,11 @@ class TimelineViewModel @Inject constructor(
     )
 
     fun onPrevRange() {
-        _range.value = DateRange.prev(_range.value)
+        _range.value = DateRange.prevCycle(_range.value, monthStartDay.value)
         _customRange.value = false
     }
     fun onNextRange() {
-        _range.value = DateRange.next(_range.value)
+        _range.value = DateRange.nextCycle(_range.value, monthStartDay.value)
         _customRange.value = false
     }
     fun onPickRange(range: DateRange) {
@@ -207,27 +221,17 @@ class TimelineViewModel @Inject constructor(
     fun onQueryChanged(query: String) { _query.value = query }
     fun clearQuery() { _query.value = "" }
 
-    /** Jump directly to a calendar month relative to today (0 = current, −1 = last month). */
+    /** Jump to the cycle [offset] months from the current one (0 = current, −1 = last). */
     fun onPickMonthOffset(offset: Int) {
-        val c = Calendar.getInstance()
-        c.add(Calendar.MONTH, offset)
-        _range.value = DateRange.monthContaining(c.timeInMillis)
+        _range.value = DateRange.cycleOffset(offset, monthStartDay.value)
         _customRange.value = false
     }
 
     fun toggleAccount(accountId: Long) {
-        _hiddenAccounts.value = _hiddenAccounts.value.toMutableSet().apply {
-            if (!add(accountId)) remove(accountId)
+        viewModelScope.launch {
+            val current = db.accounts().byId(accountId) ?: return@launch
+            db.accounts().setHidden(accountId, !current.isHidden)
         }
-    }
-
-    /** How far the active range's month is from the current calendar month (signed). */
-    private fun monthOffsetFrom(range: DateRange): Int {
-        val now = Calendar.getInstance()
-        val rangeCal = Calendar.getInstance().apply { timeInMillis = range.fromMillis }
-        val nowYm = now.get(Calendar.YEAR) * 12 + now.get(Calendar.MONTH)
-        val rangeYm = rangeCal.get(Calendar.YEAR) * 12 + rangeCal.get(Calendar.MONTH)
-        return rangeYm - nowYm
     }
 
     /**
@@ -273,15 +277,9 @@ class TimelineViewModel @Inject constructor(
             .sortedByDescending { it.cumulative.lastOrNull() ?: 0f }
     }
 
-    private fun buildGroup(
-        bucketStart: Long,
-        rows: List<TransactionEntity>,
-        byCat: Map<Long, lk.salli.data.db.entities.CategoryEntity>,
-        byAcc: Map<Long, lk.salli.data.db.entities.AccountEntity>,
-        counterpartByTxId: Map<Long, String>,
-        dominantCurrency: String,
-    ): TimelineGroup {
-        val net = rows
+    /** Signed day total in the dominant currency; declines and own-transfer legs are net-zero. */
+    private fun netOf(rows: List<TransactionEntity>, dominantCurrency: String): Long =
+        rows
             .filter { !it.isDeclined && it.transferGroupId == null && it.amountCurrency == dominantCurrency }
             .sumOf { row ->
                 when (row.flowId) {
@@ -290,19 +288,6 @@ class TimelineViewModel @Inject constructor(
                     else -> 0L
                 }
             }
-        return TimelineGroup(
-            label = labelFor(bucketStart),
-            items = rows.map { row ->
-                row.toTimelineItem(
-                    category = row.categoryId?.let { byCat[it] },
-                    accountDisplayName = byAcc[row.accountId]?.displayName,
-                    counterpartAccountName = counterpartByTxId[row.id],
-                )
-            },
-            netMinor = net,
-            currency = dominantCurrency,
-        )
-    }
 
     private fun dayBucket(timestamp: Long): Long {
         val cal = Calendar.getInstance()

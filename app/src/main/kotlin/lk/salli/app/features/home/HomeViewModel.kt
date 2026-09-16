@@ -8,12 +8,14 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.app.ui.TimelineItem
-import lk.salli.app.ui.toTimelineItem
+import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.TransactionEntity
+import lk.salli.data.transactions.TransactionSpending
 import lk.salli.data.prefs.SalliPreferences
 import lk.salli.domain.Currency
 import lk.salli.domain.DateRange
@@ -97,15 +99,57 @@ class HomeViewModel @Inject constructor(
         db.transactions().observeActivityPerAccount(),
     ) { accounts, activity -> accounts to activity.groupBy { it.accountId } }
 
+    /**
+     * The five time windows Home needs — current and previous spending cycle, current and
+     * previous week, today — re-derived whenever the user changes the month or week start
+     * day in Settings. combine() caps at 5 sources, so the windows travel as one flow.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val windows = prefs.period.flatMapLatest { period ->
+        val now = System.currentTimeMillis()
+        val month = DateRange.cycleFor(now, period.monthStartDay)
+        val prevMonth = DateRange.prevCycle(month, period.monthStartDay)
+        val week = DateRange.weekContaining(now, period.weekStartDay)
+        val prevWeek = DateRange.prevWeek(week, period.weekStartDay)
+        val today = startOfToday()
+        kotlinx.coroutines.flow.combine(
+            db.transactions().observeInRange(month.fromMillis, month.untilMillis),
+            db.transactions().observeInRange(prevMonth.fromMillis, prevMonth.untilMillis),
+            db.transactions().observeInRange(week.fromMillis, week.untilMillis),
+            db.transactions().observeInRange(prevWeek.fromMillis, prevWeek.untilMillis),
+            db.transactions().observeInRange(today, today + DAY_MS),
+        ) { m, pm, w, pw, t -> TimeWindows(m, pm, w, pw, t, monthRange = month, weekRange = week) }
+    }
+
+    private data class TimeWindows(
+        val thisMonth: List<TransactionEntity>,
+        val prevMonth: List<TransactionEntity>,
+        val thisWeek: List<TransactionEntity>,
+        val prevWeek: List<TransactionEntity>,
+        val today: List<TransactionEntity>,
+        val monthRange: DateRange,
+        val weekRange: DateRange,
+    )
+
+    private fun startOfToday(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
     val state: StateFlow<HomeUiState> = combine(
         accountsWithActivity,
         db.transactions().observeTimeline(limit = 20),
-        observeAllThisAndPreviousMonth(),
+        windows,
         db.categories().observeAll(),
         prefs.userName,
-    ) { (accounts, activityByAccount), recent, windows, categories, userName ->
+    ) { (allAccounts, activityByAccount), recentAll, windows, categories, userName ->
         val categoriesById = categories.associateBy { it.id }
-        val accountsById = accounts.associateBy { it.id }
+        val accountsById = allAccounts.associateBy { it.id }
+        // Accounts toggled off in Settings vanish from every number on this screen: the
+        // strip, the hero balance, trends, top spenders and the recent list.
+        val hiddenIds = allAccounts.filter { it.isHidden }.map { it.id }.toSet()
+        val accounts = allAccounts.filter { !it.isHidden }
+        val recent = recentAll.filter { it.accountId !in hiddenIds }
 
         val rawSummaries = accounts.map { a ->
             // Fold rows of the same account across currencies into one (rare — most LK
@@ -130,28 +174,20 @@ class HomeViewModel @Inject constructor(
 
         val accountSummaries = rawSummaries
 
-        val items = recent.map { tx ->
-            tx.toTimelineItem(
-                category = tx.categoryId?.let { categoriesById[it] },
-                accountDisplayName = accountsById[tx.accountId]?.displayName,
-            )
-        }
+        val items = recent.toTimelineItems(categoriesById, accountsById)
 
-        val (thisMonth, prevMonth, thisWeek, prevWeek, today) = windows
+        val (thisMonthAll, prevMonthAll, thisWeekAll, prevWeekAll, todayAll) = windows
+        val thisMonth = thisMonthAll.filter { it.accountId !in hiddenIds }
+        val prevMonth = prevMonthAll.filter { it.accountId !in hiddenIds }
+        val thisWeek = thisWeekAll.filter { it.accountId !in hiddenIds }
+        val prevWeek = prevWeekAll.filter { it.accountId !in hiddenIds }
+        val today = todayAll.filter { it.accountId !in hiddenIds }
 
         val realThisMonth = thisMonth.filter { !it.isDeclined && it.transferGroupId == null }
-        val dominantCurrency = realThisMonth
-            .groupBy { it.amountCurrency }
-            .maxByOrNull { it.value.size }
-            ?.key
-            ?: Currency.LKR
+        val dominantCurrency = TransactionSpending.dominantCurrency(thisMonth)
 
         val expenseIn: (List<TransactionEntity>) -> Long = { list ->
-            list.filter {
-                !it.isDeclined && it.transferGroupId == null &&
-                    it.flowId == TransactionFlow.EXPENSE.id &&
-                    it.amountCurrency == dominantCurrency
-            }.sumOf { it.amountMinor }
+            TransactionSpending.totalMinor(list, dominantCurrency)
         }
         val incomeIn: (List<TransactionEntity>) -> Long = { list ->
             list.filter {
@@ -168,7 +204,7 @@ class HomeViewModel @Inject constructor(
             currentMinor = expenseIn(thisWeek),
             previousMinor = expenseIn(prevWeek),
             currency = dominantCurrency,
-            buckets = bucketByDay(thisWeek, dominantCurrency, startOfThisWeek(), days = 7),
+            buckets = bucketByDay(thisWeek, dominantCurrency, windows.weekRange.fromMillis, days = 7),
         )
         val monthTrend = Trend(
             currentMinor = monthExpense,
@@ -234,52 +270,6 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Bundles the five time windows Home needs into a single reactive flow — this month,
-     * previous month, this week (Mon–now), previous week, today. combine() caps at 5 sources
-     * and we already use 4 elsewhere, so compressing these into one flow avoids arity pain.
-     */
-    private fun observeAllThisAndPreviousMonth() = kotlinx.coroutines.flow.combine(
-        db.transactions().observeInRange(startOfThisMonth(), endOfThisMonth()),
-        db.transactions().observeInRange(startOfPrevMonth(), endOfPrevMonth()),
-        db.transactions().observeInRange(startOfThisWeek(), endOfThisWeek()),
-        db.transactions().observeInRange(startOfPrevWeek(), endOfPrevWeek()),
-        db.transactions().observeInRange(startOfToday(), endOfToday()),
-    ) { month, prevMonth, week, prevWeek, today ->
-        TimeWindows(month, prevMonth, week, prevWeek, today)
-    }
-
-    private data class TimeWindows(
-        val thisMonth: List<TransactionEntity>,
-        val prevMonth: List<TransactionEntity>,
-        val thisWeek: List<TransactionEntity>,
-        val prevWeek: List<TransactionEntity>,
-        val today: List<TransactionEntity>,
-    )
-
-    private fun startOfThisMonth() = DateRange.currentMonth().fromMillis
-    private fun endOfThisMonth() = DateRange.currentMonth().untilMillis
-    private fun startOfPrevMonth() = DateRange.prev(DateRange.currentMonth()).fromMillis
-    private fun endOfPrevMonth() = DateRange.prev(DateRange.currentMonth()).untilMillis
-
-    private fun startOfToday(): Long = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-    private fun endOfToday(): Long = startOfToday() + 24L * 60 * 60 * 1000
-
-    private fun startOfThisWeek(): Long = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        // Monday as the first day of the week — matches Sri Lankan / most-of-world convention
-        // and keeps our week-over-week deltas stable regardless of Android's locale default.
-        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-    }.timeInMillis
-    private fun endOfThisWeek(): Long = startOfThisWeek() + 7L * 24 * 60 * 60 * 1000
-
-    private fun startOfPrevWeek(): Long = startOfThisWeek() - 7L * 24 * 60 * 60 * 1000
-    private fun endOfPrevWeek(): Long = startOfThisWeek()
-
-    /**
      * Sum [txns] expenses by day into a fixed-length bucket array starting at [startMs] and
      * running [days] days forward. Zero-fills days with no spend so sparklines keep a
      * consistent x-axis. Transfers and declines are excluded here the same way they are in
@@ -303,4 +293,8 @@ class HomeViewModel @Inject constructor(
         return out.toList()
     }
 
+
+    private companion object {
+        const val DAY_MS = 24L * 60 * 60 * 1000
+    }
 }

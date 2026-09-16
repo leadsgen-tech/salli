@@ -149,3 +149,59 @@ class InternalTransferDetectorTest {
         rawBody = "",
     )
 }
+
+class InternalTransferFeeRuleTest {
+    @org.junit.jupiter.api.Test
+    fun `flat small fee is plausible on any size`() {
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.isPlausibleFee(fee = 2_500, debitMinor = 40_000)).isTrue()
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.isPlausibleFee(fee = 2_500, debitMinor = 3_502_500)).isTrue()
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `fee above ten percent of a small debit is not a transfer`() {
+        // Rs 50 debit vs Rs 0.99 credit — the real false pairing from a user's phone.
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.isPlausibleFee(fee = 4_901, debitMinor = 5_000)).isFalse()
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `credit larger than debit is never a transfer`() {
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.isPlausibleFee(fee = -8_703, debitMinor = 12_000_000)).isFalse()
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `fee over the hard cap is rejected even on huge debits`() {
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.isPlausibleFee(fee = 15_000, debitMinor = 100_000_000)).isFalse()
+    }
+}
+
+
+class InternalTransferNamedCounterpartyTest {
+    private fun leg(sender: String, flow: lk.salli.domain.TransactionFlow, minor: Long, merchant: String?, ts: Long = 1_000L) =
+        lk.salli.parser.ParsedTransaction(
+            senderAddress = sender, accountNumberSuffix = "1", amount = lk.salli.domain.Money(minor, "LKR"),
+            balance = null, fee = null, flow = flow, type = lk.salli.domain.TransactionType.ONLINE_TRANSFER,
+            merchantRaw = merchant, location = null, timestamp = ts, isDeclined = false, rawBody = "",
+        )
+
+    @org.junit.jupiter.api.Test
+    fun `a credit from a named person never pairs with a same-size debit`() {
+        val hnbCredit = leg("HNB", lk.salli.domain.TransactionFlow.INCOME, 100_000, "AADHIL M M")
+        val bocDebit = leg("BOC", lk.salli.domain.TransactionFlow.EXPENSE, 102_500, null)
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.findCounterpart(hnbCredit, listOf(bocDebit))).isNull()
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.findCounterpart(bocDebit, listOf(hnbCredit))).isNull()
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `a debit that names the other bank still pairs`() {
+        val pbDebit = leg("PeoplesBank", lk.salli.domain.TransactionFlow.EXPENSE, 4_002_500, "Bank Of Ceylon - BOC")
+        val bocCredit = leg("BOC", lk.salli.domain.TransactionFlow.INCOME, 4_000_000, null)
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.findCounterpart(pbDebit, listOf(bocCredit))).isEqualTo(bocCredit)
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `a card purchase is never half of a transfer`() {
+        val pos = leg("COMBANK", lk.salli.domain.TransactionFlow.EXPENSE, 500_000, "KEELLS SUPER")
+        val credit = leg("BOC", lk.salli.domain.TransactionFlow.INCOME, 500_000, null)
+        com.google.common.truth.Truth.assertThat(InternalTransferDetector.findCounterpart(pos, listOf(credit))).isNull()
+    }
+}

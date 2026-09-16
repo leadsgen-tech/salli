@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Receipt
@@ -36,7 +35,7 @@ import lk.salli.domain.TransactionFlow
 
 /**
  * Unified transaction row used on Home, Timeline, and anywhere else we list tx activity.
- * White pill card on the paper background, emoji avatar on the left (falls through to a
+ * Crisp surface card on the page background, category icon on the left (falls through to a
  * merchant logo when one is registered for the raw merchant name), merchant/title + subtitle
  * in the middle, amount on the right.
  *
@@ -53,24 +52,27 @@ fun TransactionRow(
     merchantRaw: String? = null,
     timestamp: Long? = null,
     isDeclined: Boolean = false,
+    /** Money moved between two of the user's own accounts: tinted, neutral amount, swap glyph. */
+    isOwnTransfer: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val logoPath = MerchantLogos.resolve(merchantRaw)
+    val logoPath = if (isOwnTransfer) null else MerchantLogos.resolve(merchantRaw)
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        shape = RoundedCornerShape(16.dp),
+        color = if (isOwnTransfer) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+        else MaterialTheme.colorScheme.surfaceContainerLowest,
+        shape = RoundedCornerShape(14.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             if (logoPath != null) {
                 MerchantLogo(path = logoPath)
             } else {
-                IconAvatar(icon = leadingIcon)
+                IconAvatar(icon = leadingIcon, emphasised = isOwnTransfer)
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -116,24 +118,28 @@ private fun MerchantLogo(path: String) {
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape),
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp)),
     )
 }
 
 @Composable
-private fun IconAvatar(icon: ImageVector) {
+private fun IconAvatar(icon: ImageVector, emphasised: Boolean = false) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (emphasised) MaterialTheme.colorScheme.secondary
+                else MaterialTheme.colorScheme.primaryContainer,
+            ),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
+            tint = if (emphasised) MaterialTheme.colorScheme.onSecondary
+            else MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.size(20.dp),
         )
     }

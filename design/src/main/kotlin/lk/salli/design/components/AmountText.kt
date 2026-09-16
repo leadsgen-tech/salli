@@ -16,7 +16,7 @@ import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
 
 /**
- * Row-scale amount. Flow-coloured: income lights up in `tertiary` (Revolut teal); expenses
+ * Row-scale amount. Flow-coloured: income uses the accessible tertiary green; expenses
  * stay on the default `onSurface` because a wall of red would be deafening in a spending app;
  * transfers go to `onSurfaceVariant` (quiet); declined reads struck-through in the muted tone.
  */
@@ -55,7 +55,7 @@ fun AmountText(
 /**
  * Billboard-scale amount for account cards and the home hero. Currency sits as a tiny
  * superscript-like prefix in `onSurfaceVariant`; the number itself is Space Grotesk display
- * weight 500 with negative tracking — Revolut's billboard recipe.
+ * weight and tight tracking for a clear financial hierarchy.
  */
 @Composable
 fun HeroAmountText(

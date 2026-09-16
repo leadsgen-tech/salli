@@ -1,9 +1,12 @@
 package lk.salli.app.sms
 
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import lk.salli.data.prefs.SalliPreferences
 
 /**
@@ -33,12 +37,14 @@ import lk.salli.data.prefs.SalliPreferences
 class SmsRefresher @Inject constructor(
     private val importer: HistoricalImporter,
     private val prefs: SalliPreferences,
+    private val promptNotifier: TransactionPromptNotifier,
 ) {
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var ensureJob: Job? = null
 
     fun refresh() {
         scope.launch {
@@ -46,7 +52,17 @@ class SmsRefresher @Inject constructor(
             try {
                 _refreshing.value = true
                 val since = System.currentTimeMillis() - WINDOW_MS
-                runCatching { importer.import(sinceMillis = since).collect { /* drain */ } }
+                // If the broadcast receiver lost the race to this refresh (user pulled just as
+                // an SMS landed) the refresh is what inserts the row — so it must also own the
+                // "who was this for?" prompt, or the prompt silently never appears.
+                try {
+                    importer.import(sinceMillis = since, onIngested = promptNotifier::handle)
+                        .collect { /* drain */ }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(TAG, "Recent SMS refresh failed", error)
+                }
             } finally {
                 _refreshing.value = false
                 mutex.unlock()
@@ -54,21 +70,35 @@ class SmsRefresher @Inject constructor(
         }
     }
 
+    @Synchronized
     fun ensureHistoricalImport() {
-        scope.launch {
-            if (prefs.historicalImportCompleted.first()) return@launch
-            if (!mutex.tryLock()) return@launch
-            try {
+        if (ensureJob?.isActive == true) return
+        ensureJob = scope.launch {
+            mutex.withLock {
+                // Another queued caller may have completed the import while this one waited.
+                if (prefs.historicalImportCompleted.first()) return@withLock
+                // The owner granted SMS access but explicitly chose not to scan history.
+                if (prefs.historicalImportDeferred.first()) return@withLock
                 _refreshing.value = true
-                val outcome = runCatching {
+                try {
                     importer.import(sinceMillis = null).collect { /* drain */ }
+                    prefs.setHistoricalImportCompleted(true)
+                    prefs.setHistoricalImportDeferred(false)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // Leave the completion bit false: the next reconciliation may retry safely.
+                    Log.e(TAG, "Historical SMS import failed", error)
+                } finally {
+                    _refreshing.value = false
                 }
-                if (outcome.isSuccess) prefs.setHistoricalImportCompleted(true)
-            } finally {
-                _refreshing.value = false
-                mutex.unlock()
             }
         }
+    }
+
+    /** Lets deterministic app tests wait for the one deduplicated reconciliation attempt. */
+    internal suspend fun awaitHistoricalImportIdle() {
+        ensureJob?.join()
     }
 
     /**
@@ -82,10 +112,15 @@ class SmsRefresher @Inject constructor(
             if (!mutex.tryLock()) return@launch
             try {
                 _refreshing.value = true
-                val outcome = runCatching {
+                try {
                     importer.import(sinceMillis = null).collect { /* drain */ }
+                    prefs.setHistoricalImportCompleted(true)
+                    prefs.setHistoricalImportDeferred(false)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(TAG, "Full SMS resync failed", error)
                 }
-                if (outcome.isSuccess) prefs.setHistoricalImportCompleted(true)
             } finally {
                 _refreshing.value = false
                 mutex.unlock()
@@ -94,6 +129,7 @@ class SmsRefresher @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "SmsRefresher"
         /** 3 days. Covers a long weekend of Doze; short enough to finish in seconds. */
         const val WINDOW_MS: Long = 3L * 24 * 60 * 60 * 1000
     }

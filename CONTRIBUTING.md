@@ -44,7 +44,7 @@ Android Studio Ladybug or later. JDK 17.
 
 ## What we won't merge
 
-- Anything that adds network calls outside the existing `LocalModel` download URL.
+- Anything that adds network access. The manifest declares no `INTERNET` permission and CI fails if one appears.
 - Analytics / crash reporting / telemetry SDKs.
 - Firebase, RevenueCat, Mixpanel, or similar hosted services.
 - Direct copies of code from AGPL'd competitors (we ship Apache 2.0 — see `CLAUDE.md` for the rationale).

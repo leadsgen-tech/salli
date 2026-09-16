@@ -42,6 +42,50 @@ object TimeParser {
     // DD/MM/YYYY — ComBank "Bill Payment in the amount of … was received on …" (date only).
     private val combankBillPayment = DateTimeFormatter.ofPattern("d/M/yyyy")
 
+    // Month-name stamps are matched case-insensitively: banks print "Sep", "SEP" and "sep"
+    // and a case-sensitive formatter would silently fall back to the SMS receive time.
+    private fun caseInsensitive(pattern: String): DateTimeFormatter =
+        java.time.format.DateTimeFormatterBuilder()
+            .parseCaseInsensitive()
+            .appendPattern(pattern)
+            .toFormatter(java.util.Locale.ENGLISH)
+
+    // DD/MMM/YYYY HH:MM — DFCC credit-card alert, e.g. "14/Sep/2026 18:42" (provisional).
+    private val dfccCard = caseInsensitive("d/MMM/yyyy H:mm")
+
+    // DD MMM YYYY — DFCC account alert, date only, e.g. "14 Sep 2026" (provisional).
+    private val dayMonthNameYear = caseInsensitive("d MMM yyyy")
+
+    // DD-MMM-YYYY hh:mm:ss AM|PM — HNB credit-card alert, e.g. "14-Sep-2026 06:42:10 PM" (provisional).
+    private val hnbCard = caseInsensitive("d-MMM-yyyy h:mm:ss a")
+
+    // DD/MM/YYYY HH:MM:SS — Sampath account alert (provisional).
+    private val sampathAccount = DateTimeFormatter.ofPattern("d/M/yyyy H:mm:ss")
+
+    fun parseDfccCard(datetime: String): Long? =
+        runCatching {
+            LocalDateTime.parse(datetime.trim(), dfccCard).atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    /** Date-only stamps resolve to local midnight; ordering within the day falls back to receivedAt. */
+    fun parseDayMonthNameYear(date: String): Long? =
+        runCatching {
+            java.time.LocalDate.parse(date.trim(), dayMonthNameYear).atStartOfDay(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    /** `yyyy-MM-dd HH:mm:ss` — same shape People's Bank confirms use; NDB card alerts too. */
+    fun parseIsoDateTime(datetime: String): Long? = parsePeoplesConfirm(datetime.trim())
+
+    fun parseHnbCard(datetime: String): Long? =
+        runCatching {
+            LocalDateTime.parse(datetime.trim(), hnbCard).atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
+    fun parseSampathAccount(date: String, time: String): Long? =
+        runCatching {
+            LocalDateTime.parse("$date $time", sampathAccount).atZone(colombo).toInstant().toEpochMilli()
+        }.getOrNull()
+
     fun parsePeoplesPrimary(timeOfDay: String, date: String): Long? =
         runCatching {
             LocalDateTime.parse("$timeOfDay $date", peoplesPrimary)

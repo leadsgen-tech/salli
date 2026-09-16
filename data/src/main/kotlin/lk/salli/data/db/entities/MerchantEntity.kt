@@ -2,9 +2,11 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+@Serializable
 @Entity(tableName = "merchants")
 data class MerchantEntity(
     @PrimaryKey(autoGenerate = true)
@@ -30,6 +32,7 @@ data class MerchantEntity(
  * Maps raw SMS merchant strings (e.g. "KEELLS SUPER COLOMBO 04") to a canonical [MerchantEntity].
  * Multiple aliases per merchant are normal.
  */
+@Serializable
 @Entity(
     tableName = "merchant_aliases",
     indices = [Index(value = ["raw_name"], unique = true)],

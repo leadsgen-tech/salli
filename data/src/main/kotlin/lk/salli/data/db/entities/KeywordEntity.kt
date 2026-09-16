@@ -2,6 +2,7 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -10,6 +11,7 @@ import androidx.room.PrimaryKey
  * manual re-categorizations (c) derived merchant→category mappings. Allows fast pre-classification
  * without scanning merchants.
  */
+@Serializable
 @Entity(
     tableName = "keywords",
     indices = [Index(value = ["keyword"], unique = true)],

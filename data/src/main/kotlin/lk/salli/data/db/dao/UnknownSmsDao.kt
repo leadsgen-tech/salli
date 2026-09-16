@@ -24,4 +24,11 @@ interface UnknownSmsDao {
 
     @Query("DELETE FROM unknown_sms WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /** Same sender + body already waiting for review: re-scans must not queue it twice. */
+    @Query("SELECT * FROM unknown_sms WHERE sender_address = :sender AND body = :body ORDER BY id ASC LIMIT 1")
+    suspend fun findByBody(sender: String, body: String): UnknownSmsEntity?
+
+    @Query("SELECT * FROM unknown_sms WHERE resolution IS NULL ORDER BY id ASC")
+    suspend fun pending(): List<UnknownSmsEntity>
 }

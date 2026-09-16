@@ -24,8 +24,14 @@ object InternalTransferDetector {
     /** How far apart the two halves can be. 48 h covers slow interbank settlement windows. */
     const val WINDOW_MS: Long = 48L * 60 * 60 * 1000L
 
-    /** Upper bound for the fee delta between the two halves, in minor units (Rs 100). */
+    /** Hard upper bound for the fee between the two halves, in minor units (Rs 100). */
     const val MAX_FEE_MINOR: Long = 10_000L
+
+    /** Small transfers: a flat fee up to this (Rs 30) is always plausible (LPAY charges Rs 25). */
+    const val SMALL_FEE_MINOR: Long = 3_000L
+
+    /** Larger transfers: the fee must also stay under this share of the debit. */
+    const val MAX_FEE_RATIO: Double = 0.10
 
     fun findCounterpart(
         incoming: ParsedTransaction,
@@ -54,9 +60,54 @@ object InternalTransferDetector {
 
         if (abs(a.timestamp - b.timestamp) > WINDOW_MS) return false
 
-        val delta = abs(a.amount.minorUnits - b.amount.minorUnits)
-        if (delta > MAX_FEE_MINOR) return false
+        // A leg that names its counterparty must be naming the other leg's bank. "You received
+        // LKR 1,000 from [a person]" is a third party's payment, not the user's own BOC debit
+        // that happened to be Rs 1,000 the same day; a POS purchase at KEELLS is never one half
+        // of a transfer either. Legs with no name (bare "Online Transfer Credit") stay eligible.
+        if (namesSomeoneElse(a, other = b) || namesSomeoneElse(b, other = a)) return false
 
-        return true
+        // The sending bank deducts the fee, so the debit is never smaller than the credit.
+        // A credit larger than the debit is two unrelated movements that happen to be close.
+        val debit = if (a.flow == TransactionFlow.EXPENSE) a else b
+        val credit = if (a.flow == TransactionFlow.EXPENSE) b else a
+        val fee = debit.amount.minorUnits - credit.amount.minorUnits
+        return isPlausibleFee(fee = fee, debitMinor = debit.amount.minorUnits)
+    }
+
+    /** Words that identify each bank inside a counterparty string, keyed by stored sender. */
+    private val bankAliases: Map<String, List<String>> = mapOf(
+        "BOC" to listOf("boc", "bank of ceylon"),
+        "BOCONLINE" to listOf("boc", "bank of ceylon"),
+        "PeoplesBank" to listOf("people"),
+        "PeoplesCard" to listOf("people"),
+        "COMBANK" to listOf("combank", "commercial bank"),
+        "HNB" to listOf("hnb", "hatton"),
+        "SAMPATH" to listOf("sampath"),
+        "SEYLAN" to listOf("seylan"),
+        "SEYLANBANK" to listOf("seylan"),
+        "AMANABANK" to listOf("amana"),
+        "DFCC" to listOf("dfcc"),
+        "NDB" to listOf("ndb"),
+        "NTB" to listOf("ntb", "nations trust"),
+        "PanAsiaBank" to listOf("pan asia"),
+    )
+
+    /** True when [leg] carries a counterparty name that does not mention [other]'s bank. */
+    fun namesSomeoneElse(leg: ParsedTransaction, other: ParsedTransaction): Boolean {
+        val name = leg.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val aliases = bankAliases[other.senderAddress]
+            ?: bankAliases.entries.firstOrNull { other.senderAddress.contains(it.key, ignoreCase = true) }?.value
+            ?: return false
+        return aliases.none { name.contains(it, ignoreCase = true) }
+    }
+
+    /**
+     * Fee sanity. Absolute caps alone paired a Rs 50 debit with a Rs 0.99 reversal (Rs 49
+     * "fee"); the ratio test stops that while still accepting Rs 25 on a Rs 400 transfer.
+     */
+    fun isPlausibleFee(fee: Long, debitMinor: Long): Boolean {
+        if (fee < 0L || fee > MAX_FEE_MINOR) return false
+        if (fee <= SMALL_FEE_MINOR) return true
+        return fee <= (debitMinor * MAX_FEE_RATIO).toLong()
     }
 }

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Salli</string>
+    <string name="widget_description">Spent today, this period and safe to spend</string>
 </resources>

@@ -2,6 +2,7 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.PrimaryKey
 
 /**
@@ -9,6 +10,7 @@ import androidx.room.PrimaryKey
  * belong to the same cross-account movement. Transactions in a group are excluded from
  * income/expense totals.
  */
+@Serializable
 @Entity(tableName = "transfer_groups")
 data class TransferGroupEntity(
     @PrimaryKey(autoGenerate = true)

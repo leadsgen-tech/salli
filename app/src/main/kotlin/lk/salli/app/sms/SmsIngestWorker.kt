@@ -7,6 +7,7 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import lk.salli.data.ingest.IngestResult
 import lk.salli.data.ingest.TransactionIngestor
 
@@ -28,22 +29,17 @@ class SmsIngestWorker @AssistedInject constructor(
         val sender = inputData.getString(KEY_SENDER) ?: return Result.failure()
         val body = inputData.getString(KEY_BODY) ?: return Result.failure()
         val receivedAt = inputData.getLong(KEY_RECEIVED_AT, System.currentTimeMillis())
-        val result = runCatching { ingestor.ingest(sender, body, receivedAt) }
-            .getOrElse { return Result.retry() }
-        // Fire the "who was this for?" prompt only for freshly-inserted transactions.
-        // Paired/Merged/Duplicate/Queued paths either already know the counterpart or
-        // aren't transactions at all. The notifier itself filters by freshness + type.
-        when (result) {
-            is IngestResult.Inserted -> promptNotifier.notifyIfNeeded(result.transactionId)
-            is IngestResult.Paired -> {
-                // An earlier prompt may have fired for the counterpart (e.g. "Who did you
-                // pay Rs 5,000?") when the first leg arrived. Now that we know both legs
-                // and it's an internal transfer, retract the stale prompt for both sides.
-                promptNotifier.cancelFor(result.transactionId)
-                promptNotifier.cancelFor(result.counterpartId)
-            }
-            else -> {}
+        val result = try {
+            ingestor.ingest(sender, body, receivedAt)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("SalliIngest", "ingest failed for sender=$sender, will retry", error)
+            return Result.retry()
         }
+        if (lk.salli.app.BuildConfig.DEBUG) android.util.Log.d("SalliIngest", "sender=$sender -> $result")
+        // The notifier decides whether a prompt fires, is withdrawn, or nothing happens.
+        promptNotifier.handle(result, receivedAt)
         return Result.success()
     }
 

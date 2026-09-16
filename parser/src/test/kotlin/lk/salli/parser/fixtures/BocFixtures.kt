@@ -155,5 +155,18 @@ object BocFixtures {
             body = "Dear Customer, Self-declaration forms for YA 2025/26 valid up to 31 March 2026. Submit new declaration forms to the bank to avoid WHT deductions.",
             expected = Expectation.Informational("non-transaction BOC notice"),
         ),
+        ParseCase(
+            label = "boc_cash_cheque_debit",
+            sender = "BOC",
+            body = "Cash Cheque Debit  CHQ/NO 123456 Rs 180000.00 From A/C No XXXXXXXXXX870. Balance available Rs 12345.67 - Thank you for banking with BOC",
+            expected = Expectation.Success(
+                type = TransactionType.CHEQUE,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 18000000,
+                currency = Currency.LKR,
+                balanceMinor = 1234567,
+                accountSuffix = "870",
+            ),
+        ),
     )
 }

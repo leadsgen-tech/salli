@@ -51,10 +51,11 @@ object BocTemplate : BankTemplate {
             """ - Thank you for banking with BOC$""",
     )
 
-    // ACH cheque-clearing SMS have an extra "CHQ/NO <number>" segment between the type and the
-    // amount. Captures mirror the main pattern's order (type, amount, direction, suffix, balance).
+    // Cheque SMS (ACH clearing in either direction, or a cash cheque cashed over the counter)
+    // carry an extra "CHQ/NO <number>" segment between the type and the amount. Captures mirror
+    // the main pattern's order (type, amount, direction, suffix, balance).
     private val achClearingPattern: Regex = Regex(
-        """^(ACH Clearing Debit|ACH Clearing Credit)\s+CHQ/NO\s+\d+""" +
+        """^(ACH Clearing Debit|ACH Clearing Credit|Cash Cheque Debit)\s+CHQ/NO\s+\d+""" +
             """\s+Rs ([\d,]+\.\d{2}) (From|To) A/C No X+(\d{3,6})\.""" +
             """ Balance available Rs ([\d,]+\.\d{2})""" +
             """ - Thank you for banking with BOC$""",
@@ -63,6 +64,7 @@ object BocTemplate : BankTemplate {
     private val achTypeMap: Map<String, Pair<TransactionType, TransactionFlow>> = mapOf(
         "ACH Clearing Debit" to (TransactionType.CHEQUE to TransactionFlow.EXPENSE),
         "ACH Clearing Credit" to (TransactionType.CHEQUE to TransactionFlow.INCOME),
+        "Cash Cheque Debit" to (TransactionType.CHEQUE to TransactionFlow.EXPENSE),
     )
 
     private val nonTransactionMarkers: List<Regex> = listOf(

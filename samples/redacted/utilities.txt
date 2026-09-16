@@ -1,0 +1,54 @@
+# Utility SMS — senders: SLTBILL, SLTMOBITEL (SLT-MOBITEL fixed line), 1919 (National Fuel Pass)
+# Redaction: names → [NAME], phone/account numbers → fake digits, invoice numbers zeroed, plate → ABC-1234.
+# Canonical fixtures: parser/src/test/kotlin/lk/salli/parser/utility/*Test.kt
+
+- Customer name : Mr [NAME]
+- Home Telephone No : 0371234567
+- Invoice No : 26AUG_SLTNA0000000000_0000
+- Bill Period  : 2026-08-01 to 2026-08-31
+- Last month Bal : 12020.47
+- Payment Received : 6000.00
+- Charges for the Period  : 5932.44
+- Total Payable : 11952.91
+- Payment Due date : 2026-09-22
+
+Please use https://sbill.slt.lk/Public/Bi?iv=XXXX to view the bill.
+
+Use last 4 digits of your mobile number as the password to open the file
+SLT-MOBITEL
+
+Your bill payment Rs.6000.00 has been received to account number 0050000000 (94371234567) on 2026/08/12:09:30:00 PM.  Thank you.
+
+Dear customer,
+Please settle your bill outstanding for SLT-MOBITEL Home no 0371234567 before 09.09.2026 to avoid the automated service disconnection. Your due amount up to month of July 2026 is Rs. 6020.47
+Pay easily through https://billpay.slt.lk/. Ignore if already paid. Thank you
+
+Dear customer,
+Your due date is reaching. SLT-MOBITEL Home bill 0371234567 payable is Rs.5890. You can pay your bill easily by https://billpay.slt.lk/ MySLT app, mCash, scanning the QR code, or through other digital payment channels. Ignore if already paid. Thank you
+
+Dear Customer,
+Your SLT-MOBITEL Home bill 0371234567 of Rs. 6088.03 is overdue. Please note that late payment charges have been applied to your account. To settle your outstanding balance, please pay through https://billpay.slt.lk/ MySLT app, mCash, QR code scanning, or other digital channels. Ignore if already paid. Thank you
+
+National Fuel Pass: TRN confirmed.
+2026-09-08 06:02:23 ABC-1234
+Quota used: 8L
+Weekly Balance: 0.000L
+Station code: 102316
+(Resets on - 2026-09-13)
+
+National Fuel Pass: TRN confirmed.
+2026-08-19 12:06:22 ABC-1234
+Quota used: 1.2L
+Weekly Balance: 4.390L
+Station code: 109249
+(Resets on - 2026-08-23)
+
+National Fuel Pass: TRN confirmed.
+05.04.2026 14:14:35 ABC-1234
+Quota used: 8L
+Weekly Balance: 0.000L
+Station code: 400109
+(Expires on - 2026-04-11)
+
+National Fuel Pass: One time validation (OTP) 123456
+Expire in 5 minutes

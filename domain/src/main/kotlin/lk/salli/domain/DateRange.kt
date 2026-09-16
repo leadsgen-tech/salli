@@ -108,6 +108,80 @@ data class DateRange(
             return DateRange(from, until, label)
         }
 
+        /**
+         * The cycle immediately before [range] for a given start day. Works for calendar
+         * months too (start day 1): the day before the range starts always lies in the
+         * previous cycle.
+         */
+        fun prevCycle(range: DateRange, periodStartDay: Int): DateRange =
+            cycleFor(range.fromMillis - 1, periodStartDay)
+
+        /** The cycle immediately after [range]; a half-open range's `until` is the next start. */
+        fun nextCycle(range: DateRange, periodStartDay: Int): DateRange =
+            cycleFor(range.untilMillis, periodStartDay)
+
+        /**
+         * The cycle whose start lies [monthOffset] months from the start of the cycle that
+         * contains "now". Drives the month pills: 0 = current cycle, −1 = the one before.
+         */
+        fun cycleOffset(
+            monthOffset: Int,
+            periodStartDay: Int,
+            clock: () -> Long = { System.currentTimeMillis() },
+        ): DateRange {
+            val current = cycleFor(clock(), periodStartDay)
+            val cal = Calendar.getInstance(LOCAL_TZ).apply {
+                timeInMillis = current.fromMillis
+                add(Calendar.MONTH, monthOffset)
+            }
+            return cycleFor(cal.timeInMillis, periodStartDay)
+        }
+
+        /** Signed number of months between the current cycle's start and [range]'s start. */
+        fun cycleMonthOffset(
+            range: DateRange,
+            periodStartDay: Int,
+            clock: () -> Long = { System.currentTimeMillis() },
+        ): Int {
+            val current = cycleFor(clock(), periodStartDay)
+            val a = Calendar.getInstance(LOCAL_TZ).apply { timeInMillis = current.fromMillis }
+            val b = Calendar.getInstance(LOCAL_TZ).apply { timeInMillis = range.fromMillis }
+            return (b.get(Calendar.YEAR) * 12 + b.get(Calendar.MONTH)) -
+                (a.get(Calendar.YEAR) * 12 + a.get(Calendar.MONTH))
+        }
+
+        /**
+         * The seven-day week containing [anchorMillis] that starts on [weekStartDay]
+         * (ISO numbering: 1 = Monday … 7 = Sunday). Label: `8 – 14 Sep 2026`.
+         */
+        fun weekContaining(anchorMillis: Long, weekStartDay: Int): DateRange {
+            val wanted = isoToCalendarDay(weekStartDay)
+            val cal = Calendar.getInstance(LOCAL_TZ).apply {
+                timeInMillis = anchorMillis
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+            while (cal.get(Calendar.DAY_OF_WEEK) != wanted) cal.add(Calendar.DAY_OF_MONTH, -1)
+            val from = cal.timeInMillis
+            cal.add(Calendar.DAY_OF_MONTH, 7)
+            val until = cal.timeInMillis
+            return DateRange(from, until, buildCustomLabel(from, until))
+        }
+
+        /** The week before [range] with the same start day. */
+        fun prevWeek(range: DateRange, weekStartDay: Int): DateRange =
+            weekContaining(range.fromMillis - 1, weekStartDay)
+
+        /** The week after [range] with the same start day. */
+        fun nextWeek(range: DateRange, weekStartDay: Int): DateRange =
+            weekContaining(range.untilMillis, weekStartDay)
+
+        /** ISO day-of-week (Mon=1…Sun=7) → java.util.Calendar constant (Sun=1…Sat=7). */
+        fun isoToCalendarDay(iso: Int): Int {
+            val d = iso.coerceIn(1, 7)
+            return if (d == 7) Calendar.SUNDAY else d + 1
+        }
+
         /** The previous calendar month relative to [range]. Label updates to the new month. */
         fun prev(range: DateRange): DateRange {
             val cal = Calendar.getInstance(LOCAL_TZ).apply { timeInMillis = range.fromMillis }

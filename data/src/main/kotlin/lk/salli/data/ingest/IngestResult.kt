@@ -22,4 +22,10 @@ sealed interface IngestResult {
 
     /** Known bank sender, unrecognised format — parked in the review queue. */
     data class Queued(val unknownId: Long) : IngestResult
+
+    /**
+     * A utility sender (bills, Fuel Pass) handled by [UtilityIngestor]. Never a transaction;
+     * counts as "dropped" for import progress. [kind] is a short diagnostic label.
+     */
+    data class Utility(val kind: String) : IngestResult
 }

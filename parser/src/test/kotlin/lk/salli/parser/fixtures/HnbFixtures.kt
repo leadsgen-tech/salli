@@ -123,5 +123,32 @@ object HnbFixtures {
                 location = "HNB MALLAWAPITIYA CRM 01",
             ),
         ),
+        ParseCase(
+            label = "hnb_payment_notice_is_not_a_transaction",
+            sender = "HNB",
+            body = "You received LKR 10,000 from [NAME]\nOTP අංකය හෝ රහස්‍ය තොරතුරු කිසිවෙකුටවත් ලබා නොදෙන්න.\nOTP மற்றும் முக்கியமான தகவல்களை எவருடனும் பகிர வேண்டாம்.\nDo not share OTP & sensitive information with anyone.",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            // A notice, not an OTP: a four-digit amount near the word OTP must not trip the guard.
+            label = "hnb_payment_notice_four_digit_amount_not_otp",
+            sender = "HNB",
+            body = "You received LKR 5000 from [NAME]\nමෙම අංකය කිසිවෙකුට නොකියන්න.\nDo not share OTP & sensitive information with anyone.",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            label = "hnb_credit_card_alert_reconstructed",
+            sender = "HNB",
+            body = "HNB Credit Card **1234 :KEELLS SUPER (Apprx) LKR 3,450.00 (14-Sep-2026 06:42:10 PM) Av.Bal : LKR 120,550.00",
+            expected = Expectation.Success(
+                type = TransactionType.POS,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 345000,
+                currency = Currency.LKR,
+                balanceMinor = 12055000,
+                accountSuffix = "1234",
+                merchantRaw = "KEELLS SUPER",
+            ),
+        ),
     )
 }

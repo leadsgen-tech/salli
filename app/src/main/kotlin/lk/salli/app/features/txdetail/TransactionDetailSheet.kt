@@ -1,8 +1,5 @@
 package lk.salli.app.features.txdetail
 
-import android.os.Build
-import android.view.Window
-import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -31,15 +28,15 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.SimpleDateFormat
+import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.Locale
 import lk.salli.design.components.AmountText
@@ -57,22 +55,35 @@ import lk.salli.domain.TransactionFlow
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailSheet(
+    txId: Long,
     onDismiss: () -> Unit,
-    viewModel: TransactionDetailViewModel = hiltViewModel(),
+    /** "Split this": closes the sheet, then hands the transaction id to the split flow. */
+    onSplit: (Long) -> Unit = {},
+    viewModel: TransactionDetailViewModel = hiltViewModel(key = "transaction-detail"),
 ) {
+    // Runs every time the sheet enters composition, including reopening the same transaction.
+    LaunchedEffect(txId) { viewModel.open(txId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    // Programmatic closes (Save) run the slide-down first and only then remove the sheet, so
+    // the exit is one smooth motion instead of a hard cut. Swipe/scrim/back dismissals have
+    // already animated by the time onDismissRequest fires.
+    val animatedDismiss: () -> Unit = {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        // Drop the dim scrim — we blur the content below via FLAG_BLUR_BEHIND instead, so
-        // the page stays visible (just out of focus) when the sheet is open.
-        scrimColor = androidx.compose.ui.graphics.Color.Transparent,
+        // Plain scrim on purpose. The previous cross-window blur (FLAG_BLUR_BEHIND) made
+        // SurfaceFlinger re-blur the whole screen every frame of the slide animation, which
+        // is exactly the stutter users saw when closing the sheet.
     ) {
-        SheetBlurBehind(radiusDp = 28)
-        val tx = state.transaction
+        // Ignore a previous transaction's state for the frame before open() resets it.
+        val tx = state.transaction?.takeIf { it.id == txId }
         if (tx == null) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
                 Text(
@@ -119,6 +130,10 @@ fun TransactionDetailSheet(
             )
 
             MetaRow(label = "Account", value = state.accountName ?: "—")
+            state.counterpartAccountName?.let { other ->
+                val toward = if (flow == TransactionFlow.INCOME) "from" else "to"
+                MetaRow(label = "Own transfer", value = "$toward $other")
+            }
             if (tx.balanceMinor != null) {
                 MetaRow(
                     label = "Balance after",
@@ -133,6 +148,27 @@ fun TransactionDetailSheet(
             }
             if (tx.isDeclined) {
                 MetaRow(label = "Status", value = "Declined by bank — not charged")
+            }
+            state.linkedSplit?.let { link ->
+                val share = link.myShareMinor?.let { " · your share ${MoneyFormat.format(Money(it, link.currency))}" }.orEmpty()
+                MetaRow(label = "Split", value = "In ${link.groupName}$share")
+            }
+            if (!tx.isDeclined && flow == TransactionFlow.EXPENSE) {
+                var splitting by remember { mutableStateOf(false) }
+                TextButton(
+                    enabled = !splitting,
+                    onClick = {
+                        splitting = true
+                        // hide() throws if the sheet is already closing (a drag, a second tap), so a
+                        // cancelled hide never navigates; the flag ignores repeat taps.
+                        scope.launch {
+                            sheetState.hide()
+                            onSplit(tx.id)
+                        }
+                    },
+                ) {
+                    Text(if (state.linkedSplit == null) "Split this with others" else "Split again")
+                }
             }
 
             // Category picker
@@ -214,7 +250,7 @@ fun TransactionDetailSheet(
                         .background(saveBg)
                         .clickable(enabled = dirty) {
                             viewModel.setNote(noteDraft)
-                            onDismiss()
+                            animatedDismiss()
                         }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
@@ -247,44 +283,6 @@ fun TransactionDetailSheet(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * Asks the platform to blur whatever window sits behind the ModalBottomSheet's Dialog.
- * Compose's ModalBottomSheet uses a Dialog under the hood; we find its Window via
- * [DialogWindowProvider] and set `FLAG_BLUR_BEHIND` + `blurBehindRadius`. No-op on API < 31
- * and on devices that advertise no blur support — the only visible consequence is the
- * scrim stays transparent and the background is just visible (not blurred).
- */
-@Composable
-private fun SheetBlurBehind(radiusDp: Int) {
-    val view = LocalView.current
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    DisposableEffect(radiusDp) {
-        val window: Window? = (view.parent as? DialogWindowProvider)?.window
-        if (window != null) {
-            // Kill the dialog-level dim + opaque background so content behind actually
-            // renders through. scrimColor = Transparent on the Compose side isn't enough —
-            // the underlying Dialog window had its own FLAG_DIM_BEHIND + bg drawable.
-            window.setDimAmount(0f)
-            window.setBackgroundDrawable(
-                android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-            )
-            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                val attrs = window.attributes
-                attrs.blurBehindRadius = with(density) { radiusDp.dp.toPx() }.toInt()
-                window.attributes = attrs
-            }
-        }
-        onDispose {
-            if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
             }
         }
     }

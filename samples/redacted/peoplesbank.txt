@@ -1,0 +1,49 @@
+# People's Bank — sender: PeoplesBank
+# Redaction: names → [NAME], own account masks kept as the bank sends them (last 2 digits), beneficiary accounts masked to ****NNNN, amounts and balances are plausible fakes.
+# Canonical fixtures: parser/src/test/kotlin/lk/salli/parser/fixtures/PeoplesBankFixtures.kt
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 500.25 (LPAY Tfr @08:58 22/04/2026).[Av_Bal: Rs. 1,046.27 at the time of SMS generated]
+
+Dear Sir/Madam, Your A/C 280-2001******68 has been debited by Rs. 100.00 (LPAY Tfr @10:00 01/01/2025).[Av_Bal: Rs. 5,000.00 at the time of SMS generated]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been credited by Rs. 700.50 (LPAY Tfr @13:18 05/04/2026).[Av_Bal: Rs. 9,486.15 at the time of SMS generated]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 190.00 (POS @20:30 13/04/2026 at Dissanayaka Super Center).[Av_Bal: Rs. 5,852.68 as of SMS]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 6,005.00 (ATM @13:34 07/04/2026 at Pothuhera).[Av_Bal: Rs. 5,428.68 as of SMS]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 5,000.00 (CDM @13:01 12/04/2026 at Gampola).[Av_Bal: Rs. 6,042.68 as of SMS]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 10,000.00 (CDM @22:14 13/04/2026 at Mawanella).
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 12,087.03(Cash payment @21:23 05/04/2026).[Av_Bal: Rs. 21,494.68 at SMS generated]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been credited by Rs. 500.00 (PeoPAY Tfr @08:55 02/04/2026).[Av_Bal: Rs. 636.15 at the time of SMS generated]
+
+Mobile Payment Successful, LKR 100.00 to Mobitel Ref No [PHONE] on 2026-04-15 21:53:17. Call 1961
+
+Mobile Payment Successful, LKR 385.00 to Dialog  Ref No [PHONE] on 2026-04-06 20:47:21. Call 1961
+
+Fund transfer  Successful. LKR 50,000.00 to LOLC Finance PLC Account ****7495 on 2026-04-22 08:58:39. Call 1961
+
+Fund transfer  Successful. LKR 5,000.00 to Bank Of Ceylon - BOC Account ****7870 on 2026-03-30 18:12:09. Call 1961
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 6525.00 (LPAY Tfr @00:21 28/04/2026). Thank You- Inquiries Dial: 1961
+
+Dear MR [NAME], You have logged in to People's Pay App on 2026-04-22 08:57:43. Not you? Call us on 1961.
+
+Dear MR [NAME], Your attempt to log in to People's Pay App failed. For inquiries, Call us on 1961.
+
+Please don't share this with anyone. මෙය කිසිවෙකු වෙත ලබා නොදෙන්න. இதை யாருடனும் பகிர வேண்டாம். use 508926 as OTP. [for People's Pay transaction] Didn't request? Call 1961.
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 45000.00(Cash Depo. @11:55 07/09/2026).[Av_Bal: Rs. 46234.10 as of SMS]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 98765.43(eRem Payment @14:03 03/09/2026).[Av_Bal: Rs. 123456.78 as of SMS]
+
+Dear Sir/Madam, Your A/C 280-2001****68 has been Credited (Reversal) by Rs. 0.99 (Just Pay Transaction @23:00 11/08/2026).Thank You.
+
+Dear Sir/Madam, Your A/C (280-2001******68) has been debited by Rs. 23005.00 (ATM @11:25 12/01/2026 at Pothuhera).[Av_Bal: Rs. 1889.96 as of SMS]
+
+Hi [NAME] You have successfully changed your mobile device on date 2026-08-13 21:56:09. Call 1961.
+
+Important:  2025/26 Non-Taxable Self-Declaration expired on 31.03.2026. Submit NEW DECLARATION to continue tax exemption & avoid AIT deductions in future.

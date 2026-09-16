@@ -2,6 +2,7 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -18,6 +19,7 @@ import androidx.room.PrimaryKey
  *
  * Period: [periodStartDay] lets the user say "my month runs 25→24" (default 1 = calendar month).
  */
+@Serializable
 @Entity(tableName = "budgets")
 data class BudgetEntity(
     @PrimaryKey(autoGenerate = true)
@@ -61,6 +63,7 @@ data class BudgetEntity(
  * `amount_minor` is stored in minor units (cents) as a Long — keeps us consistent with how
  * `TransactionEntity.amountMinor` is stored, avoiding float drift when computing spent/remaining.
  */
+@Serializable
 @Entity(
     tableName = "budget_lines",
     foreignKeys = [
@@ -98,6 +101,7 @@ data class BudgetLineEntity(
  * `budget_id` means "all accounts" — keeps the common case zero-cost and avoids having to
  * backfill rows when a new account is discovered from a future SMS.
  */
+@Serializable
 @Entity(
     tableName = "budget_accounts",
     foreignKeys = [

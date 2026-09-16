@@ -4,13 +4,28 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.graphics.Color
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import android.view.WindowManager
+import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import lk.salli.app.sms.SmsRefresher
+import lk.salli.app.security.AppLockController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import lk.salli.app.nav.Destination
@@ -19,13 +34,23 @@ import lk.salli.app.nav.SalliNavHost
 import lk.salli.data.prefs.SalliPreferences
 import lk.salli.design.theme.SalliTheme
 
+// FragmentActivity (a ComponentActivity) because BiometricPrompt hosts itself in a fragment.
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @Inject lateinit var prefs: SalliPreferences
+    @Inject lateinit var appLock: AppLockController
+    @Inject lateinit var smsRefresher: SmsRefresher
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Recreating BiometricPrompt reconnects its callback to the retained prompt fragment
+        // after rotation. Window protection is applied before Compose can draw its first frame.
+        appLock.attach(this)
+        applyWindowProtection(appLock.protectWindow.value)
+        lifecycleScope.launch {
+            appLock.protectWindow.collect(::applyWindowProtection)
+        }
         // Transparent system bars — the status/nav bar icon colour flips with the active
         // scheme via SystemBarStyle.auto so they read on either palette.
         enableEdgeToEdge(
@@ -33,22 +58,46 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
 
-        // If SMS perms already granted (user re-opened the app), skip onboarding; otherwise
-        // route to it so we can ask and do the historical import.
-        val smsGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.READ_SMS,
-        ) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.RECEIVE_SMS,
-            ) == PackageManager.PERMISSION_GRANTED
-
-        val start = if (smsGranted) Destination.HOME.route else Route.ONBOARDING
-
         setContent {
             val dark by prefs.darkTheme.collectAsState(initial = false)
-            SalliTheme(darkTheme = dark) {
-                SalliNavHost(startDestination = start)
+            val introduced by prefs.onboardingCompleted.collectAsState(initial = null)
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
             }
+            SalliTheme(darkTheme = dark) {
+                if (introduced == null) {
+                    Surface(Modifier.fillMaxSize()) {
+                        Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    }
+                } else {
+                    // Keep the initial graph stable when onboarding saves completion before
+                    // navigating. Skipping SMS is a valid, persistent first-run choice.
+                    val start = remember {
+                        if (introduced == true) Destination.HOME.route else Route.ONBOARDING
+                    }
+                    SalliNavHost(startDestination = start, appLock = appLock)
+                }
+            }
+        }
+    }
+
+    private fun applyWindowProtection(protect: Boolean) {
+        if (protect) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // A grant made in Android Settings doesn't deliver our permission-launcher result.
+        // Reconcile it here, but let first-run onboarding own its visible import flow.
+        lifecycleScope.launch {
+            if (!prefs.onboardingCompleted.first()) return@launch
+            val smsGranted = arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
+                .all { ContextCompat.checkSelfPermission(this@MainActivity, it) == PackageManager.PERMISSION_GRANTED }
+            if (smsGranted) smsRefresher.ensureHistoricalImport()
         }
     }
 }

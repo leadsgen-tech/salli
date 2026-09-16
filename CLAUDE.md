@@ -10,7 +10,7 @@ Sri Lankan banks have no public APIs, but every card swipe and transfer triggers
 
 ## Non-Goals (keep scope honest)
 
-- **No LLM in v1.** Regex-based parser with curated templates for the top ~7 banks. Gemma 4 / AICore is a v2+ consideration only if real-world cold-start is a pain point.
+- **No LLM, no AI mode, ever.** Regex templates only. An on-device model (MediaPipe + Qwen) was prototyped and removed in Sep 2026: it needed `INTERNET` for the model download and prebuilt binaries F-Droid can't build. Do not re-propose it.
 - **No iOS in v1.** iOS is a later phase. Code is structured so the parser module can be converted to Kotlin Multiplatform without rewriting.
 - **No backend.** Ever. No auth, no sync server, no analytics. Export-only for user-driven portability.
 - **No Play Store as primary distribution.** F-Droid first — Play Store's SMS permission policies make OSS distribution painful. We may revisit with a workaround later.
@@ -47,14 +47,14 @@ The `parser/` and `domain/` modules are pure Kotlin with zero Android deps — e
 ## Architectural Decisions (locked in)
 
 1. **`RECEIVE_SMS` BroadcastReceiver**, not `READ_SMS` polling — fires the instant an SMS lands.
-2. **Parser templates as data, not code.** Each bank = a JSON/data-class blob of regex patterns. Community can contribute patterns via PR without touching parser logic.
+2. **One small Kotlin object per bank** implementing `BankTemplate`; the regexes are the data. Verified templates anchor whole sentences from real samples. *Provisional* templates (no real sample yet) use field-anchored extraction via `parser/util/Fields.kt`, fixtures labelled `_reconstructed`, and a "provisional" label in the README; promote them when redacted real samples arrive.
 3. **DB schema shape:**
    - `transactions` with `enum_flow_id` (0=expense, 1=income), `enum_method_id` (0=manual, 1=sms), `is_hidden`
    - `merchants`, `categories`, `sub_categories`
    - `keywords` table for fast local re-categorization
    - 48h debit/credit pairing for internal transfer detection
    - Optional `sms_account_balance` column for bank-reported balance reconciliation
-4. **Zero network permissions in manifest.** Can't accidentally leak data if we literally can't reach the network.
+4. **Zero network permissions in manifest.** Can't accidentally leak data if we literally can't reach the network. CI greps the manifest and the version catalog to keep it that way.
 5. **User-driven export.** CSV, JSON, maybe SQLite file dump. No auto-sync.
 
 ## Attribution / Ethics
@@ -76,7 +76,7 @@ Target 80%+ coverage with 7 banks:
 
 Later: NSB, NDB, HSBC, StanChart, Amana, Cargills, Union, plus wallets (Frimi, Genie, eZ Cash).
 
-**Realistic v1 scope:** initial coverage is BOC, PeoplesBank, COMBANK. Additional banks arrive via the sourcing flow described in `docs/BANK_SAMPLES_GUIDE.md` — primarily community-contributed redacted samples via the GitHub Issue template.
+**Status (Sep 2026):** verified on real samples — BOC, PeoplesBank, COMBANK (+Q+), HNB, Seylan, Amana. Provisional (reconstructed formats) — Sampath, DFCC, NDB, NTB, Pan Asia, PeoplesCard. Sender-only (queued to Unknown) — NSB, HSBC, StanChart, Cargills, CDB, Union. Additional real samples arrive via `docs/BANK_SAMPLES_GUIDE.md` and the GitHub Issue template.
 
 ## SMS Sample Collection Protocol
 
@@ -95,5 +95,6 @@ Full guide for contributors in `docs/BANK_SAMPLES_GUIDE.md`.
 - **Tests for every parser template.** A template without a sample test is not merged.
 - **Don't add backend/network dependencies.** If you find yourself reaching for Retrofit/Ktor, stop and ask.
 - **When adding a bank template**: (1) add raw sample to `samples/raw/` locally, (2) redact and commit to `samples/redacted/`, (3) write template, (4) write test using the redacted sample.
-- **No LLM integration in v1.** If Gemma/AICore work becomes necessary, it's a separate feature-flag module, never in the hot path.
-- **Anti-drift**: skim this file at the start of any non-trivial session to avoid re-proposing discarded paths (LLM-in-v1, iOS-parallel, Flutter/RN, Play-Store-primary).
+- **Anti-drift**: skim this file at the start of any non-trivial session to avoid re-proposing discarded paths (AI mode, iOS-parallel, Flutter/RN, Play-Store-primary).
+- **Competitors are format evidence, not source.** KoSalli (closed-source) and Prabhava Labs' Flutter "Salli" (MIT) may be studied for sender IDs and field wording; never paste their regexes or code. Same clean-room rule as PennyWise.
+- **Coverage check against a real inbox**: dump with `adb shell content query --uri content://sms/inbox --projection _id:address:date:body > samples/raw/inbox.txt` and run `SALLI_RAW_INBOX=$PWD/samples/raw/inbox.txt ./gradlew :parser:test --tests '*RawInboxRunner*'` (the runner reads that raw output directly). Dumps and reports stay in the gitignored `samples/raw/`.

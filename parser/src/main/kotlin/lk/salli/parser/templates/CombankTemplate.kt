@@ -198,8 +198,20 @@ object CombankTemplate : BankTemplate {
         RegexOption.IGNORE_CASE,
     )
 
+    // Daily-limit declines name the merchant but carry no amount, so there is nothing to
+    // book. Cancellations ("YOUR TRANSACTION AT X … HAS BEEN CANCELLED") are deliberately NOT
+    // handled here: the matching purchase may already be booked and nothing can void it yet,
+    // so they fall through to the Unknown queue where the user can see and act on them.
+    private val declinedNoAmount = Regex(
+        """^(?!.*\d+\.\d{2})TRANSACTION ON YOUR CARD ENDING WITH \d{4} AT .+? DECLINED\b""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+
     override fun tryParse(body: String, receivedAt: Long): ParseResult? {
         val trimmed = body.trim()
+        if (declinedNoAmount.containsMatchIn(trimmed)) {
+            return ParseResult.Informational("ComBank declined, no amount")
+        }
 
         if (dormantReminder.containsMatchIn(trimmed)) {
             return ParseResult.Informational("ComBank dormant-account reminder")

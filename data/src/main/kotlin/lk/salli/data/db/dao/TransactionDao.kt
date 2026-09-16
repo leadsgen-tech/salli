@@ -45,6 +45,17 @@ interface TransactionDao {
     )
     suspend fun recentFromSender(sender: String, sinceTimestamp: Long): List<TransactionEntity>
 
+    /** The user's own category choice; `user_tagged` locks it against the startup recategorise pass. */
+    @Query("UPDATE transactions SET category_id = :categoryId, user_tagged = 1, updated_at = :now WHERE id = :id")
+    suspend fun setUserCategory(id: Long, categoryId: Long, now: Long)
+
+    @Query("UPDATE transactions SET note = :note, updated_at = :now WHERE id = :id")
+    suspend fun setNote(id: Long, note: String?, now: Long)
+
+    /** Same sender and same SMS text, at any time. A bank never sends one body twice. */
+    @Query("SELECT * FROM transactions WHERE sender_address = :sender AND (raw_body = :body OR raw_body = :trimmedBody) LIMIT 1")
+    suspend fun findBySenderAndBody(sender: String, body: String, trimmedBody: String): TransactionEntity?
+
     /** Recent rows across all senders — feeds InternalTransferDetector. */
     @Query("SELECT * FROM transactions WHERE timestamp >= :sinceTimestamp ORDER BY timestamp DESC")
     suspend fun recentAll(sinceTimestamp: Long): List<TransactionEntity>
@@ -102,8 +113,20 @@ interface TransactionDao {
     @Query("UPDATE transactions SET transfer_group_id = :groupId, flow_id = :flowId WHERE id = :id")
     suspend fun assignTransferGroup(id: Long, groupId: Long, flowId: Int)
 
+    /** Undo a pairing: drop the group link and restore the leg's original direction. */
+    @Query("UPDATE transactions SET transfer_group_id = NULL, flow_id = :flowId WHERE id = :id")
+    suspend fun clearTransferGroup(id: Long, flowId: Int)
+
     @Query("DELETE FROM transactions WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /** Removes SMS rows whose body starts with [bodyPrefix] (a LIKE pattern) from [sender]. */
+    @Query("DELETE FROM transactions WHERE sender_address = :sender AND method_id = 1 AND raw_body LIKE :bodyPrefix")
+    suspend fun deleteSmsRowsByBodyPrefix(sender: String, bodyPrefix: String): Int
+
+    /** When history begins; planning skips the first, partly covered cycle. */
+    @Query("SELECT MIN(timestamp) FROM transactions WHERE is_hidden = 0")
+    suspend fun earliestTimestamp(): Long?
 
     @Query("UPDATE transactions SET account_id = :targetId WHERE account_id = :sourceId")
     suspend fun reassignAccount(sourceId: Long, targetId: Long)

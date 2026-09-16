@@ -31,7 +31,7 @@ import lk.salli.domain.TransactionType
  * in the right bucket automatically.
  *
  * We only prompt for transactions that are:
- *   - fresh (within the last few minutes — historical imports don't spam)
+ *   - fresh (reached the phone within the last few hours; bulk imports never prompt)
  *   - missing `merchantRaw`
  *   - a transfer / cheque / mobile-payment type (POS/ATM/CDM are self-explanatory)
  *   - not declined, not part of an internal-transfer group (we already know the pair)
@@ -41,32 +41,56 @@ class TransactionPromptNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
     private val db: SalliDatabase,
 ) {
-    /**
-     * Decide + post for [transactionId]. Safe to call on any thread — internally runs a
-     * small DB read; the DAO methods are `suspend`.
-     */
-    /**
-     * Cancels any pending prompt notification for [transactionId]. Called when a transaction
-     * gets paired into an internal-transfer group after the fact — the "Who did you pay?"
-     * prompt becomes meaningless (the answer is "your other account") so we withdraw it.
-     */
+    /** One place that maps an ingest outcome to notification side effects. */
+    suspend fun handle(result: lk.salli.data.ingest.IngestResult, receivedAt: Long) {
+        when (result) {
+            is lk.salli.data.ingest.IngestResult.Inserted -> notifyIfNeeded(result.transactionId, receivedAt)
+            // The counterpart may already carry a "Who did you pay?" prompt from when its leg
+            // arrived. Both legs are now known to be the user's own accounts, so withdraw both.
+            is lk.salli.data.ingest.IngestResult.Paired -> {
+                cancelFor(result.transactionId)
+                cancelFor(result.counterpartId)
+            }
+            is lk.salli.data.ingest.IngestResult.Merged -> refreshFor(result.transactionId)
+            else -> Unit
+        }
+    }
+
+    /** Withdraws the prompt for [transactionId], e.g. once its leg is paired as an own transfer. */
     fun cancelFor(transactionId: Long) {
         NotificationManagerCompat.from(context).cancel(transactionId.toInt())
     }
 
-    suspend fun notifyIfNeeded(transactionId: Long) {
+    /**
+     * @param receivedAt when the SMS landed on the phone. Freshness is judged on the later of
+     * this and the bank's own timestamp: bank clocks drift and WorkManager can hold the job
+     * for minutes under Doze, and either used to push a real transfer past the old 10-minute
+     * window so the prompt silently never fired.
+     */
+    suspend fun notifyIfNeeded(transactionId: Long, receivedAt: Long = System.currentTimeMillis()) {
         if (!canPostNotifications()) return
         val tx = db.transactions().byId(transactionId) ?: return
-        if (!shouldPrompt(tx)) return
+        if (!shouldPrompt(tx, receivedAt)) return
         val account = db.accounts().byId(tx.accountId)
         post(tx = tx, accountLabel = account?.displayName ?: tx.senderAddress.orEmpty())
     }
 
-    private fun shouldPrompt(tx: TransactionEntity): Boolean {
+    /**
+     * Re-evaluate an already-posted prompt after the row changed underneath it. A People's
+     * Bank debit prompts "Who did you pay?" and seconds later the confirm SMS merges in with
+     * the payee name — the question is answered, so the prompt is withdrawn.
+     */
+    suspend fun refreshFor(transactionId: Long) {
+        val tx = db.transactions().byId(transactionId) ?: return cancelFor(transactionId)
+        if (!tx.merchantRaw.isNullOrBlank() || tx.transferGroupId != null) cancelFor(transactionId)
+    }
+
+    private fun shouldPrompt(tx: TransactionEntity, receivedAt: Long): Boolean {
         if (!tx.merchantRaw.isNullOrBlank()) return false
         if (tx.isDeclined) return false
         if (tx.transferGroupId != null) return false
-        if (System.currentTimeMillis() - tx.timestamp > FRESH_WINDOW_MS) return false
+        val freshestKnown = maxOf(tx.timestamp, receivedAt)
+        if (System.currentTimeMillis() - freshestKnown > FRESH_WINDOW_MS) return false
         val type = TransactionType.fromId(tx.typeId)
         return type in PROMPTABLE_TYPES
     }
@@ -211,10 +235,11 @@ class TransactionPromptNotifier @Inject constructor(
         private const val SUMMARY_ID = Int.MAX_VALUE
         private const val SUMMARY_REQ_CODE = Int.MAX_VALUE - 1
 
-        // Only prompt for transactions whose body timestamp is within ~10 minutes. Longer
-        // than that and the user won't remember the context anyway, and historical import
-        // would otherwise trigger hundreds of stale prompts on first run.
-        private const val FRESH_WINDOW_MS = 10L * 60 * 1000
+        // Prompt only for SMS that reached the phone in the last few hours: long enough to
+        // survive Doze deferrals and a pull-to-refresh catching up on a quiet morning, short
+        // enough that the historical import never spams. The importer and full resync do not
+        // call the notifier at all; only the live receiver and the 3-day refresh do.
+        private const val FRESH_WINDOW_MS = 6L * 60 * 60 * 1000
 
         private val PROMPTABLE_TYPES = setOf(
             TransactionType.CEFT,

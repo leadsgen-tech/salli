@@ -3,7 +3,9 @@ package lk.salli.app.sms
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Telephony
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 
@@ -30,12 +32,21 @@ class SmsReceiver : BroadcastReceiver() {
             val body = parts.joinToString(separator = "") { it.messageBody.orEmpty() }
             val receivedAt = parts.first().timestampMillis.takeIf { it > 0L }
                 ?: System.currentTimeMillis()
-            workManager.enqueue(
-                OneTimeWorkRequestBuilder<SmsIngestWorker>()
-                    .setInputData(SmsIngestWorker.inputOf(sender, body, receivedAt))
-                    .addTag(TAG)
-                    .build(),
-            )
+            val request = OneTimeWorkRequestBuilder<SmsIngestWorker>()
+                .setInputData(SmsIngestWorker.inputOf(sender, body, receivedAt))
+                .addTag(TAG)
+                .apply {
+                    // Android 12+ runs expedited work immediately without a foreground
+                    // service, so a transfer prompt lands while the user still remembers
+                    // the payment instead of after Doze lets the job through. Older APIs
+                    // would need FOREGROUND_SERVICE for this, which the app deliberately
+                    // does not declare, so they keep the plain request.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    }
+                }
+                .build()
+            workManager.enqueue(request)
         }
     }
 

@@ -13,10 +13,20 @@ concurrency:
 
 jobs:
   test:
-    name: Parser + domain tests
+    name: Parser, domain + data tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Privacy invariants
+        run: |
+          set -euo pipefail
+          if grep -qiE "firebase|mixpanel|analytics|crashlytics|posthog|sentry|mediapipe" gradle/libs.versions.toml; then
+            echo "::error::analytics or AI SDK found in the version catalog"; exit 1
+          fi
+          if grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml; then
+            echo "::error::INTERNET permission must never be declared"; exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -29,8 +39,8 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Run pure-Kotlin tests
-        run: ./gradlew :parser:test :domain:test --no-daemon
+      - name: Run unit tests
+        run: ./gradlew :parser:test :domain:test :data:test --no-daemon
 
       - name: Upload test reports on failure
         if: failure()
@@ -40,6 +50,7 @@ jobs:
           path: |
             parser/build/reports/tests/
             domain/build/reports/tests/
+            data/build/reports/tests/
           retention-days: 7
 
 # APK builds are handled by release.yml on v* tags (and via manual dispatch for

@@ -6,7 +6,7 @@ Scope of the first release. If a feature isn't here, it's not v1.
 
 > A complete Sri Lankan SMS expense tracker — on-device, open source, honest about privacy.
 
-Salli reads bank SMS, turns them into a coherent financial picture, and never touches the network (except for one optional future AI-mode model download, parked behind a feature flag for v1).
+Salli reads bank SMS, turns them into a coherent financial picture, and never touches the network. The manifest declares no network permission at all.
 
 ## What v1 ships with
 
@@ -41,8 +41,7 @@ Salli reads bank SMS, turns them into a coherent financial picture, and never to
 - Add-budget FAB
 
 **Settings** (already shipped)
-- Parse mode section replaced by a "Coming soon" tile
-- Export CSV, Delete all data, About
+- Export CSV, Delete all data, About (no parse-mode section: there is only one parser)
 
 ### Cross-cutting UI
 
@@ -52,14 +51,14 @@ Salli reads bank SMS, turns them into a coherent financial picture, and never to
 
 ### Parser coverage
 
-Banks in v1:
-1. BOC — full (ATM, CDM, cheque, online transfer, CEFT, ACH)
-2. PeoplesBank — full (POS, CDM, ATM, mobile pay, fund transfer, bill, QR)
-3. COMBANK — **partial**: card purchase + declined only; transfers / ATM / CDM / bill payments / incoming credits still need samples
-4. Sampath
-5. HNB
-6. NTB
-7. DFCC
+Banks in v1 (status Sep 2026):
+1. BOC — verified (ATM, CDM, cheque deposit + cash cheque debit, online transfer, CEFT, ACH)
+2. PeoplesBank — verified (POS, CDM, cash deposit, ATM, mobile pay incl. Just Pay + reversals, fund transfer, bill, QR, eRem)
+3. COMBANK / ComBank_Q+ — verified (card purchase, declines, ATM, account credit/debit, CRM deposit, fund transfer, bill payment)
+4. HNB — verified (account, fee, card alert, ATM receipt, payment received); credit-card alert provisional
+5. Seylan, Amana — verified on contributed samples
+6. Sampath, DFCC, NDB, NTB, Pan Asia, PeoplesCard — **provisional**: templates built from format evidence, tests on reconstructed bodies, promote when real samples arrive
+7. NSB, HSBC, StanChart, Cargills, CDB, Union — sender recognised, messages queued to Unknown for reporting
 
 Each new template = samples collected (redacted), regex written, ≥3 unit tests passing.
 
@@ -81,8 +80,8 @@ Each new template = samples collected (redacted), regex written, ≥3 unit tests
 
 These get a hard "no":
 
-- **LLM / AI mode** — parked. `FeatureFlags.AI_ENABLED = false`. Code stays, UI doesn't surface it.
-- **Chat / Ask Salli** — parked with AI.
+- **LLM / AI mode** — removed entirely (code, MediaPipe dependency, model download, and the INTERNET permission it needed). Regex templates are the parser, full stop.
+- **Chat / Ask Salli** — removed with AI.
 - **Cloud / backend / sync / auth** — ever.
 - **Play Store as primary** — F-Droid first; Play is a post-v1 consideration if/when permission stories allow it.
 - **iOS** — v2+.

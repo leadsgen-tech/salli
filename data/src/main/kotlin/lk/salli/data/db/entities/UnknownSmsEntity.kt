@@ -2,6 +2,7 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.PrimaryKey
 
 /**
@@ -9,6 +10,7 @@ import androidx.room.PrimaryKey
  * triage. When the user confirms it's a transaction, we'll add a template / ask for more
  * samples.
  */
+@Serializable
 @Entity(tableName = "unknown_sms")
 data class UnknownSmsEntity(
     @PrimaryKey(autoGenerate = true)

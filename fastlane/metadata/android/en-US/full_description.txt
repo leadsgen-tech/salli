@@ -20,7 +20,7 @@ Bank of Ceylon, People's Bank, Commercial Bank. More coming — contribute real 
 
 <b>Privacy</b>
 
-Salli has no INTERNET permission in use unless you opt into the (currently parked) AI mode. No analytics, no Firebase, no account. Your transaction data is stored only on your device, is exportable as CSV, and is deleted the moment you uninstall.
+Salli declares no INTERNET permission at all, so it cannot reach the network even by mistake. No AI mode, no analytics, no Firebase, no account. Your transaction data is stored only on your device, is exportable as CSV, and is deleted the moment you uninstall.
 
 <b>Open source</b>
 

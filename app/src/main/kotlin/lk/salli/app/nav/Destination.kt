@@ -19,9 +19,18 @@ enum class Destination(val route: String, val label: String, val icon: ImageVect
 
 object Route {
     const val ONBOARDING = "onboarding"
-    const val TRANSACTION_DETAIL = "tx/{id}"
-    fun transactionDetail(id: Long): String = "tx/$id"
+    const val ONBOARDING_REPLAY = "onboarding-replay"
 
-    const val CHAT = "chat"
     const val UNKNOWN_SMS = "unknown-sms"
+    const val BILLS = "bills"
+    const val FUEL_PASS = "fuel-pass"
+    const val RECURRING = "recurring"
+    const val GOALS = "goals"
+    const val SAFE_TO_SPEND = "safe-to-spend"
+
+    /** Groups list. `tx` > 0 means "Split this" handed over a transaction to place in a group. */
+    const val SPLIT_GROUPS = "split?tx={tx}"
+    const val SPLIT_GROUP = "split/{groupId}?tx={tx}"
+    fun splitGroups(pendingTransactionId: Long = -1L): String = "split?tx=$pendingTransactionId"
+    fun splitGroup(groupId: Long, pendingTransactionId: Long = -1L): String = "split/$groupId?tx=$pendingTransactionId"
 }

@@ -326,5 +326,24 @@ object CombankFixtures {
             body = "Dear Customer , This is to inform you that due to security reasons, your ComBank Digital online banking facility was deactivated recently as you have not used the service.",
             expected = Expectation.Informational(),
         ),
+        ParseCase(
+            label = "combank_declined_daily_limit_no_amount",
+            sender = "COMBANK",
+            body = "TRANSACTION ON YOUR CARD ENDING WITH 4273 AT APPLE.COM/BILL DECLINED DUE TO EXCEEDING DAILY TRANSACTION LIMIT.PL CONTACT 011-2353353.",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            // A cancellation may void a purchase that is already booked; keep it visible.
+            label = "combank_transaction_cancelled_stays_in_queue",
+            sender = "COMBANK",
+            body = "YOUR TRANSACTION AT Microsoft*Store ON YOUR CARD ENDING WITH 4273 HAS BEEN CANCELLED.",
+            expected = Expectation.Unknown,
+        ),
+        ParseCase(
+            label = "combank_declined_with_amount_is_not_swallowed",
+            sender = "COMBANK",
+            body = "TRANSACTION ON YOUR CARD ENDING WITH 4273 AT UBER EATS DECLINED. AMOUNT 1,200.00 EXCEEDS LIMIT.",
+            expected = Expectation.Unknown,
+        ),
     )
 }

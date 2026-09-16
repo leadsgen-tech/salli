@@ -4,10 +4,8 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Each Sri Lankan bank has a recognisable brand colour. Using them on account cards turns
- * the accounts carousel into a little wallet of real-looking cards — far livelier than a
- * row of identical grey tiles. Values are loosely inspired by each bank's actual brand but
- * nudged to work on a dark UI (we tint down, desaturate slightly, and always provide a
- * paired darker shade for the gradient's far stop).
+ * account markers into useful identity cues. Values are loosely inspired by each bank's
+ * actual brand and include a darker companion that remains distinct on cool-neutral surfaces.
  */
 data class BankBrand(
     val primary: Color,

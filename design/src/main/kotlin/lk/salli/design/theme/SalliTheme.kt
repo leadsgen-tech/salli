@@ -4,9 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 
 /**
- * Root theme. Defaults to light; a user-controlled toggle (Home top-right) flips into the
- * Burnt Peach / Deep Steel Blue dark palette. System dark-mode is deliberately not followed —
- * the two palettes are brand choices, not accessibility adaptations.
+ * Root theme. Cobalt carries primary actions and financial focus; acid lime is reserved for
+ * high-value status surfaces such as safe-to-spend. The user-controlled toggle is retained.
  */
 @Composable
 fun SalliTheme(

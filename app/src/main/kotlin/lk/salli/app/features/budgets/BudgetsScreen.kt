@@ -95,6 +95,7 @@ import lk.salli.design.components.EmptyState
 fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val defaultPeriodStart by viewModel.defaultPeriodStartDay.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var editing by remember { mutableStateOf<BudgetUi?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -161,6 +162,7 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             categories = state.availableCategories,
             accounts = state.availableAccounts,
             initial = null,
+            defaultPeriodStartDay = defaultPeriodStart,
             onDismiss = { creating = false },
             onSave = { payload ->
                 viewModel.create(
@@ -183,6 +185,7 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             categories = state.availableCategories,
             accounts = state.availableAccounts,
             initial = b,
+            defaultPeriodStartDay = defaultPeriodStart,
             onDismiss = { editing = null },
             onSave = { payload ->
                 viewModel.update(
@@ -444,6 +447,7 @@ private fun BudgetSheet(
     categories: List<CategoryEntity>,
     accounts: List<AccountEntity>,
     initial: BudgetUi?,
+    defaultPeriodStartDay: Int,
     onDismiss: () -> Unit,
     onSave: (SavePayload) -> Unit,
     onDelete: () -> Unit,
@@ -458,7 +462,8 @@ private fun BudgetSheet(
             if (initial?.capMode == BudgetCapMode.Total) majorString(initial.totalCapMinor) else "",
         )
     }
-    var periodStartDay by remember { mutableStateOf(1) }
+    // Editing keeps the budget's own reset day; a new budget inherits the Settings default.
+    var periodStartDay by remember { mutableStateOf(initial?.periodStartDay ?: defaultPeriodStartDay) }
 
     val caps = remember { mutableStateMapOf<Long, String>() }
     val selected = remember { mutableStateListOf<Long>() }

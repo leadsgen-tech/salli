@@ -15,9 +15,11 @@ import lk.salli.domain.TransactionMethod
 import lk.salli.parser.ParseResult
 import lk.salli.parser.ParsedTransaction
 import lk.salli.parser.SmsParser
+import lk.salli.parser.util.SenderId
 import lk.salli.parser.merge.DuplicateDetector
 import lk.salli.parser.merge.InternalTransferDetector
 import lk.salli.parser.merge.PeoplesBankMerger
+import lk.salli.parser.utility.UtilitySenders
 
 /**
  * End-to-end SMS → DB pipeline.
@@ -36,14 +38,29 @@ class TransactionIngestor(
     private val typeCategorizer: TypeCategorizer,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val method: TransactionMethod = TransactionMethod.SMS,
+    /** Handles bill and Fuel Pass senders; null keeps this ingestor bank-only (tests). */
+    private val utilityIngestor: UtilityIngestor? = null,
 ) {
 
     suspend fun ingest(sender: String, body: String, receivedAt: Long): IngestResult {
-        val parse = SmsParser.parse(sender, body, receivedAt)
+        // Normalised once here so bank matching, utility routing and the review queue all see a
+        // clean ID (the SMS provider has handed back IDs like "COMBANK" plus a line break).
+        val senderId = SenderId.normalize(sender)
+        // Utility senders never carry bank transactions and would otherwise be dropped as
+        // "sender not registered"; hand them to the tracker pipeline first.
+        if (utilityIngestor != null && UtilitySenders.isUtilitySender(senderId)) {
+            return utilityIngestor.ingest(senderId, body, receivedAt)
+        }
+        val parse = SmsParser.parse(senderId, body, receivedAt)
         return when (parse) {
             is ParseResult.Otp -> IngestResult.Dropped("otp")
             is ParseResult.Informational -> IngestResult.Dropped("informational: ${parse.reason}")
             is ParseResult.Unknown -> {
+                // Pull-to-refresh re-imports the last three days and a rescan re-imports
+                // everything; without this lookup every pass would add the same row again.
+                db.unknownSms().findByBody(parse.sender, parse.body)?.let { existing ->
+                    return IngestResult.Queued(existing.id)
+                }
                 val id = db.unknownSms().insert(
                     UnknownSmsEntity(
                         senderAddress = parse.sender,
@@ -55,6 +72,33 @@ class TransactionIngestor(
             }
             is ParseResult.Success -> persist(parse.tx)
         }
+    }
+
+    /**
+     * Re-runs every message still waiting in the Unknown queue through the current parser.
+     * Templates improve over time; a body that was unknown last month may now be a real
+     * transaction (persisted, row removed) or a recognised notice (row removed). Bodies that
+     * are still unknown stay put. Safe to run on every app start.
+     *
+     * @return number of queue rows resolved.
+     */
+    suspend fun retriagePendingUnknown(): Int {
+        var resolved = 0
+        for (row in db.unknownSms().pending()) {
+            when (val parse = SmsParser.parse(row.senderAddress, row.body, row.receivedAt)) {
+                is ParseResult.Unknown -> Unit
+                is ParseResult.Success -> {
+                    persist(parse.tx)
+                    db.unknownSms().deleteById(row.id)
+                    resolved++
+                }
+                is ParseResult.Otp, is ParseResult.Informational -> {
+                    db.unknownSms().deleteById(row.id)
+                    resolved++
+                }
+            }
+        }
+        return resolved
     }
 
     private suspend fun persist(parsed: ParsedTransaction): IngestResult = db.withTransaction {
@@ -69,7 +113,10 @@ class TransactionIngestor(
         // to the same stored row.
         val bodyKey = parsed.rawBody.trim()
         if (bodyKey.isNotEmpty()) {
+            // Also looked up outside the window: the live receiver and a re-scan can stamp the
+            // same SMS with times far enough apart that a windowed check stored it twice.
             val byBody = recentEntities.firstOrNull { it.rawBody?.trim() == bodyKey }
+                ?: db.transactions().findBySenderAndBody(parsed.senderAddress, parsed.rawBody, bodyKey)
             if (byBody != null) return@withTransaction IngestResult.Duplicate(existingId = byBody.id)
         }
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.db.entities.CategoryEntity
 import lk.salli.data.db.entities.TransactionEntity
@@ -65,6 +66,7 @@ data class InsightsUiState(
 class InsightsViewModel @Inject constructor(
     private val db: SalliDatabase,
     private val refresher: lk.salli.app.sms.SmsRefresher,
+    prefs: lk.salli.data.prefs.SalliPreferences,
 ) : ViewModel() {
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
@@ -72,6 +74,16 @@ class InsightsViewModel @Inject constructor(
 
     private val _range = MutableStateFlow(DateRange.currentMonth())
     val range: StateFlow<DateRange> = _range
+
+    /** The user's month start day; the range snaps to the current cycle whenever it changes. */
+    private val monthStartDay: StateFlow<Int> = prefs.monthStartDay
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1)
+
+    init {
+        viewModelScope.launch {
+            prefs.monthStartDay.collect { day -> _range.value = DateRange.cycleFor(System.currentTimeMillis(), day) }
+        }
+    }
 
     // For the bar chart we always want the last 6 months regardless of `range` — the user's
     // active range drives the hero + category list, but the bars are a stable horizon.
@@ -94,7 +106,17 @@ class InsightsViewModel @Inject constructor(
         rangeTxns,
         sixMonthTxns,
         db.categories().observeAll(),
-    ) { r, txns, sixMonth, categories -> aggregate(r, txns, sixMonth, categories) }
+        db.accounts().observeAll(),
+    ) { r, txns, sixMonth, categories, accounts ->
+        // Accounts hidden in Settings are excluded from the donut and the bars alike.
+        val hidden = accounts.filter { it.isHidden }.map { it.id }.toSet()
+        aggregate(
+            r,
+            txns.filter { it.accountId !in hidden },
+            sixMonth.filter { it.accountId !in hidden },
+            categories,
+        )
+    }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
@@ -105,8 +127,8 @@ class InsightsViewModel @Inject constructor(
             ),
         )
 
-    fun onPrevRange() { _range.value = DateRange.prev(_range.value) }
-    fun onNextRange() { _range.value = DateRange.next(_range.value) }
+    fun onPrevRange() { _range.value = DateRange.prevCycle(_range.value, monthStartDay.value) }
+    fun onNextRange() { _range.value = DateRange.nextCycle(_range.value, monthStartDay.value) }
     fun onPickRange(range: DateRange) { _range.value = range }
 
     private fun aggregate(
@@ -216,7 +238,9 @@ class InsightsViewModel @Inject constructor(
                 label = label,
                 totalMinor = total,
                 slices = barSlices,
-                isCurrent = start.timeInMillis == rangeStartMs,
+                // Bars stay calendar months; the highlighted one is the month the active
+                // cycle starts in, so a 25th-to-25th cycle still lights up a single bar.
+                isCurrent = rangeStartMs in start.timeInMillis until end.timeInMillis,
             )
         }
     }

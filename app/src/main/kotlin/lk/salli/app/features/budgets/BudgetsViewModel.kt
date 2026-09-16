@@ -74,6 +74,7 @@ data class BudgetUi(
     val accountScope: AccountScope,
     val pace: BudgetPace,
     val paceExpectedFraction: Float,  // 0.0-1.0 — how far through the cycle we are
+    val periodStartDay: Int = 1,
 ) {
     val progress: Float = if (totalCapMinor > 0)
         (totalSpentMinor.toFloat() / totalCapMinor).coerceAtLeast(0f) else 0f
@@ -105,10 +106,15 @@ data class BudgetsUiState(
 class BudgetsViewModel @Inject constructor(
     private val db: SalliDatabase,
     private val refresher: lk.salli.app.sms.SmsRefresher,
+    prefs: lk.salli.data.prefs.SalliPreferences,
 ) : ViewModel() {
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
     fun refresh() = refresher.refresh()
+
+    /** New budgets reset on the user's global month start day unless they pick another. */
+    val defaultPeriodStartDay: StateFlow<Int> = prefs.monthStartDay
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1)
 
     // We fetch a wide slab of recent transactions and slice per-budget. The widest cycle is
     // 28 days + one-day boundary slack → 90 days covers "current cycle" plus room for history
@@ -152,10 +158,11 @@ class BudgetsViewModel @Inject constructor(
         val accountLinks = bundle.accountLinks
         val accounts = lookup.accounts
         val categories = lookup.categories
-        val txns = lookup.txns
+        val accountLookup = accounts.associateBy { it.id }
+        // Hidden accounts don't count toward any budget, even one that names them.
+        val txns = lookup.txns.filter { accountLookup[it.accountId]?.isHidden != true }
 
         val catLookup = categories.associateBy { it.id }
-        val accountLookup = accounts.associateBy { it.id }
         val linksByBudget = accountLinks.groupBy { it.budgetId }
         val now = System.currentTimeMillis()
 
@@ -228,6 +235,7 @@ class BudgetsViewModel @Inject constructor(
                 accountScope = scope,
                 pace = pace,
                 paceExpectedFraction = expectedFraction,
+                periodStartDay = b.periodStartDay,
             )
         }
 

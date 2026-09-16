@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Atomic Orange — Salli brand accent, backs the launcher icon. -->
-    <color name="ic_launcher_background">#E9631A</color>
-    <!-- Matches PaperWarm in design/Color.kt (cream). Used for the splash/initial window bg
-         so the very first frame doesn't flash white-then-cream. -->
-    <color name="paper">#F3ECDA</color>
+    <!-- Cobalt brand accent shared by the launcher and primary actions. -->
+    <color name="ic_launcher_background">#003DFF</color>
+    <!-- Neutral launch surface, before the saved Compose theme has loaded. -->
+    <color name="paper">#F7F8FC</color>
 </resources>

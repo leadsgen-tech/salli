@@ -14,4 +14,10 @@ interface TransferGroupDao {
 
     @Query("SELECT * FROM transfer_groups WHERE id = :id")
     suspend fun byId(id: Long): TransferGroupEntity?
+
+    @Query("SELECT * FROM transfer_groups ORDER BY id ASC")
+    suspend fun all(): List<TransferGroupEntity>
+
+    @Query("DELETE FROM transfer_groups WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }

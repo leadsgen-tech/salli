@@ -34,7 +34,9 @@ class SmsInboxReader @Inject constructor(
         val args = sinceMillis?.let { arrayOf(it.toString()) }
         val out = mutableListOf<RawSms>()
 
-        resolver.query(uri, projection, selection, args, "${Telephony.Sms.DATE} DESC")?.use { c ->
+        val cursor = resolver.query(uri, projection, selection, args, "${Telephony.Sms.DATE} DESC")
+            ?: error("The SMS provider did not return an inbox cursor")
+        cursor.use { c ->
             val addressIdx = c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
             val bodyIdx = c.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val dateIdx = c.getColumnIndexOrThrow(Telephony.Sms.DATE)

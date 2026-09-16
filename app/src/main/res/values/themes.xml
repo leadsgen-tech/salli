@@ -10,7 +10,7 @@
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowBackground">@color/paper</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <!-- Force Day mode regardless of system setting — the brand is light-only for now. -->
+        <!-- Compose owns both light and dark palettes; disable automatic color inversion. -->
         <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>

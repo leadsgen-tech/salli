@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,6 +50,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlin.math.pow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -79,30 +81,56 @@ fun SalliPullToRefresh(
     var thresholdArmed by remember { mutableStateOf(false) }
     val indicatorPx = remember { Animatable(0f) }
 
-    LaunchedEffect(isRefreshing) {
-        if (!isRefreshing && indicatorPx.value > 0f) {
-            indicatorPx.animateTo(
-                targetValue = 0f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow,
-                ),
-            )
-            rawPull = 0f
-            thresholdArmed = false
+    // The gesture owns its own lifecycle instead of trusting `isRefreshing` to toggle.
+    // A local SMS rescan can finish in tens of milliseconds, or be skipped entirely when
+    // another refresh already holds the lock, so `isRefreshing` may never visibly flip —
+    // the old effect keyed on it then left the pill hanging at the threshold until the next
+    // pull. Now: trigger → show the spinner for at least MIN_SHOW_MS → wait for the external
+    // refresh to end (or time out) → settle back.
+    var phase by remember { mutableStateOf(Phase.Idle) }
+    var refreshStartedAt by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(phase, isRefreshing) {
+        if (phase != Phase.Refreshing || isRefreshing) return@LaunchedEffect
+        val elapsed = System.currentTimeMillis() - refreshStartedAt
+        if (elapsed < MIN_SHOW_MS) delay(MIN_SHOW_MS - elapsed)
+        phase = Phase.Settling
+    }
+    LaunchedEffect(phase) {
+        when (phase) {
+            Phase.Refreshing -> {
+                delay(REFRESH_TIMEOUT_MS)
+                if (phase == Phase.Refreshing) phase = Phase.Settling
+            }
+            Phase.Settling -> {
+                indicatorPx.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow,
+                    ),
+                )
+                rawPull = 0f
+                thresholdArmed = false
+                phase = Phase.Idle
+            }
+            else -> Unit
         }
     }
 
-    val nestedScroll = remember {
+    val nestedScroll = remember(thresholdPx, maxPullPx) {
         object : NestedScrollConnection {
+            private fun accepting() = phase == Phase.Idle || phase == Phase.Dragging
+
             override fun onPreScroll(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (isRefreshing) return Offset.Zero
+                if (!accepting()) return Offset.Zero
                 if (rawPull > 0f && available.y < 0f && source == NestedScrollSource.UserInput) {
                     val consumed = minOf(-available.y, rawPull)
                     rawPull = (rawPull - consumed).coerceAtLeast(0f)
+                    if (rawPull == 0f) phase = Phase.Idle
                     scope.launch { indicatorPx.snapTo(damped(rawPull, maxPullPx)) }
                     updateArmed(rawPull, thresholdPx, thresholdArmed, haptic) { thresholdArmed = it }
                     return Offset(0f, -consumed)
@@ -115,9 +143,10 @@ fun SalliPullToRefresh(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (isRefreshing) return Offset.Zero
+                if (!accepting()) return Offset.Zero
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 if (available.y <= 0f) return Offset.Zero
+                phase = Phase.Dragging
                 rawPull = (rawPull + available.y).coerceAtMost(maxPullPx * 2f)
                 scope.launch { indicatorPx.snapTo(damped(rawPull, maxPullPx)) }
                 updateArmed(rawPull, thresholdPx, thresholdArmed, haptic) { thresholdArmed = it }
@@ -125,26 +154,25 @@ fun SalliPullToRefresh(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (isRefreshing) return Velocity.Zero
-                if (rawPull <= 0f) return Velocity.Zero
+                if (phase != Phase.Dragging) return Velocity.Zero
+                if (rawPull <= 0f) {
+                    phase = Phase.Idle
+                    return Velocity.Zero
+                }
                 val triggered = rawPull >= thresholdPx
                 rawPull = 0f
                 thresholdArmed = false
                 if (triggered) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    refreshStartedAt = System.currentTimeMillis()
+                    phase = Phase.Refreshing
                     onRefresh()
                     indicatorPx.animateTo(
                         targetValue = thresholdPx,
                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
                     )
                 } else {
-                    indicatorPx.animateTo(
-                        targetValue = 0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioHighBouncy,
-                            stiffness = Spring.StiffnessMediumLow,
-                        ),
-                    )
+                    phase = Phase.Settling
                 }
                 return available
             }
@@ -164,10 +192,18 @@ fun SalliPullToRefresh(
             offsetPx = indicatorPx.value,
             thresholdPx = thresholdPx,
             armed = thresholdArmed,
-            isRefreshing = isRefreshing,
+            isRefreshing = phase == Phase.Refreshing,
         )
     }
 }
+
+private enum class Phase { Idle, Dragging, Refreshing, Settling }
+
+/** Spinner is shown at least this long so an instant local refresh still reads as "done". */
+private const val MIN_SHOW_MS = 650L
+
+/** Safety net if the refresh never reports completion. */
+private const val REFRESH_TIMEOUT_MS = 15_000L
 
 private fun damped(raw: Float, max: Float): Float {
     val ratio = (raw / max).coerceAtLeast(0f)

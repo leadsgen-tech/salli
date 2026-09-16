@@ -182,7 +182,7 @@ object PeoplesBankFixtures {
         ParseCase(
             label = "peoples_fund_transfer_other_bank",
             sender = "PeoplesBank",
-            body = "Fund transfer  Successful. LKR 50,000.00 to LOLC Finance PLC Account 20810007495 on 2026-04-22 08:58:39. Call 1961",
+            body = "Fund transfer  Successful. LKR 50,000.00 to LOLC Finance PLC Account ****7495 on 2026-04-22 08:58:39. Call 1961",
             expected = Expectation.Success(
                 type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.EXPENSE,
@@ -194,7 +194,7 @@ object PeoplesBankFixtures {
         ParseCase(
             label = "peoples_fund_transfer_boc",
             sender = "PeoplesBank",
-            body = "Fund transfer  Successful. LKR 5,000.00 to Bank Of Ceylon - BOC Account 93637870 on 2026-03-30 18:12:09. Call 1961",
+            body = "Fund transfer  Successful. LKR 5,000.00 to Bank Of Ceylon - BOC Account ****7870 on 2026-03-30 18:12:09. Call 1961",
             expected = Expectation.Success(
                 type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.EXPENSE,
@@ -238,6 +238,66 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Please don't share this with anyone. මෙය කිසිවෙකු වෙත ලබා නොදෙන්න. இதை யாருடனும் பகிர வேண்டாம். use 508926 as OTP. [for People's Pay transaction] Didn't request? Call 1961.",
             expected = Expectation.Otp,
+        ),
+        ParseCase(
+            label = "peoples_cash_depo_credit",
+            sender = "PeoplesBank",
+            body = "Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 45000.00(Cash Depo. @11:55 07/09/2026).[Av_Bal: Rs. 46234.10 as of SMS]",
+            expected = Expectation.Success(
+                type = TransactionType.CDM,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 4500000,
+                currency = Currency.LKR,
+                balanceMinor = 4623410,
+            ),
+        ),
+        ParseCase(
+            label = "peoples_erem_payment_credit",
+            sender = "PeoplesBank",
+            body = "Dear Sir/Madam, Your A/C 280-2001****68 has been Credited by Rs. 98765.43(eRem Payment @14:03 03/09/2026).[Av_Bal: Rs. 123456.78 as of SMS]",
+            expected = Expectation.Success(
+                type = TransactionType.ONLINE_TRANSFER,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 9876543,
+                currency = Currency.LKR,
+                balanceMinor = 12345678,
+            ),
+        ),
+        ParseCase(
+            label = "peoples_just_pay_reversal_credit",
+            sender = "PeoplesBank",
+            body = "Dear Sir/Madam, Your A/C 280-2001****68 has been Credited (Reversal) by Rs. 0.99 (Just Pay Transaction @23:00 11/08/2026).Thank You.",
+            expected = Expectation.Success(
+                type = TransactionType.MOBILE_PAYMENT,
+                flow = TransactionFlow.INCOME,
+                amountMinor = 99,
+                currency = Currency.LKR,
+                balanceMinor = null,
+            ),
+        ),
+        ParseCase(
+            label = "peoples_six_star_mask_atm",
+            sender = "PeoplesBank",
+            body = "Dear Sir/Madam, Your A/C (280-2001******68) has been debited by Rs. 23005.00 (ATM @11:25 12/01/2026 at Pothuhera).[Av_Bal: Rs. 1889.96 as of SMS]",
+            expected = Expectation.Success(
+                type = TransactionType.ATM,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 2300500,
+                currency = Currency.LKR,
+                balanceMinor = 188996,
+            ),
+        ),
+        ParseCase(
+            label = "peoples_device_change_notice",
+            sender = "PeoplesBank",
+            body = "Hi [NAME] You have successfully changed your mobile device on date 2026-08-13 21:56:09. Call 1961.",
+            expected = Expectation.Informational(),
+        ),
+        ParseCase(
+            label = "peoples_tax_declaration_notice",
+            sender = "PeoplesBank",
+            body = "Important:  2025/26 Non-Taxable Self-Declaration expired on 31.03.2026. Submit NEW DECLARATION to continue tax exemption & avoid AIT deductions in future.",
+            expected = Expectation.Informational(),
         ),
     )
 }

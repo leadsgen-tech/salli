@@ -34,6 +34,7 @@ class Seeder(private val db: SalliDatabase) {
         // re-parsed PeoplesBank confirms with post-merge shape differences. Safe to run
         // every boot — a no-op on clean DBs.
         deduplicateByRawBody()
+        removeRetiredTransactionShapes()
         fusePlaceholderAccounts()
 
         // Insert only categories whose names aren't already present — avoids re-introducing
@@ -98,6 +99,19 @@ class Seeder(private val db: SalliDatabase) {
      * and inserted afresh on every pull-to-refresh. Keeps the lowest-id row per group and
      * drops the rest.
      */
+    /**
+     * Deletes rows an earlier build booked from SMS that are not transactions on the user's own
+     * account, then drops any placeholder account left empty. Currently one shape: HNB's
+     * "You received LKR X from NAME", a notice HNB sends to the *payee*, which invented an HNB
+     * account for people who bank elsewhere and double-counted the real credit. Targeted by
+     * sender and exact body prefix on purpose; a generic re-parse-and-delete pass could erase
+     * real history if a template ever regressed.
+     */
+    private suspend fun removeRetiredTransactionShapes() {
+        db.transactions().deleteSmsRowsByBodyPrefix(sender = "HNB", bodyPrefix = "You received %")
+        db.accounts().deleteEmptyPlaceholders(PLACEHOLDER_SUFFIX)
+    }
+
     private suspend fun deduplicateByRawBody() {
         val all = db.transactions().allForRecategorise()
         val groups = all

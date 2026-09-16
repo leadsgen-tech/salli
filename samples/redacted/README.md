@@ -32,3 +32,11 @@ information ever enters the repo, while still exercising the parser correctly.
 1. Redact 5+ real SMS following the table above.
 2. Open an issue using the "Bank support request" template.
 3. A maintainer will review and add a `<Bank>Fixtures.kt` + `<Bank>Template.kt`.
+
+## Provisional templates
+
+Sampath, DFCC, NDB, NTB, Pan Asia and People's Bank *card* templates were written from
+publicly observable format evidence (sender IDs and the field wording those banks use), not
+from real samples. Their fixtures are **reconstructions** and are labelled `_reconstructed`
+in the Kotlin fixture files; nothing for them lives in this folder on purpose. If you bank
+with one of them, 3–5 redacted real messages will let us promote the template to verified.

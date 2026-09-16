@@ -99,12 +99,13 @@ fun TimelineScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 8.dp)
-                        .height(180.dp),
+                        .height(204.dp),
                 )
             }
             item("monthpills") {
                 MonthFilterRow(
                     activeLabel = state.range.label,
+                    baseMillis = state.cycleStartMillis,
                     selectedOffset = state.monthOffset,
                     onPickOffset = { viewModel.onPickMonthOffset(it) },
                     onPickCustom = { viewModel.onPickRange(it) },
@@ -149,6 +150,7 @@ fun TimelineScreen(
                         merchantRaw = row.merchantRaw,
                         timestamp = row.timestamp,
                         isDeclined = row.isDeclined,
+                        isOwnTransfer = row.isOwnTransfer,
                         modifier = Modifier.clickable { onTransactionClick(row.id) },
                     )
                 }
@@ -175,7 +177,7 @@ private fun TimelineTopBar(
         AnimatedVisibility(visible = !searchOpen, enter = fadeIn(), exit = fadeOut()) {
             Text(
                 text = "Timeline",
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -212,7 +214,7 @@ private fun TimelineTopBar(
         }
         Spacer(Modifier.weight(1f))
         if (!searchOpen) {
-            IconButton(onClick = onOpenSearch) {
+            IconButton(onClick = onOpenSearch, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = "Search",
@@ -253,13 +255,14 @@ private fun SummaryPill(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier.height(72.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shape = RoundedCornerShape(14.dp),
+        tonalElevation = 0.dp,
+        modifier = modifier.height(76.dp),
     ) {
         Column(
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Text(
                 text = label,
@@ -272,7 +275,7 @@ private fun SummaryPill(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = if (positive) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.onSurface,
+                else MaterialTheme.colorScheme.error,
             )
         }
     }
@@ -284,9 +287,8 @@ private fun SummaryPill(
 
 /**
  * One line per account's cumulative expense over the selected range. Lines animate on
- * composition via a spring-driven progress that grows from 0 → 1, so the chart reads
- * as "the month drawing itself". Each line's colour cycles through the semantic palette
- * (primary / tertiary / error) matching the account chips on Home.
+ * composition. Each point is the real cumulative daily value; the path deliberately avoids
+ * smoothing that could visually overstate or understate spending between points.
  */
 @Composable
 private fun MultiAccountChart(
@@ -302,6 +304,11 @@ private fun MultiAccountChart(
         MaterialTheme.colorScheme.error,
         MaterialTheme.colorScheme.onSurface,
     )
+    // Filters remove entries from [series], so indexing that filtered list would shift colours
+    // and make the interactive legend lie. Account order is the stable source for both.
+    val colorByAccountId = accountsInView.mapIndexed { index, account ->
+        account.id to colors[index % colors.size]
+    }.toMap()
     val guide = MaterialTheme.colorScheme.outlineVariant
     // Re-draw from 0 every time the series identity changes (month switched, accounts
     // updated, etc.). `animateFloatAsState` on a fixed target of 1f won't re-animate once
@@ -319,10 +326,23 @@ private fun MultiAccountChart(
         )
     }
     val progress = progressAnim.value
-    Column(modifier = modifier) {
-        androidx.compose.foundation.Canvas(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        ) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 0.dp,
+        modifier = modifier,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = "Cumulative spending",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(6.dp))
+            androidx.compose.foundation.Canvas(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) {
             val padTop = 12f
             val padBottom = 18f
             val chartH = size.height - padTop - padBottom
@@ -342,82 +362,59 @@ private fun MultiAccountChart(
             val stepX = size.width / (days - 1).toFloat()
 
             series.forEachIndexed { idx, s ->
-                val raw = s.cumulative
-                if (raw.size < 2) return@forEachIndexed
-                // Two passes of a 5-point moving average — smooths the daily zig-zags out of
-                // the cumulative curve so the stroke reads as a continuous ribbon, not a
-                // staircase, while still respecting the real endpoint total.
-                val pass1 = FloatArray(raw.size) { i ->
-                    val from = (i - 2).coerceAtLeast(0)
-                    val to = (i + 2).coerceAtMost(raw.size - 1)
-                    var sum = 0f
-                    for (j in from..to) sum += raw[j]
-                    sum / (to - from + 1)
-                }
-                val points = FloatArray(raw.size) { i ->
-                    val from = (i - 2).coerceAtLeast(0)
-                    val to = (i + 2).coerceAtMost(raw.size - 1)
-                    var sum = 0f
-                    for (j in from..to) sum += pass1[j]
-                    sum / (to - from + 1)
-                }
+                val points = s.cumulative
+                if (points.size < 2) return@forEachIndexed
+                val lineColor = colorByAccountId[s.accountId] ?: colors[idx % colors.size]
                 val drawUpTo = (points.size * progress).toInt().coerceIn(1, points.size - 1)
                 val path = androidx.compose.ui.graphics.Path().apply {
                     fun y(i: Int): Float = padTop + chartH - (points[i] / globalMax) * chartH
                     moveTo(0f, y(0))
-                    val tension = 0.42f                 // more swoop than the previous 0.3
                     for (i in 0 until drawUpTo) {
-                        val iPrev = (i - 1).coerceAtLeast(0)
                         val iNext = i + 1
-                        val iNext2 = (i + 2).coerceAtMost(points.size - 1)
-                        val x1 = stepX * i
                         val x2 = stepX * iNext
-                        val c1x = x1 + (x2 - stepX * iPrev) * tension
-                        val c1y = y(i) + (y(iNext) - y(iPrev)) * tension
-                        val c2x = x2 - (stepX * iNext2 - x1) * tension
-                        val c2y = y(iNext) - (y(iNext2) - y(i)) * tension
-                        cubicTo(c1x, c1y, c2x, c2y, x2, y(iNext))
+                        lineTo(x2, y(iNext))
                     }
                 }
                 drawPath(
                     path = path,
-                    color = colors[idx % colors.size],
+                    color = lineColor,
                     style = androidx.compose.ui.graphics.drawscope.Stroke(
                         width = 7f,
                         cap = androidx.compose.ui.graphics.StrokeCap.Round,
                         join = androidx.compose.ui.graphics.StrokeJoin.Round,
                     ),
                 )
-                // Head dot sits on the last drawn smoothed point.
+                // Head dot sits on the last real point drawn.
                 val headIdx = drawUpTo.coerceAtMost(points.size - 1)
                 val hx = stepX * headIdx
                 val hy = padTop + chartH - (points[headIdx] / globalMax) * chartH
                 drawCircle(
-                    color = colors[idx % colors.size],
+                    color = lineColor,
                     radius = 6f,
                     center = androidx.compose.ui.geometry.Offset(hx, hy),
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
         // Legend doubles as an account filter. Styled as Material FilterChips with visible
         // borders + checkmark on selected so the interaction is discoverable — a plain
         // coloured-dot row read as a passive legend, which it isn't.
-        val scrollState = rememberScrollState()
-        Row(
+            val scrollState = rememberScrollState()
+            Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(scrollState),
-        ) {
+            ) {
             Text(
                 text = "Accounts",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            accountsInView.forEachIndexed { idx, account ->
+            accountsInView.forEach { account ->
                 val visible = account.id !in hiddenAccountIds
+                val accountColor = colorByAccountId.getValue(account.id)
                 androidx.compose.material3.FilterChip(
                     selected = visible,
                     onClick = { onToggleAccount(account.id) },
@@ -434,12 +431,13 @@ private fun MultiAccountChart(
                                 .size(10.dp)
                                 .clip(androidx.compose.foundation.shape.CircleShape)
                                 .background(
-                                    if (visible) colors[idx % colors.size]
-                                    else colors[idx % colors.size].copy(alpha = 0.3f),
+                                    if (visible) accountColor
+                                    else accountColor.copy(alpha = 0.3f),
                                 ),
                         )
                     },
                 )
+            }
             }
         }
     }
@@ -454,6 +452,7 @@ private fun MultiAccountChart(
 @Composable
 private fun MonthFilterRow(
     activeLabel: String,
+    baseMillis: Long,
     selectedOffset: Int?,
     onPickOffset: (Int) -> Unit,
     onPickCustom: (lk.salli.domain.DateRange) -> Unit,
@@ -474,16 +473,16 @@ private fun MonthFilterRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .weight(1f)
-                    .height(32.dp)
+                    .height(48.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.inverseSurface)
+                    .background(MaterialTheme.colorScheme.primary)
                     .clickable { showPicker = true }
                     .padding(horizontal = 12.dp),
             ) {
                 Text(
                     text = "Custom · $activeLabel",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                 )
@@ -494,13 +493,14 @@ private fun MonthFilterRow(
                     Icon(
                         imageVector = Icons.Outlined.Close,
                         contentDescription = "Reset to current month",
-                        tint = MaterialTheme.colorScheme.inverseOnSurface,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(16.dp),
                     )
                 }
             }
         } else {
             MonthOffsetPills(
+                baseMillis = baseMillis,
                 selectedOffset = selectedOffset,
                 onPick = onPickOffset,
                 modifier = Modifier.weight(1f),
@@ -511,7 +511,7 @@ private fun MonthFilterRow(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(32.dp)
+                .size(48.dp)
                 .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .clickable { showPicker = true },
@@ -552,6 +552,7 @@ private fun MonthFilterRow(
 
 @Composable
 private fun MonthOffsetPills(
+    baseMillis: Long,
     selectedOffset: Int,
     onPick: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -560,22 +561,25 @@ private fun MonthOffsetPills(
     val offsets = listOf(-3, -2, -1, 0, 1, 2)
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier,
+        modifier = modifier.horizontalScroll(rememberScrollState()),
     ) {
         offsets.forEach { off ->
+            // Pills are named after the month each cycle *starts* in, so with a 25th start
+            // the pill for the current cycle reads "Aug" in mid-September.
             val cal = java.util.Calendar.getInstance()
+            if (baseMillis > 0L) cal.timeInMillis = baseMillis
             cal.add(java.util.Calendar.MONTH, off)
             val label = fmt.format(cal.time)
             val isSelected = off == selectedOffset
             val isFuture = off > 0
             val bg by androidx.compose.animation.animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.inverseSurface
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primary
                 else androidx.compose.ui.graphics.Color.Transparent,
                 label = "pill-bg-$off",
             )
             val fg by androidx.compose.animation.animateColorAsState(
                 targetValue = when {
-                    isSelected -> MaterialTheme.colorScheme.inverseOnSurface
+                    isSelected -> MaterialTheme.colorScheme.onPrimary
                     isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -584,8 +588,8 @@ private fun MonthOffsetPills(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .weight(1f)
-                    .height(32.dp)
+                    .width(48.dp)
+                    .height(48.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .background(bg)
                     .clickable(enabled = !isFuture) { onPick(off) },

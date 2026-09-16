@@ -11,12 +11,11 @@ import androidx.compose.ui.unit.sp
 import lk.salli.design.R
 
 /**
- * Typography tuned to the Revolut-inspired brief.
+ * Salli's type system pairs Space Grotesk for financial hierarchy with Inter for dense,
+ * readable supporting information.
  *
- * Display / headline styles use **Space Grotesk** (our free substitute for Aeonik Pro — the
- * closest open-source geometric grotesque) with weight 500 and aggressive negative tracking.
- * Body / label styles use **Inter** with weight 400 / 500 / 600 and positive tracking for
- * airy reading. Every style opts into tabular numerals so amount columns align.
+ * Display styles are deliberately bold while screen titles remain compact. Body and label
+ * styles use restrained tracking. Every style opts into tabular numerals so amounts align.
  */
 
 private val SpaceGrotesk = FontFamily(
@@ -43,7 +42,7 @@ private fun display(
     sizeSp: Float,
     lineHeightSp: Float = sizeSp,
     letterSpacingEm: Float,
-    weight: FontWeight = FontWeight.Medium,
+    weight: FontWeight = FontWeight.SemiBold,
 ): TextStyle = TextStyle(
     fontFamily = SpaceGrotesk,
     fontWeight = weight,
@@ -69,9 +68,8 @@ private fun body(
 )
 
 internal val SalliTypography = Typography(
-    // Billboard hero. -0.022em on 57sp ≈ Revolut's -2.72px/136px proportion.
-    displayLarge = display(sizeSp = 57f, lineHeightSp = 60f, letterSpacingEm = -0.022f),
-    displayMedium = display(sizeSp = 45f, lineHeightSp = 48f, letterSpacingEm = -0.020f),
+    displayLarge = display(sizeSp = 57f, lineHeightSp = 60f, letterSpacingEm = -0.022f, weight = FontWeight.Bold),
+    displayMedium = display(sizeSp = 45f, lineHeightSp = 48f, letterSpacingEm = -0.020f, weight = FontWeight.Bold),
     displaySmall = display(sizeSp = 36f, lineHeightSp = 40f, letterSpacingEm = -0.018f),
 
     headlineLarge = display(sizeSp = 32f, lineHeightSp = 38f, letterSpacingEm = -0.016f),
@@ -82,7 +80,7 @@ internal val SalliTypography = Typography(
     titleMedium = display(sizeSp = 18f, lineHeightSp = 24f, letterSpacingEm = -0.005f),
     titleSmall = display(sizeSp = 15f, lineHeightSp = 20f, letterSpacingEm = 0f),
 
-    // Inter + positive tracking — Revolut's +0.16–0.24px scaled to em.
+    // Inter with enough tracking to keep compact labels legible.
     bodyLarge = body(sizeSp = 16f, lineHeightSp = 24f, letterSpacingEm = 0.015f),
     bodyMedium = body(sizeSp = 14f, lineHeightSp = 20f, letterSpacingEm = 0.012f),
     bodySmall = body(sizeSp = 12f, lineHeightSp = 16f, letterSpacingEm = 0.015f),

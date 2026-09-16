@@ -1,5 +1,17 @@
 package lk.salli.app.features.settings
 
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.ui.draw.alpha
+import lk.salli.app.security.findFragmentActivity
+import lk.salli.data.prefs.AppLockSettings
+import lk.salli.domain.security.AppLockPolicy
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Speed
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -24,15 +36,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.LocalGasStation
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Sync
@@ -48,10 +68,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,10 +88,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.app.BuildConfig
-import lk.salli.app.FeatureFlags
-import lk.salli.data.ai.LocalModel
-import lk.salli.data.ai.ModelStatus
-import lk.salli.domain.ParseMode
 
 // Community / repo URLs. Single source of truth so a future fork-and-rename only edits here.
 private const val GITHUB_REPO_URL = "https://github.com/leadsgen-tech/salli"
@@ -90,18 +104,31 @@ private fun openUrl(context: android.content.Context, url: String) {
 @Composable
 fun SettingsScreen(
     onOpenUnknownSms: () -> Unit = {},
+    onOpenBills: () -> Unit = {},
+    onOpenFuelPass: () -> Unit = {},
+    onOpenRecurring: () -> Unit = {},
+    onOpenGoals: () -> Unit = {},
+    onOpenSplit: () -> Unit = {},
+    onReplayIntro: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val period by viewModel.period.collectAsStateWithLifecycle()
+    val summaries by viewModel.summaries.collectAsStateWithLifecycle()
+    val spendingLimit by viewModel.spendingLimit.collectAsStateWithLifecycle()
+    val trackers by viewModel.trackers.collectAsStateWithLifecycle()
+    var editingLimit by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     var confirmingDelete by remember { mutableStateOf(false) }
-    var confirmingDeleteModel by remember { mutableStateOf(false) }
 
-    val pickFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let { viewModel.importModelFromUri(it) } }
+    // Restore picks any file the user can reach; JSON is not always tagged as such by pickers,
+    // so we accept broadly and validate the contents ourselves.
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { viewModel.inspectBackup(it) }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -111,11 +138,22 @@ fun SettingsScreen(
                         android.content.Intent.createChooser(event.intent, "Share export"),
                     )
                 }
+                is SettingsEvent.ShareFile -> {
+                    context.startActivity(android.content.Intent.createChooser(event.intent, event.title))
+                }
                 is SettingsEvent.Message -> {
                     android.widget.Toast.makeText(context, event.text, android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    if (editingLimit) {
+        SpendingLimitDialog(
+            currentMinor = spendingLimit,
+            onDismiss = { editingLimit = false },
+            onSave = { viewModel.setSpendingLimit(it); editingLimit = false },
+        )
     }
 
     LazyColumn(
@@ -142,31 +180,141 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(8.dp)) }
 
-        if (FeatureFlags.AI_ENABLED) {
-            item { SectionLabel("PARSE MODE") }
+        item { SectionLabel("ACCOUNTS") }
+        if (accounts.isEmpty()) {
             item {
-                ParseModeCard(
-                    current = state.parseMode,
-                    modelStatus = state.modelStatus,
-                    importing = state.importingModel,
-                    onPickStandard = { viewModel.setParseMode(ParseMode.STANDARD) },
-                    onPickAi = { viewModel.setParseMode(ParseMode.AI) },
-                    onDownload = { viewModel.downloadModel() },
-                    onCancel = { viewModel.cancelDownload() },
-                    onDeleteModel = { confirmingDeleteModel = true },
-                    onPickFile = { pickFileLauncher.launch(arrayOf("*/*")) },
-                    onTestAi = { viewModel.testAi() },
+                Text(
+                    text = "Accounts appear here once a bank SMS has been read.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
-        } else {
-            // AI mode is parked for v1 per CLAUDE.md ("No LLM in v1"). We tease it as a
-            // coming-soon feature so users know it's on the roadmap, but nothing's wired up
-            // behind it — the code is retained and re-enables cleanly once we flip the flag.
-            item { SectionLabel("WHAT'S NEXT") }
-            item { AiComingSoonTile() }
+        }
+        items(accounts, key = { "acct-${it.id}" }) { account ->
+            SwitchTile(
+                icon = Icons.Outlined.AccountBalance,
+                title = account.displayName,
+                subtitle = if (account.isHidden) "Hidden from all screens and totals"
+                else "Shown everywhere",
+                checked = !account.isHidden,
+                onToggle = { shown -> viewModel.setAccountHidden(account.id, hidden = !shown) },
+            )
         }
 
         item { Spacer(Modifier.height(8.dp)) }
+
+        item { SectionLabel("SPENDING PERIOD") }
+        item {
+            val cycle = remember(period.monthStartDay) {
+                lk.salli.domain.DateRange.cycleFor(System.currentTimeMillis(), period.monthStartDay)
+            }
+            StepperTile(
+                icon = Icons.Outlined.DateRange,
+                title = "Month starts on day ${period.monthStartDay}",
+                subtitle = if (period.monthStartDay == 1) "Calendar month · ${cycle.label}"
+                else "Current period: ${cycle.label}",
+                value = "${period.monthStartDay}",
+                onMinus = { viewModel.setMonthStartDay(period.monthStartDay - 1) },
+                onPlus = { viewModel.setMonthStartDay(period.monthStartDay + 1) },
+                minusEnabled = period.monthStartDay > 1,
+                plusEnabled = period.monthStartDay < 28,
+            )
+        }
+        item {
+            WeekStartTile(selected = period.weekStartDay, onSelect = { viewModel.setWeekStartDay(it) })
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Speed,
+                title = "Monthly spending limit",
+                subtitle = spendingLimit?.let { "${lk.salli.design.format.MoneyFormat.format(lk.salli.domain.Money(it, "LKR"))} · safe-to-spend uses this" }
+                    ?: "Automatic · the median of your last three periods",
+                onClick = { editingLimit = true },
+            )
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+
+        item { SectionLabel("SUMMARIES") }
+        item {
+            SwitchTile(
+                icon = Icons.Outlined.Notifications,
+                title = "Daily summary",
+                subtitle = "What you spent today, every evening",
+                checked = summaries.daily,
+                onToggle = { viewModel.setSummaryDaily(it) },
+            )
+        }
+        item {
+            SwitchTile(
+                icon = Icons.Outlined.Notifications,
+                title = "Weekly summary",
+                subtitle = "Last week's spending, on your week-start day",
+                checked = summaries.weekly,
+                onToggle = { viewModel.setSummaryWeekly(it) },
+            )
+        }
+        item {
+            SwitchTile(
+                icon = Icons.Outlined.Notifications,
+                title = "Monthly summary",
+                subtitle = "Last period's spending, on your month-start day",
+                checked = summaries.monthly,
+                onToggle = { viewModel.setSummaryMonthly(it) },
+            )
+        }
+        item {
+            StepperTile(
+                icon = Icons.Outlined.Schedule,
+                title = "Deliver at ${"%02d:00".format(summaries.hour)}",
+                subtitle = "Summaries post once the hour has passed",
+                value = "${summaries.hour}",
+                onMinus = { viewModel.setSummaryHour(summaries.hour - 1) },
+                onPlus = { viewModel.setSummaryHour(summaries.hour + 1) },
+                minusEnabled = summaries.hour > 0,
+                plusEnabled = summaries.hour < 23,
+            )
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+
+        item { SectionLabel("WIDGET") }
+        item {
+            val hideAmounts by viewModel.widgetHideAmounts.collectAsStateWithLifecycle()
+            SwitchTile(
+                icon = Icons.Outlined.Widgets,
+                title = "Hide amounts on the widget",
+                subtitle = if (hideAmounts) "The home-screen widget shows Rs ••••"
+                else "The home-screen widget shows your numbers",
+                checked = hideAmounts,
+                onToggle = { viewModel.setWidgetHideAmounts(it) },
+            )
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+
+        item { SectionLabel("SECURITY") }
+        item {
+            val lock by viewModel.appLockSettings.collectAsStateWithLifecycle()
+            SecurityTiles(
+                lock = lock,
+                isDeviceSecure = viewModel::isDeviceSecure,
+                onToggleLock = { enable ->
+                    val activity = context.findFragmentActivity()
+                    if (activity != null) viewModel.requestAppLock(activity, enable)
+                },
+                onLockAfter = { seconds ->
+                    context.findFragmentActivity()?.let { viewModel.requestAppLockAfter(it, seconds) }
+                },
+                onHideInRecents = { hide ->
+                    context.findFragmentActivity()?.let { viewModel.requestHideInRecents(it, hide) }
+                },
+            )
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+
         item { SectionLabel("PERMISSIONS") }
         item { PermissionsTiles(onSmsGranted = { viewModel.ensureHistoricalImport() }) }
 
@@ -182,6 +330,68 @@ fun SettingsScreen(
                     { UnknownBadge(state.unknownSmsCount) }
                 } else null,
                 onClick = onOpenUnknownSms,
+            )
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+        item { SectionLabel("TRACKERS") }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.ReceiptLong,
+                title = "Bills",
+                subtitle = when (state.openBillCount) {
+                    0 -> "SLT, Dialog, CEB and water bills from SMS"
+                    1 -> "1 bill to pay"
+                    else -> "${state.openBillCount} bills to pay"
+                },
+                trailing = if (state.openBillCount > 0) {
+                    { UnknownBadge(state.openBillCount) }
+                } else null,
+                onClick = onOpenBills,
+            )
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.LocalGasStation,
+                title = "Fuel Pass",
+                subtitle = if (state.fuelVehicleCount == 0) "Weekly quota per vehicle, from 1919 SMS"
+                else "${state.fuelVehicleCount} vehicle${if (state.fuelVehicleCount == 1) "" else "s"} tracked",
+                onClick = onOpenFuelPass,
+            )
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Autorenew,
+                title = "Recurring & subscriptions",
+                subtitle = when {
+                    trackers.recurring == 0 -> "Repeating payments and failing card subscriptions"
+                    trackers.needsAttention > 0 -> "${trackers.recurring} found · ${trackers.needsAttention} need a look"
+                    else -> "${trackers.recurring} found"
+                },
+                trailing = if (trackers.needsAttention > 0) {
+                    { UnknownBadge(trackers.needsAttention) }
+                } else null,
+                onClick = onOpenRecurring,
+            )
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Flag,
+                title = "Goals",
+                subtitle = when (trackers.goals) {
+                    0 -> "Save toward a target, a period at a time"
+                    1 -> "1 goal"
+                    else -> "${trackers.goals} goals"
+                },
+                onClick = onOpenGoals,
+            )
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Groups,
+                title = "Shared expenses",
+                subtitle = "Split bills with people and see who owes whom",
+                onClick = onOpenSplit,
             )
         }
 
@@ -213,6 +423,31 @@ fun SettingsScreen(
         }
         item {
             SettingsTile(
+                icon = Icons.Outlined.Save,
+                title = "Back up (JSON)",
+                subtitle = if (state.backingUp) "Preparing backup…"
+                else "Everything: transactions, accounts, bills, budgets, settings",
+                trailing = if (state.backingUp) {
+                    { CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) }
+                } else null,
+                onClick = { if (!state.backingUp) viewModel.backupJson() },
+            )
+        }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.Restore,
+                title = "Restore from backup",
+                subtitle = if (state.restoring) "Restoring…" else "Replaces this device's data with a backup file",
+                trailing = if (state.restoring) {
+                    { CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) }
+                } else null,
+                onClick = {
+                    if (!state.restoring) restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+                },
+            )
+        }
+        item {
+            SettingsTile(
                 icon = Icons.Outlined.DeleteForever,
                 title = "Delete all data",
                 subtitle = "Clears transactions, accounts, merchants, categories",
@@ -239,7 +474,39 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(16.dp)) }
         item { SectionLabel("ABOUT") }
+        item {
+            SettingsTile(
+                icon = Icons.Outlined.PlayCircleOutline,
+                title = "Replay the introduction",
+                subtitle = "Try the Salli demo again",
+                onClick = onReplayIntro,
+            )
+        }
         item { AboutCard() }
+    }
+
+    state.pendingRestore?.let { pending ->
+        val exported = remember(pending.exportedAt) {
+            java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(pending.exportedAt))
+        }
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelRestore() },
+            title = { Text("Restore this backup?") },
+            text = {
+                Text(
+                    "This replaces everything on this device with the backup from $exported " +
+                        "(${pending.transactions} transactions, ${pending.rows} rows in total). This cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmRestore() }) {
+                    Text("Replace", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelRestore() }) { Text("Cancel") }
+            },
+        )
     }
 
     if (confirmingDelete) {
@@ -262,259 +529,6 @@ fun SettingsScreen(
             },
         )
     }
-
-    if (state.testingAi || state.aiTestResult != null) {
-        AiTestDialog(
-            testing = state.testingAi,
-            result = state.aiTestResult,
-            onDismiss = { if (!state.testingAi) viewModel.dismissAiTest() },
-        )
-    }
-
-    if (confirmingDeleteModel) {
-        AlertDialog(
-            onDismissRequest = { confirmingDeleteModel = false },
-            title = { Text("Delete AI model?") },
-            text = { Text("Reclaims ~${LocalModel.SIZE_BYTES / (1024 * 1024)} MB. You can re-download it later. Parse mode drops back to Standard.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmingDeleteModel = false
-                    viewModel.deleteModel()
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingDeleteModel = false }) { Text("Cancel") }
-            },
-        )
-    }
-}
-
-@Composable
-private fun ParseModeCard(
-    current: ParseMode,
-    modelStatus: ModelStatus,
-    importing: Boolean,
-    onPickStandard: () -> Unit,
-    onPickAi: () -> Unit,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onDeleteModel: () -> Unit,
-    onPickFile: () -> Unit,
-    onTestAi: () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            ModeRow(
-                title = "Standard",
-                subtitle = "Regex templates · instant · offline",
-                selected = current == ParseMode.STANDARD,
-                onClick = onPickStandard,
-            )
-            ModeRow(
-                title = "AI",
-                subtitle = aiSubtitle(modelStatus, importing),
-                selected = current == ParseMode.AI,
-                onClick = onPickAi,
-                leading = Icons.Outlined.AutoAwesome,
-                enabled = modelStatus is ModelStatus.Installed,
-            )
-            AiModelControls(
-                status = modelStatus,
-                importing = importing,
-                onDownload = onDownload,
-                onCancel = onCancel,
-                onDelete = onDeleteModel,
-                onPickFile = onPickFile,
-                onTestAi = onTestAi,
-            )
-        }
-    }
-}
-
-private fun aiSubtitle(status: ModelStatus, importing: Boolean): String {
-    val mb = LocalModel.SIZE_BYTES / (1024 * 1024)
-    return when {
-        importing -> "Copying model…"
-        status is ModelStatus.NotDownloaded -> "${LocalModel.DISPLAY_NAME} · $mb MB"
-        status is ModelStatus.Queued -> "Queued…"
-        status is ModelStatus.Downloading -> {
-            val pct = if (status.totalBytes > 0) {
-                (status.bytesDownloaded * 100 / status.totalBytes).coerceAtMost(100)
-            } else 0
-            "Downloading · $pct%"
-        }
-        status is ModelStatus.Installed -> "${LocalModel.DISPLAY_NAME} · ready"
-        status is ModelStatus.Failed -> "Download failed — tap to retry"
-        else -> ""
-    }
-}
-
-@Composable
-private fun ModeRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    leading: ImageVector? = null,
-    enabled: Boolean = true,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = if (enabled) onClick else null,
-        )
-        Spacer(Modifier.size(6.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (leading != null) {
-                    Icon(
-                        imageVector = leading,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.size(6.dp))
-                }
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AiModelControls(
-    status: ModelStatus,
-    importing: Boolean,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onDelete: () -> Unit,
-    onPickFile: () -> Unit,
-    onTestAi: () -> Unit,
-) {
-    if (importing) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            CircularProgressIndicator(
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(10.dp))
-            Text(
-                "Copying file to app storage…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        return
-    }
-    when (status) {
-        is ModelStatus.NotDownloaded, is ModelStatus.Failed -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-            ) {
-                if (status is ModelStatus.Failed) {
-                    Text(
-                        text = "Download failed: ${status.reason}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    TextButton(onClick = onPickFile) { Text("Select file") }
-                    Spacer(Modifier.size(4.dp))
-                    TextButton(onClick = onDownload) {
-                        Text(
-                            if (status is ModelStatus.Failed) "Retry" else "Download",
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        }
-        is ModelStatus.Downloading, is ModelStatus.Queued -> {
-            val (done, total) = when (status) {
-                is ModelStatus.Downloading -> status.bytesDownloaded to status.totalBytes
-                is ModelStatus.Queued -> status.bytesDownloaded to status.totalBytes
-                else -> 0L to 1L
-            }
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                LinearProgressIndicator(
-                    progress = { if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "${formatMb(done)} / ${formatMb(total)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onCancel) { Text("Cancel") }
-                }
-            }
-        }
-        is ModelStatus.Installed -> {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-            ) {
-                TextButton(onClick = onDelete) {
-                    Text(
-                        "Delete (${formatMb(status.sizeBytes)})",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onTestAi) {
-                    Text("Test AI", color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-    }
-}
-
-private fun formatMb(bytes: Long): String {
-    val mb = bytes.toDouble() / (1024 * 1024)
-    return if (mb < 10) "%.1f MB".format(mb) else "%.0f MB".format(mb)
 }
 
 @Composable
@@ -694,6 +708,230 @@ private fun openAppSettings(context: android.content.Context) {
 }
 
 @Composable
+private fun StepperTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    value: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    minusEnabled: Boolean = true,
+    plusEnabled: Boolean = true,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.size(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onMinus, enabled = minusEnabled) { Text("−") }
+            Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            TextButton(onClick = onPlus, enabled = plusEnabled) { Text("+") }
+        }
+    }
+}
+
+/** Mon…Sun chips; [selected] and the callback use ISO numbering (1 = Monday … 7 = Sunday). */
+@Composable
+private fun WeekStartTile(selected: Int, onSelect: (Int) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(text = "Week starts on", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            // Seven equal-width pills: FilterChips are too wide for a phone row, so Saturday
+            // wrapped and Sunday fell off the edge.
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                (1..7).forEach { iso ->
+                    val label = java.time.DayOfWeek.of(iso).getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)
+                    val on = iso == selected
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                            .clip(CircleShape)
+                            .background(if (on) MaterialTheme.colorScheme.inverseSurface else MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .clickable { onSelect(iso) },
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (on) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * App lock, its "Lock after" delay and FLAG_SECURE. The lock switch needs a screen lock on the
+ * phone (re-checked on every resume, so setting one in system settings and coming back works) and
+ * never flips by itself: the view model shows the system prompt and only a success changes it.
+ */
+@Composable
+private fun SecurityTiles(
+    lock: AppLockSettings,
+    isDeviceSecure: () -> Boolean,
+    onToggleLock: (Boolean) -> Unit,
+    onLockAfter: (Int) -> Unit,
+    onHideInRecents: (Boolean) -> Unit,
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumeTick by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val secure = remember(resumeTick) { isDeviceSecure() }
+
+    Column {
+        SwitchTile(
+            icon = Icons.Outlined.Lock,
+            title = "App lock",
+            subtitle = when {
+                !secure -> "Set a screen lock on this phone first to use app lock"
+                lock.enabled -> "On · unlock with your fingerprint or phone PIN"
+                else -> "Ask for your fingerprint or phone PIN to open Salli"
+            },
+            checked = lock.enabled && secure,
+            enabled = secure,
+            onToggle = onToggleLock,
+        )
+        LockAfterTile(
+            selected = lock.lockAfterSeconds,
+            enabled = lock.enabled && secure,
+            onSelect = onLockAfter,
+        )
+        SwitchTile(
+            icon = Icons.Outlined.VisibilityOff,
+            title = "Hide Salli in recent apps",
+            subtitle = "Blanks Salli in the recent apps view. Also blocks screenshots and screen recording.",
+            checked = lock.hideInRecents,
+            onToggle = onHideInRecents,
+        )
+    }
+}
+
+/** Immediately / 1 min / 5 min pills, styled like the week-start picker. */
+@Composable
+private fun LockAfterTile(selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .alpha(if (enabled) 1f else 0.5f),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Outlined.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.size(14.dp))
+                Column {
+                    Text(text = "Lock after", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(text = "How long Salli can sit in the background before it locks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                AppLockPolicy.lockAfterChoicesSeconds.forEach { seconds ->
+                    val label = when (seconds) {
+                        AppLockPolicy.IMMEDIATELY_SECONDS -> "Immediately"
+                        AppLockPolicy.ONE_MINUTE_SECONDS -> "1 min"
+                        else -> "5 min"
+                    }
+                    val on = seconds == selected
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                            .clip(CircleShape)
+                            .background(if (on) MaterialTheme.colorScheme.inverseSurface else MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .clickable(enabled = enabled) { onSelect(seconds) },
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (on) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwitchTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit,
+    enabled: Boolean = true,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .clickable(enabled = enabled) { onToggle(!checked) },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.size(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.size(8.dp))
+            Switch(checked = checked, onCheckedChange = onToggle, enabled = enabled)
+        }
+    }
+}
+
+@Composable
 private fun SettingsTile(
     icon: ImageVector,
     title: String,
@@ -791,115 +1029,6 @@ private fun UserNameTile(name: String, onChange: (String) -> Unit) {
             )
         }
     }
-}
-
-@Composable
-private fun AiComingSoonTile() {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.AutoAwesome,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.size(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "AI mode",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = "Ask Salli about your money, on-device. Coming in a future update.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Surface(
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(
-                    text = "Soon",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiTestDialog(
-    testing: Boolean,
-    result: AiTestResult?,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (testing) "Running…" else "AI output") },
-        text = {
-            Column {
-                if (testing) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.size(10.dp))
-                        Text(
-                            "First run loads the 547 MB model — this takes ~5 s on a Pixel 6.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else if (result != null) {
-                    if (result.error != null) {
-                        Text(
-                            text = "Error",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = result.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else {
-                        Text(
-                            text = "load ${result.loadMillis} ms · infer ${result.inferMillis} ms",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = result.output.ifBlank { "(empty response)" },
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            ),
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss, enabled = !testing) { Text("Close") }
-        },
-    )
 }
 
 @Composable
@@ -1009,11 +1138,53 @@ private fun AboutCard() {
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Open source under Apache 2.0. Every parse runs on this device. " +
-                    "The only network call is the optional one-time AI model download.",
+                    "The app has no network permission, so nothing can leave your phone.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp,
             )
         }
     }
+}
+
+/** Empty field means "automatic". Amounts are whole rupees or rupees and cents. */
+@Composable
+private fun SpendingLimitDialog(currentMinor: Long?, onDismiss: () -> Unit, onSave: (Long?) -> Unit) {
+    var text by remember {
+        mutableStateOf(currentMinor?.let { if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(java.util.Locale.US, it / 100, it % 100) }.orEmpty())
+    }
+    val parsed = runCatching {
+        val cleaned = text.replace(",", "").trim()
+        if (cleaned.isEmpty()) null
+        else java.math.BigDecimal(cleaned).takeIf { it.signum() > 0 }
+            ?.movePointRight(2)?.setScale(0, java.math.RoundingMode.HALF_UP)?.longValueExact()
+    }
+    val valid = text.isBlank() || parsed.getOrNull() != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Monthly spending limit") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Leave empty to let Salli use the median of your last three complete periods.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Limit (Rs)") },
+                    singleLine = true,
+                    isError = !valid,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(parsed.getOrNull()) }, enabled = valid) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

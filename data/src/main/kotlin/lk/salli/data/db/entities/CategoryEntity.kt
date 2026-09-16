@@ -2,8 +2,10 @@ package lk.salli.data.db.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import kotlinx.serialization.Serializable
 import androidx.room.PrimaryKey
 
+@Serializable
 @Entity(tableName = "categories")
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true)
@@ -22,6 +24,7 @@ data class CategoryEntity(
     val isSystem: Boolean = true,
 )
 
+@Serializable
 @Entity(tableName = "sub_categories")
 data class SubCategoryEntity(
     @PrimaryKey(autoGenerate = true)

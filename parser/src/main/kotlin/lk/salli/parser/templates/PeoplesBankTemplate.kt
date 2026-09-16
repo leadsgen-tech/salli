@@ -67,6 +67,8 @@ object PeoplesBankTemplate : BankTemplate {
         Regex("""^Dear MR\b.*You have logged in""") to "people's pay login alert",
         Regex("""^Dear MR\b.*attempt to log in""") to "people's pay login failed",
         Regex("""^Hi\b.*successfully changed your login password""") to "password change",
+        Regex("""^Hi\b.*successfully changed your mobile device""") to "device change",
+        Regex("""^Important:""") to "tax declaration notice",
         Regex("""^Dear Customer, to avoid""") to "account limit notice",
         Regex("""^Beware""", RegexOption.IGNORE_CASE) to "security warning",
         // Sinhala-only security bulletins — no English equivalent in the same SMS.
@@ -182,6 +184,9 @@ object PeoplesBankTemplate : BankTemplate {
         // TypeCategorizer routes it to the Cash category instead of leaving it adrift
         // in Uncategorised.
         phrase.equals("Cash payment", ignoreCase = true) -> TransactionType.CDM
+        phrase.startsWith("Cash Depo", ignoreCase = true) -> TransactionType.CDM
+        // "eRem Payment" is an inward e-remittance credit; nearest bucket is a transfer.
+        phrase.startsWith("eRem", ignoreCase = true) -> TransactionType.ONLINE_TRANSFER
         else -> TransactionType.OTHER
     }
 }
