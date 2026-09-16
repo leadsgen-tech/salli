@@ -27,6 +27,8 @@ data class WidgetSummary(
     val safeToSpendTodayMinor: Long?,
     val safeToSpendCurrency: String,
     val hideAmounts: Boolean,
+    /** Makes the widget's period line actionable rather than an unexplained month label. */
+    val daysRemaining: Int = 0,
 ) {
     fun spentTodayText(format: (Money) -> String): String = amountText(spentTodayMinor, currency, format)
     fun periodSpentText(format: (Money) -> String): String = amountText(periodSpentMinor, currency, format)
@@ -103,6 +105,7 @@ class WidgetSummaryService(
             safeToSpendTodayMinor = inputs.safePerDayMinor,
             safeToSpendCurrency = inputs.planningCurrency,
             hideAmounts = inputs.hideAmounts,
+            daysRemaining = (((cycle.untilMillis - clock()).coerceAtLeast(0L) + DAY_MS - 1) / DAY_MS).toInt(),
         )
     }
 

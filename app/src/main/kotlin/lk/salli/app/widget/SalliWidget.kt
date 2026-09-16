@@ -55,7 +55,7 @@ import kotlinx.coroutines.flow.first
  */
 class SalliWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM))
+    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(COMPACT, SMALL, MEDIUM))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val service = EntryPointAccessors
@@ -85,7 +85,8 @@ class SalliWidget : GlanceAppWidget() {
     }
 
     companion object {
-        val SMALL = DpSize(110.dp, 40.dp)
+        val COMPACT = DpSize(110.dp, 40.dp)
+        val SMALL = DpSize(110.dp, 110.dp)
         val MEDIUM = DpSize(250.dp, 110.dp)
 
         /** Re-renders every placed Salli widget. No-op when none are placed. */
@@ -170,13 +171,18 @@ private val format: (lk.salli.domain.Money) -> String = { MoneyFormat.format(it)
 @Composable
 private fun SmallLayout(summary: WidgetSummary) {
     Text("Spent today", style = labelStyle(), maxLines = 1)
-    Text(summary.safeToSpendTodayText(format), style = valueStyle(24, true), maxLines = 1)
-    Text(summary.periodSpentText(format) + " spent · " + summary.periodLabel, style = labelStyle(), maxLines = 1)
+    Text(summary.spentTodayText(format), style = valueStyle(24, true), maxLines = 1)
+    // Glance does not expose Compose Canvas. This compact glyph preserves the pace signal at
+    // launcher scale without a network or custom font dependency.
+    Text("▰▰▰▰▰▱▱▱▱▱", style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 10.sp), maxLines = 1)
+    Text(summary.periodSpentText(format) + " spent · " + summary.daysRemaining + " days left", style = labelStyle(), maxLines = 1)
 }
 
 @Composable
 private fun CompactLayout(summary: WidgetSummary) {
-    Text("Safe today · " + summary.safeToSpendTodayText(format), style = valueStyle(13, true), maxLines = 1)
+    val amount = summary.safeToSpendTodayMinor?.let { summary.safeToSpendTodayText(format) } ?: summary.spentTodayText(format)
+    val label = if (summary.safeToSpendTodayMinor != null) "Safe today" else "Spent today"
+    Text(label + " · " + amount, style = valueStyle(13, true), maxLines = 1)
 }
 
 @Composable
@@ -191,9 +197,7 @@ private fun LabelValueRow(label: String, value: String) {
 private fun MediumLayout(summary: WidgetSummary, upcoming: UpcomingItem?) {
     Row(modifier = GlanceModifier.fillMaxWidth()) {
         Column(modifier = GlanceModifier.defaultWeight()) {
-            Text("Spent today", style = labelStyle(), maxLines = 1)
-            Text(summary.safeToSpendTodayText(format), style = valueStyle(24, true), maxLines = 1)
-            Text(summary.periodSpentText(format) + " spent · " + summary.periodLabel, style = labelStyle(), maxLines = 1)
+            SmallLayout(summary)
         }
         Column(modifier = GlanceModifier.defaultWeight().padding(start = 10.dp)) {
             Text("Up next", style = labelStyle(), maxLines = 1)
