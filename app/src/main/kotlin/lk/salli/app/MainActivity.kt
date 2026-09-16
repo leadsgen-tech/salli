@@ -3,6 +3,7 @@ package lk.salli.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.content.Intent
 import android.graphics.Color
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -11,6 +12,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +43,9 @@ import lk.salli.design.theme.SalliTheme
 // FragmentActivity (a ComponentActivity) because BiometricPrompt hosts itself in a fragment.
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+
+    private var widgetRouteRequest by mutableStateOf<String?>(null)
+    private var widgetRouteRequestId by mutableIntStateOf(0)
 
     @Inject lateinit var prefs: SalliPreferences
     @Inject lateinit var appLock: AppLockController
@@ -84,13 +91,25 @@ class MainActivity : FragmentActivity() {
                     val start = remember {
                         if (introduced == true) intent.getStringExtra(EXTRA_START_ROUTE) ?: Destination.HOME.route else Route.ONBOARDING
                     }
-                    SalliNavHost(startDestination = start, appLock = appLock)
+                    SalliNavHost(
+                        startDestination = start,
+                        appLock = appLock,
+                        routeRequest = widgetRouteRequest,
+                        routeRequestId = widgetRouteRequestId,
+                    )
                 }
             }
         }
     }
 
     companion object { const val EXTRA_START_ROUTE = "lk.salli.app.extra.START_ROUTE" }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        widgetRouteRequest = intent.getStringExtra(EXTRA_START_ROUTE)
+        widgetRouteRequestId++
+    }
 
     private fun applyWindowProtection(protect: Boolean) {
         if (protect) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)

@@ -239,6 +239,7 @@ private fun homeIntent(context: Context) = Intent(context, MainActivity::class.j
 }
 
 private fun planIntent(context: Context) = Intent(context, MainActivity::class.java).apply {
+    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     putExtra(MainActivity.EXTRA_START_ROUTE, "plan")
 }
 

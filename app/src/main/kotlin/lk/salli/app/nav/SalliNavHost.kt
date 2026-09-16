@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -56,6 +57,8 @@ private val planSubroutes = setOf(
 fun SalliNavHost(
     startDestination: String,
     appLock: AppLockController,
+    routeRequest: String? = null,
+    routeRequestId: Int = 0,
     navController: NavHostController = rememberNavController(),
 ) {
     // The gate disposes every amount-bearing surface, including dialog and bottom-sheet windows.
@@ -65,7 +68,7 @@ fun SalliNavHost(
     val stateHolder = rememberSaveableStateHolder()
     when (lockState) {
         AppLockController.State.UNLOCKED -> stateHolder.SaveableStateProvider(UNLOCKED_STATE_KEY) {
-            UnlockedSalliNavHost(startDestination, navController)
+            UnlockedSalliNavHost(startDestination, navController, routeRequest, routeRequestId)
         }
         AppLockController.State.LOCKED -> LockScreen(appLock)
         AppLockController.State.CHECKING ->
@@ -74,9 +77,23 @@ fun SalliNavHost(
 }
 
 @Composable
-private fun UnlockedSalliNavHost(startDestination: String, navController: NavHostController) {
+private fun UnlockedSalliNavHost(
+    startDestination: String,
+    navController: NavHostController,
+    routeRequest: String?,
+    routeRequestId: Int,
+) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    LaunchedEffect(routeRequestId) {
+        if (routeRequestId > 0 && routeRequest == Destination.PLAN.route && currentRoute != Destination.PLAN.route) {
+            navController.navigate(Destination.PLAN.route) {
+                launchSingleTop = true
+                popUpTo(Destination.HOME.route) { saveState = true }
+                restoreState = true
+            }
+        }
+    }
     val showBottomNav = currentRoute in navPatterns || currentRoute in planSubroutes
     val currentDest = Destination.entries.firstOrNull { it.pattern == currentRoute }
         ?: Destination.PLAN.takeIf { currentRoute in planSubroutes }
