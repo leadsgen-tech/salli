@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transaction_detail_loading">Loading…</string>
+    <string name="transaction_detail_missing">Transaction not found.</string>
+    <string name="transaction_detail_title_fallback">Transaction</string>
+    <string name="transaction_detail_category">Category</string>
+    <string name="transaction_detail_note">Note</string>
+    <string name="transaction_detail_note_placeholder">Add a note</string>
+    <string name="transaction_detail_save">Save</string>
+    <string name="transaction_detail_original_message">Original message</string>
+    <string name="transaction_detail_exclude">Exclude</string>
+    <string name="transaction_detail_include">Include</string>
+</resources>

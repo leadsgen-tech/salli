@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.SimpleDateFormat
@@ -51,6 +52,7 @@ import lk.salli.design.components.AmountText
 import lk.salli.design.format.MoneyFormat
 import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
+import lk.salli.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +89,8 @@ fun TransactionDetailSheet(
         if (tx == null) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
                 Text(
-                    text = if (state.loading) "Loading…" else "Transaction not found.",
+                    text = if (state.loading) stringResource(R.string.transaction_detail_loading)
+                    else stringResource(R.string.transaction_detail_missing),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -111,7 +114,7 @@ fun TransactionDetailSheet(
                 Text(
                     text = tx.note?.takeIf { it.isNotBlank() }
                         ?: tx.merchantRaw?.takeIf { it.isNotBlank() }
-                        ?: "Transaction",
+                        ?: stringResource(R.string.transaction_detail_title_fallback),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -283,6 +286,18 @@ fun TransactionDetailSheet(
                         )
                     }
                 }
+            }
+
+            TextButton(
+                onClick = { viewModel.setExcluded(!tx.isHidden); animatedDismiss() },
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (tx.isHidden) R.string.transaction_detail_include
+                        else R.string.transaction_detail_exclude,
+                    ),
+                )
             }
         }
     }

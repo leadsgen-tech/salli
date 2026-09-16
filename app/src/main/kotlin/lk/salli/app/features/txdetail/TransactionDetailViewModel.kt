@@ -86,6 +86,14 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 
+    fun setExcluded(excluded: Boolean) {
+        val txId = _state.value.transaction?.id ?: return
+        viewModelScope.launch {
+            db.transactions().setHidden(txId, excluded, System.currentTimeMillis())
+            refreshRow(txId) { it }
+        }
+    }
+
     /** Re-reads the row after a write, unless the sheet has moved on to another transaction. */
     private suspend fun refreshRow(txId: Long, also: (TxDetailState) -> TxDetailState) {
         val fresh = db.transactions().byId(txId) ?: return

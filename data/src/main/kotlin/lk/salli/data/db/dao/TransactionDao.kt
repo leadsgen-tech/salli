@@ -52,6 +52,10 @@ interface TransactionDao {
     @Query("UPDATE transactions SET note = :note, updated_at = :now WHERE id = :id")
     suspend fun setNote(id: Long, note: String?, now: Long)
 
+    /** Excluded rows stay in the database but leave Activity, totals and Insights. */
+    @Query("UPDATE transactions SET is_hidden = :hidden, updated_at = :now WHERE id = :id")
+    suspend fun setHidden(id: Long, hidden: Boolean, now: Long)
+
     /** Same sender and same SMS text, at any time. A bank never sends one body twice. */
     @Query("SELECT * FROM transactions WHERE sender_address = :sender AND (raw_body = :body OR raw_body = :trimmedBody) LIMIT 1")
     suspend fun findBySenderAndBody(sender: String, body: String, trimmedBody: String): TransactionEntity?

@@ -120,6 +120,24 @@ class SalliDatabaseTest {
         assertThat(recent).hasSize(2)
     }
 
+    @Test
+    fun `excluding a transaction keeps the row and records its visibility`() = runBlocking {
+        val accountId = db.accounts().insert(
+            AccountEntity(
+                senderAddress = "BOC", accountSuffix = "870", displayName = "BOC",
+                currency = Currency.LKR, accountTypeId = 0,
+            ),
+        )
+        val id = db.transactions().insert(tx(accountId, timestamp = 100L))
+
+        db.transactions().setHidden(id, hidden = true, now = 200L)
+
+        val excluded = db.transactions().byId(id)
+        assertThat(excluded).isNotNull()
+        assertThat(excluded!!.isHidden).isTrue()
+        assertThat(excluded.updatedAt).isEqualTo(200L)
+    }
+
     private fun tx(accountId: Long, timestamp: Long) = TransactionEntity(
         accountId = accountId,
         amountMinor = 100_000,

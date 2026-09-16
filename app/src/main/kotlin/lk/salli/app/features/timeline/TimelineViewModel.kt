@@ -57,6 +57,8 @@ data class TimelineUiState(
     val hiddenAccountIds: Set<Long> = emptySet(),
     /** Start of the cycle containing today; the month pills label offsets from this. */
     val cycleStartMillis: Long = 0L,
+    /** One absolute spending total per day in the selected period, for Activity's quiet bar row. */
+    val dailySpend: List<Long> = emptyList(),
 )
 
 data class AccountSummary(
@@ -210,6 +212,7 @@ class TimelineViewModel @Inject constructor(
             series = visibleSeries,
             accountsInView = accountsInView,
             hiddenAccountIds = hiddenAccountIds,
+            dailySpend = buildDailySpend(range, filtered, dominantCurrency),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -243,12 +246,7 @@ class TimelineViewModel @Inject constructor(
         _customRange.value = false
     }
 
-    fun toggleAccount(accountId: Long) {
-        viewModelScope.launch {
-            val current = db.accounts().byId(accountId) ?: return@launch
-            db.accounts().setHidden(accountId, !current.isHidden)
-        }
-    }
+    /** Account visibility is a Settings preference. Activity filters only change this view. */
 
     /**
      * Builds one cumulative-expense series per account inside [range]. Each series has
@@ -291,6 +289,24 @@ class TimelineViewModel @Inject constructor(
                 )
             }
             .sortedByDescending { it.cumulative.lastOrNull() ?: 0f }
+    }
+
+    private fun buildDailySpend(
+        range: DateRange,
+        txns: List<TransactionEntity>,
+        currency: String,
+    ): List<Long> {
+        val days = range.durationDays.coerceAtLeast(1)
+        val dayMs = 24L * 60 * 60 * 1000
+        return LongArray(days).also { totals ->
+            txns.filter {
+                !it.isDeclined && it.transferGroupId == null &&
+                    it.flowId == TransactionFlow.EXPENSE.id && it.amountCurrency == currency
+            }.forEach { tx ->
+                val index = ((tx.timestamp - range.fromMillis) / dayMs).toInt()
+                if (index in totals.indices) totals[index] += tx.amountMinor
+            }
+        }.toList()
     }
 
     /** Signed day total in the dominant currency; declines and own-transfer legs are net-zero. */

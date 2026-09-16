@@ -54,12 +54,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.design.components.DateHeader
 import lk.salli.design.components.DateRangeSelector
 import lk.salli.design.components.EmptyState
 import lk.salli.design.components.TransactionRow
+import lk.salli.design.components.MiniBarChart
+import lk.salli.app.R
 import lk.salli.domain.Money
 import lk.salli.app.nav.ActivityFilterArgs
 
@@ -94,18 +97,6 @@ fun TimelineScreen(
             )
         }
         if (!searchOpen) {
-            item("chart") {
-                MultiAccountChart(
-                    series = state.series,
-                    accountsInView = state.accountsInView,
-                    hiddenAccountIds = state.hiddenAccountIds,
-                    onToggleAccount = { viewModel.toggleAccount(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp)
-                        .height(204.dp),
-                )
-            }
             item("monthpills") {
                 MonthFilterRow(
                     activeLabel = state.range.label,
@@ -121,27 +112,36 @@ fun TimelineScreen(
                     expense = state.totalExpense,
                 )
             }
+            item("daily-bars") {
+                MiniBarChart(
+                    values = state.dailySpend,
+                    highlight = state.dailySpend.lastIndex,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
         }
 
         if (state.isEmpty) {
             item("empty") {
                 EmptyState(
-                    title = if (state.query.isNotBlank()) "No matches" else "Nothing in this range",
+                    title = if (state.query.isNotBlank()) stringResource(R.string.activity_no_matches)
+                    else stringResource(R.string.activity_nothing_here),
                     message = if (state.query.isNotBlank())
-                        "Try a different search term or widen the date range."
+                        stringResource(R.string.activity_no_matches_message)
                     else
-                        "Try a different date range or wait for fresh bank SMS.",
+                        stringResource(R.string.activity_nothing_here_message),
                     icon = Icons.Outlined.Receipt,
                     modifier = Modifier.padding(top = 40.dp),
                 )
             }
         } else {
             state.grouped.forEach { group ->
-                item(key = "h-${group.label}") {
+                stickyHeader(key = "h-${group.label}") {
                     DateHeader(
                         label = group.label,
                         trailingAmount = formatMoneyNet(group.netMinor, group.currency),
                         trailingPositive = group.netMinor >= 0,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.background),
                     )
                 }
                 items(group.items, key = { it.id }) { row ->
@@ -180,7 +180,7 @@ private fun TimelineTopBar(
     ) {
         AnimatedVisibility(visible = !searchOpen, enter = fadeIn(), exit = fadeOut()) {
             Text(
-                text = "Timeline",
+                text = stringResource(R.string.activity_title),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -190,13 +190,13 @@ private fun TimelineTopBar(
                 IconButton(onClick = onCloseSearch) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Close search",
+                        contentDescription = stringResource(R.string.activity_close_search),
                     )
                 }
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
-                    placeholder = { Text("Search merchant, note, category…", fontSize = 14.sp) },
+                    placeholder = { Text(stringResource(R.string.activity_search_placeholder), fontSize = 14.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(20.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -209,7 +209,7 @@ private fun TimelineTopBar(
                     trailingIcon = {
                         if (query.isNotBlank()) {
                             IconButton(onClick = { onQueryChange("") }) {
-                                Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.activity_clear_search))
                             }
                         }
                     },
@@ -221,7 +221,7 @@ private fun TimelineTopBar(
             IconButton(onClick = onOpenSearch, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Outlined.Search,
-                    contentDescription = "Search",
+                    contentDescription = stringResource(R.string.activity_search),
                 )
             }
         }
@@ -237,13 +237,13 @@ private fun IncomeExpensePills(income: Money, expense: Money) {
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         SummaryPill(
-            label = "INCOME",
+            label = stringResource(R.string.activity_income, formatMoney(income)),
             amount = formatMoney(income),
             positive = true,
             modifier = Modifier.weight(1f),
         )
         SummaryPill(
-            label = "EXPENSES",
+            label = stringResource(R.string.activity_expense, formatMoney(expense)),
             amount = formatMoney(expense),
             positive = false,
             modifier = Modifier.weight(1f),
