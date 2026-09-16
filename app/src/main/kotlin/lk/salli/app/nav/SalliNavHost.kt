@@ -123,6 +123,10 @@ private fun UnlockedSalliNavHost(startDestination: String, navController: NavHos
                     onOpenSafeToSpend = { navController.navigate(Route.SAFE_TO_SPEND) },
                     onSeeAllActivity = { navController.navigateToTab(Destination.ACTIVITY) },
                     onOpenSettings = { navController.navigate(Route.SETTINGS) },
+                    onSeeAllPlan = { navController.navigateToTab(Destination.PLAN) },
+                    onOpenUpcoming = { route -> navController.navigate(route) },
+                    onOpenUnknownSms = { navController.navigate(Route.UNKNOWN_SMS) },
+                    onOpenBudgets = { navController.navigate(Route.BUDGETS) },
                     onAccountClick = { accountId ->
                         navController.navigate(Route.activity(accountId = accountId))
                     },

@@ -44,7 +44,32 @@ import java.util.Date
 import java.util.Locale
 import lk.salli.app.features.planning.SafeToSpendCard
 import lk.salli.app.features.planning.SafeToSpendViewModel
+import lk.salli.app.features.budgets.BudgetsViewModel
+import lk.salli.app.features.budgets.BudgetUi
 import lk.salli.app.R
+import lk.salli.data.upcoming.UpcomingItem
+import lk.salli.data.upcoming.UpcomingKind
+import lk.salli.data.upcoming.UpcomingRoutes
+import lk.salli.domain.home.HeadlineBill
+import lk.salli.domain.home.HeadlineBudget
+import lk.salli.domain.home.HeadlineKind
+import lk.salli.domain.home.HomeHeadline
+import lk.salli.domain.home.HomeHeadlineInput
+import lk.salli.design.components.HeroCard
+import lk.salli.design.components.BankAvatar
+import lk.salli.design.components.EmptyState
+import lk.salli.design.components.HeroEyebrow
+import lk.salli.design.components.HeroFact
+import lk.salli.design.components.HeroSplit
+import lk.salli.design.components.GroupedList
+import lk.salli.design.components.ListDivider
+import lk.salli.design.components.ListRow
+import lk.salli.design.components.PaceBar
+import lk.salli.design.components.SalliTone
+import lk.salli.design.components.SectionHeader
+import lk.salli.design.components.stage.SpringOdometer
+import lk.salli.design.theme.LocalSalliColors
+import lk.salli.design.theme.SalliSpacing
 import lk.salli.app.ui.TimelineItem
 import lk.salli.design.components.SalliIconButton
 import lk.salli.domain.money.MoneyFormat
@@ -68,14 +93,26 @@ fun HomeScreen(
     onOpenSafeToSpend: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onAccountClick: (Long) -> Unit = {},
+    onSeeAllPlan: () -> Unit = {},
+    onOpenUpcoming: (String) -> Unit = {},
+    onOpenUnknownSms: () -> Unit = {},
+    onOpenBudgets: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     planningViewModel: SafeToSpendViewModel = hiltViewModel(),
+    budgetsViewModel: BudgetsViewModel = hiltViewModel(),
 ) {
     val planning by planningViewModel.snapshot.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
+    val unknownSmsCount by viewModel.unknownSmsCount.collectAsStateWithLifecycle()
+    val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val grouped = remember(state.recent) { groupByDay(state.recent) }
+    val todayLabel = stringResource(R.string.home_today)
+    val yesterdayLabel = stringResource(R.string.home_yesterday)
+    val grouped = remember(state.recent, todayLabel, yesterdayLabel) {
+        groupByDay(state.recent.take(8), todayLabel, yesterdayLabel)
+    }
     val totalBalance = remember(state.accounts) { computeTotalBalance(state.accounts) }
 
     lk.salli.design.components.SalliPullToRefresh(
@@ -89,11 +126,29 @@ fun HomeScreen(
     ) {
         item {
             TopBar(
-                userName = state.userName,
+                daysLeft = planning?.safeToSpend?.daysLeft,
                 onOpenSettings = onOpenSettings,
             )
         }
         item { Spacer(Modifier.height(12.dp)) }
+        if (!state.loaded) {
+            item {
+                Box(
+                    Modifier.fillMaxWidth().height(180.dp)
+                        .padding(horizontal = SalliSpacing.screenGutter)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                )
+            }
+        } else if (state.isEmpty) {
+            item {
+                EmptyState(
+                    title = stringResource(R.string.home_empty_title),
+                    message = stringResource(R.string.home_empty_message),
+                    modifier = Modifier.height(320.dp),
+                )
+            }
+        } else {
         item {
             AccountStack(
                 onAccountClick = onAccountClick,
@@ -101,14 +156,57 @@ fun HomeScreen(
                 totalBalance = totalBalance,
                 monthTrend = state.monthTrend,
                 monthExpense = state.monthExpense,
+                onOpenSafeToSpend = onOpenSafeToSpend,
+                safeTodayMinor = planning?.safeToSpend?.perDayMinor?.takeIf { it > 0L },
+                budgetMinor = planning?.safeToSpend?.budgetMinor,
+                expectedProgress = planning?.let {
+                    ((it.now - it.cycle.fromMillis).toFloat() /
+                        (it.cycle.untilMillis - it.cycle.fromMillis).coerceAtLeast(1L)).coerceIn(0f, 1f)
+                },
             )
         }
-        item { Spacer(Modifier.height(16.dp)) }
-        planning?.let { snap ->
-            item(key = "safe-to-spend") { SafeToSpendCard(snapshot = snap, onClick = onOpenSafeToSpend) }
+        if (upcoming.isNotEmpty()) {
+            item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+            item {
+                Column(Modifier.padding(horizontal = SalliSpacing.screenGutter)) {
+                    SectionHeader(
+                        title = stringResource(R.string.home_up_next),
+                        actionLabel = stringResource(R.string.home_see_all),
+                        onAction = onSeeAllPlan,
+                    )
+                    Spacer(Modifier.height(SalliSpacing.xs))
+                    GroupedList {
+                        upcoming.take(3).forEachIndexed { index, next ->
+                            if (index > 0) ListDivider()
+                            UpcomingRow(next, onClick = { onOpenUpcoming(next.deepLink) })
+                        }
+                    }
+                }
+            }
         }
-        item { Spacer(Modifier.height(20.dp)) }
+        item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+        item {
+            RightNowLine(
+                upcoming = upcoming,
+                unknownSmsCount = unknownSmsCount,
+                budgets = budgets.budgets,
+                safeTodayMinor = planning?.safeToSpend?.perDayMinor,
+                currency = planning?.currency ?: state.monthExpense.currency,
+                onOpenUpcoming = onOpenUpcoming,
+                onOpenUnknownSms = onOpenUnknownSms,
+                onOpenBudgets = onOpenBudgets,
+                onOpenSafeToSpend = onOpenSafeToSpend,
+            )
+        }
         if (grouped.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    title = stringResource(R.string.home_recent),
+                    modifier = Modifier.padding(horizontal = SalliSpacing.screenGutter),
+                    actionLabel = stringResource(R.string.home_see_all),
+                    onAction = onSeeAllActivity,
+                )
+            }
             grouped.forEachIndexed { i, group ->
                 item(key = "hdr-${group.dayMillis}") {
                     DayHeader(
@@ -117,22 +215,28 @@ fun HomeScreen(
                         topSpacing = if (i == 0) 8.dp else 18.dp,
                     )
                 }
-                items(group.rows, key = { it.id }) { row ->
-                    lk.salli.design.components.TransactionRow(
-                        title = row.title,
-                        subtitle = row.subtitle,
-                        amount = row.amount,
-                        flow = row.flow,
-                        leadingIcon = row.icon,
-                        merchantRaw = row.merchantRaw,
-                        isDeclined = row.isDeclined,
-                        isOwnTransfer = row.isOwnTransfer,
-                        modifier = Modifier.clickable { onTransactionClick(row.id) },
-                    )
+                item(key = "rows-${group.dayMillis}") {
+                    GroupedList(Modifier.padding(horizontal = SalliSpacing.screenGutter)) {
+                        group.rows.forEachIndexed { index, row ->
+                            if (index > 0) ListDivider()
+                            lk.salli.design.components.TransactionRow(
+                                title = row.title,
+                                subtitle = row.subtitle,
+                                amount = row.amount,
+                                flow = row.flow,
+                                leadingIcon = row.icon,
+                                merchantRaw = row.merchantRaw,
+                                timestamp = row.timestamp,
+                                isDeclined = row.isDeclined,
+                                isOwnTransfer = row.isOwnTransfer,
+                                standalone = false,
+                                modifier = Modifier.clickable { onTransactionClick(row.id) },
+                            )
+                        }
+                    }
                 }
             }
-            item { Spacer(Modifier.height(8.dp)) }
-            item { SeeAllRow(onClick = onSeeAllActivity) }
+        }
         }
     }
     }
@@ -144,12 +248,12 @@ fun HomeScreen(
 
 @Composable
 private fun TopBar(
-    userName: String,
+    daysLeft: Int?,
     onOpenSettings: () -> Unit,
 ) {
     val cal = Calendar.getInstance()
-    val dateLabel = remember(cal.timeInMillis / (60 * 60 * 1000)) {
-        SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(cal.time)
+    val periodLabel = remember(cal.timeInMillis / (60 * 60 * 1000), daysLeft) {
+        SimpleDateFormat("MMMM", Locale.getDefault()).format(cal.time)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -157,19 +261,12 @@ private fun TopBar(
             .fillMaxWidth()
             .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = userName.ifBlank { "Welcome" },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = dateLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            text = if (daysLeft == null) periodLabel else stringResource(R.string.home_period_days_left, periodLabel, daysLeft),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
         // The theme toggle used to sit here. Appearance is a setting you change twice a year,
         // not twice a day, so it moved into Settings (which is what this gear opens) and took
         // the circular-reveal transition with it.
@@ -192,6 +289,10 @@ private fun AccountStack(
     totalBalance: Money,
     monthTrend: Trend?,
     monthExpense: Money,
+    onOpenSafeToSpend: () -> Unit,
+    safeTodayMinor: Long?,
+    budgetMinor: Long?,
+    expectedProgress: Float?,
 ) {
     // Show every account that the parser has seen at least one transaction for. Accounts that
     // never carry a balance in their SMS (ComBank card-level, HSBC card, etc.) used to be
@@ -207,9 +308,15 @@ private fun AccountStack(
             totalBalance = totalBalance,
             monthTrend = monthTrend,
             monthExpense = monthExpense,
+            onOpenSafeToSpend = onOpenSafeToSpend,
+            safeTodayMinor = safeTodayMinor,
+            budgetMinor = budgetMinor,
+            expectedProgress = expectedProgress,
+            hasBalance = accounts.any { it.balance != null },
             modifier = Modifier.fillMaxWidth(),
         )
         if (accounts.isNotEmpty()) {
+            SectionHeader(title = stringResource(R.string.home_accounts))
             AccountChipsRow(accounts = accounts, onAccountClick = onAccountClick)
         }
     }
@@ -264,12 +371,13 @@ private fun AccountChip(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .clip(RoundedCornerShape(16.dp))
+            .background(color.copy(alpha = 0.08f))
             .clickable(onClick = onClick),
     ) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(color))
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            BankAvatar(sender = account.senderAddress, displayName = account.displayName, size = 32.dp)
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = account.displayName,
                 style = MaterialTheme.typography.labelSmall,
@@ -303,96 +411,63 @@ private fun SummaryCard(
     totalBalance: Money,
     monthTrend: Trend?,
     monthExpense: Money,
+    onOpenSafeToSpend: () -> Unit,
+    safeTodayMinor: Long?,
+    budgetMinor: Long?,
+    expectedProgress: Float?,
+    hasBalance: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val cardBg = SalliBrandColors.Cobalt
-    val cardFg = SalliBrandColors.OnCobalt
-    val cardFgMuted = cardFg.copy(alpha = 0.76f)
-
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(cardBg)
-            .padding(horizontal = 24.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.Start,
-    ) {
-        Text(
-            text = "Total balance",
-            style = MaterialTheme.typography.labelLarge,
-            color = cardFgMuted,
+    val onHero = LocalSalliColors.current.onHero
+    HeroCard(modifier = modifier) {
+        HeroEyebrow(stringResource(R.string.home_spent_this_period))
+        Spacer(Modifier.height(SalliSpacing.xs))
+        SpringOdometer(
+            text = MoneyFormat.format(monthExpense),
+            style = MaterialTheme.typography.displayMedium,
+            color = onHero,
         )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = MoneyFormat.formatWithMinus(totalBalance),
-            style = MaterialTheme.typography.displayLarge.copy(
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Bold,
-            ),
-            color = cardFg,
-            maxLines = 1,
-        )
-        Spacer(Modifier.height(10.dp))
-        MonthDeltaRow(
-            monthTrend = monthTrend,
-            monthExpense = monthExpense,
-            fgColor = cardFg,
-            mutedFgColor = cardFgMuted,
-        )
-    }
-}
-
-@Composable
-private fun MonthDeltaRow(
-    monthTrend: Trend?,
-    monthExpense: Money,
-    fgColor: Color,
-    mutedFgColor: Color,
-) {
-    val delta = monthTrend?.percentDelta
-    val isUp = monthTrend?.isUp ?: false
-    val arrowBg = if (delta != null && !isUp) {
-        SalliBrandColors.AcidLime
-    } else {
-        SalliBrandColors.OnCobalt.copy(alpha = 0.18f)
-    }
-    val arrowFg = if (delta != null && !isUp) {
-        SalliBrandColors.OnAcidLime
-    } else {
-        SalliBrandColors.OnCobalt
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (delta != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(arrowBg),
-                ) {
-                    Text(
-                        text = if (isUp) "↑" else "↓",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = arrowFg,
+        if (budgetMinor != null && budgetMinor > 0L) {
+            Spacer(Modifier.height(SalliSpacing.md))
+            PaceBar(
+                progress = monthExpense.minorUnits.toFloat() / budgetMinor,
+                expected = expectedProgress,
+                tone = when {
+                    monthExpense.minorUnits > budgetMinor -> SalliTone.NEGATIVE
+                    expectedProgress != null && monthExpense.minorUnits.toFloat() / budgetMinor > expectedProgress -> SalliTone.WARNING
+                    else -> SalliTone.POSITIVE
+                },
+                trackColor = onHero.copy(alpha = 0.2f),
+                tickColor = onHero,
+            )
+        }
+        monthTrend?.percentDelta?.let { delta ->
+            Spacer(Modifier.height(SalliSpacing.xs))
+            Text(
+                text = stringResource(R.string.home_vs_last_period, if (delta > 0) "+$delta" else delta.toString()),
+                style = MaterialTheme.typography.bodySmall,
+                color = onHero.copy(alpha = 0.8f),
+            )
+        }
+        if (safeTodayMinor != null || hasBalance) {
+            HeroSplit {
+                if (safeTodayMinor != null) {
+                    HeroFact(
+                        label = stringResource(R.string.home_safe_today),
+                        value = MoneyFormat.formatMinor(safeTodayMinor, monthExpense.currency),
+                        valueColor = LocalSalliColors.current.positive,
+                        modifier = Modifier.weight(1f).clickable(onClick = onOpenSafeToSpend),
                     )
                 }
-                Text(
-                    text = "${if (isUp) "+" else "-"}${kotlin.math.abs(delta)}% vs previous period",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = fgColor,
-                )
+                if (hasBalance) {
+                    HeroFact(
+                        label = stringResource(R.string.home_balance),
+                        value = MoneyFormat.formatWithMinus(totalBalance),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
-        Text(
-            text = "${MoneyFormat.formatWithMinus(monthExpense)} spent this period",
-            style = MaterialTheme.typography.bodyMedium,
-            color = mutedFgColor,
-        )
     }
 }
 
@@ -402,6 +477,94 @@ private fun computeTotalBalance(accounts: List<AccountSummary>): Money {
     val byCurrency = accounts.mapNotNull { it.balance }.groupBy { it.currency }
     val dominant = byCurrency.entries.maxByOrNull { it.value.size } ?: return Money.zero(Currency.LKR)
     return dominant.value.fold(Money.zero(dominant.key)) { acc, m -> acc + m }
+}
+
+@Composable
+private fun UpcomingRow(item: UpcomingItem, onClick: () -> Unit) {
+    val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo")).toEpochDay()
+    val days = item.dueEpochDay - today
+    val subtitle = when (item.kind) {
+        UpcomingKind.BILL -> when {
+            days < 0 -> stringResource(R.string.home_overdue)
+            days == 0L -> stringResource(R.string.home_due_today)
+            days == 1L -> stringResource(R.string.home_due_tomorrow)
+            else -> stringResource(R.string.home_due_in_days, days)
+        }
+        UpcomingKind.RECURRING -> when (days) {
+            0L -> stringResource(R.string.home_expected_today)
+            1L -> stringResource(R.string.home_expected_tomorrow)
+            else -> stringResource(R.string.home_expected_in_days, days)
+        }
+        UpcomingKind.FUEL_ELIGIBLE -> when (days) {
+            0L -> stringResource(R.string.home_fuel_eligible_today)
+            1L -> stringResource(R.string.home_fuel_eligible_tomorrow)
+            else -> stringResource(R.string.home_fuel_eligible_in_days, days)
+        }
+        UpcomingKind.FUEL_RESET -> when (days) {
+            0L -> stringResource(R.string.home_fuel_reset_today)
+            1L -> stringResource(R.string.home_fuel_reset_tomorrow)
+            else -> stringResource(R.string.home_fuel_reset_in_days, days)
+        }
+    }
+    ListRow(
+        title = item.title,
+        subtitle = subtitle,
+        trailing = item.amountMinor?.let { amount ->
+            { Text(MoneyFormat.formatMinor(amount, item.currency ?: Currency.LKR)) }
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun RightNowLine(
+    upcoming: List<UpcomingItem>,
+    unknownSmsCount: Int,
+    budgets: List<BudgetUi>,
+    safeTodayMinor: Long?,
+    currency: String,
+    onOpenUpcoming: (String) -> Unit,
+    onOpenUnknownSms: () -> Unit,
+    onOpenBudgets: () -> Unit,
+    onOpenSafeToSpend: () -> Unit,
+) {
+    val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo")).toEpochDay()
+    val bills = upcoming.filter { it.kind == UpcomingKind.BILL }.map {
+        HeadlineBill(it.title, it.amountMinor ?: 0L, it.currency ?: currency, it.dueEpochDay)
+    }
+    val headline = HomeHeadline.of(HomeHeadlineInput(
+        overdueBills = bills.filter { it.dueEpochDay < today },
+        billsDueToday = bills.filter { it.dueEpochDay == today },
+        budgetsOver = budgets.filter { it.overBudget }.map {
+            HeadlineBudget(it.name, -it.remainingMinor, it.currency)
+        },
+        unknownSmsCount = unknownSmsCount,
+        safeToSpendTodayMinor = safeTodayMinor,
+        currency = currency,
+    )) ?: return
+    val text = when (headline.kind) {
+        HeadlineKind.BILL_OVERDUE -> stringResource(R.string.home_headline_overdue, headline.params.label.orEmpty())
+        HeadlineKind.BILL_DUE_TODAY -> stringResource(R.string.home_headline_due_today, headline.params.label.orEmpty())
+        HeadlineKind.BUDGET_OVER -> stringResource(R.string.home_headline_budget_over, headline.params.label.orEmpty())
+        HeadlineKind.UNKNOWN_SMS -> stringResource(R.string.home_headline_unknown, headline.params.count)
+        HeadlineKind.SAFE_TO_SPEND -> stringResource(
+            R.string.home_headline_safe,
+            MoneyFormat.formatMinor(headline.params.amountMinor ?: 0L, currency),
+        )
+        HeadlineKind.NEW_SINCE_LAST_OPEN -> return
+    }
+    val action = when (headline.kind) {
+        HeadlineKind.BILL_OVERDUE, HeadlineKind.BILL_DUE_TODAY -> { { onOpenUpcoming(UpcomingRoutes.BILLS) } }
+        HeadlineKind.UNKNOWN_SMS -> onOpenUnknownSms
+        HeadlineKind.BUDGET_OVER -> onOpenBudgets
+        else -> onOpenSafeToSpend
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = SalliSpacing.screenGutter).clickable(onClick = action),
+    )
 }
 
 /* -------------------------------------------------------------------------- */
@@ -415,7 +578,7 @@ private data class DayGroup(
     val total: Money,
 )
 
-private fun groupByDay(rows: List<TimelineItem>): List<DayGroup> {
+private fun groupByDay(rows: List<TimelineItem>, todayLabel: String, yesterdayLabel: String): List<DayGroup> {
     val bucketed = rows.groupBy { row ->
         val c = Calendar.getInstance().apply {
             timeInMillis = row.timestamp
@@ -438,8 +601,8 @@ private fun groupByDay(rows: List<TimelineItem>): List<DayGroup> {
         .sortedByDescending { it.key }
         .map { (bucket, list) ->
             val label = when (bucket) {
-                todayMs -> "Today"
-                todayMs - dayMs -> "Yesterday"
+                todayMs -> todayLabel
+                todayMs - dayMs -> yesterdayLabel
                 else -> headerFmt.format(Date(bucket))
             }
             // Net: expense-negative, income-positive, transfers excluded. Currency is the
@@ -482,33 +645,10 @@ private fun DayHeader(label: String, total: Money, topSpacing: androidx.compose.
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val absTotal = Money(kotlin.math.abs(total.minorUnits), total.currency)
-        val sign = if (total.minorUnits < 0) "-" else if (total.minorUnits > 0) "+" else ""
         Text(
-            text = "$sign${MoneyFormat.formatWithMinus(absTotal)}",
+            text = MoneyFormat.format(total, signed = true),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-
-@Composable
-private fun SeeAllRow(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "See all activity",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }

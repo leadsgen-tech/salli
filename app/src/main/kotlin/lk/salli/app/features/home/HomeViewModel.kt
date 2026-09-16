@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.stateIn
 import lk.salli.app.ui.TimelineItem
 import lk.salli.app.ui.toTimelineItems
 import lk.salli.data.db.SalliDatabase
+import lk.salli.data.upcoming.UpcomingItem
+import lk.salli.data.upcoming.UpcomingService
 import lk.salli.data.db.entities.TransactionEntity
 import lk.salli.data.transactions.TransactionSpending
 import lk.salli.data.prefs.SalliPreferences
@@ -68,6 +70,7 @@ data class Trend(
 }
 
 data class HomeUiState(
+    val loaded: Boolean = false,
     val userName: String = "",
     val accounts: List<AccountSummary> = emptyList(),
     val recent: List<TimelineItem> = emptyList(),
@@ -89,6 +92,12 @@ class HomeViewModel @Inject constructor(
 
     val refreshing: StateFlow<Boolean> = refresher.refreshing
     fun refresh() = refresher.refresh()
+
+    val upcoming: StateFlow<List<UpcomingItem>> = UpcomingService(db).observe()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val unknownSmsCount: StateFlow<Int> = db.unknownSms().observePendingCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     // Fold (accounts × per-account activity totals) into a single source so the main combine
     // stays at 5 args. Activity totals re-emit on every transaction insert, so chips refresh
@@ -239,6 +248,7 @@ class HomeViewModel @Inject constructor(
             .take(3)
 
         HomeUiState(
+            loaded = true,
             userName = userName,
             accounts = accountSummaries,
             recent = items,

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_period_days_left">%1$s · %2$d days left</string>
+    <string name="home_spent_this_period">Spent this period</string>
+    <string name="home_vs_last_period">%1$s%% vs last period</string>
+    <string name="home_safe_today">Safe today</string>
+    <string name="home_balance">Balance</string>
+    <string name="home_accounts">Accounts</string>
+    <string name="home_up_next">Up next</string>
+    <string name="home_recent">Recent</string>
+    <string name="home_today">Today</string>
+    <string name="home_yesterday">Yesterday</string>
+    <string name="home_see_all">See all</string>
+    <string name="home_overdue">Overdue</string>
+    <string name="home_due_today">Due today</string>
+    <string name="home_due_tomorrow">Due tomorrow</string>
+    <string name="home_due_in_days">Due in %1$d days</string>
+    <string name="home_expected_today">Expected today</string>
+    <string name="home_expected_tomorrow">Expected tomorrow</string>
+    <string name="home_expected_in_days">Expected in %1$d days</string>
+    <string name="home_fuel_eligible_today">Eligible today</string>
+    <string name="home_fuel_eligible_tomorrow">Eligible tomorrow</string>
+    <string name="home_fuel_eligible_in_days">Eligible in %1$d days</string>
+    <string name="home_fuel_reset_today">Resets today</string>
+    <string name="home_fuel_reset_tomorrow">Resets tomorrow</string>
+    <string name="home_fuel_reset_in_days">Resets in %1$d days</string>
+    <string name="home_headline_overdue">%1$s is overdue</string>
+    <string name="home_headline_due_today">%1$s is due today</string>
+    <string name="home_headline_budget_over">%1$s is over budget</string>
+    <string name="home_headline_unknown">%1$d messages need a look</string>
+    <string name="home_headline_safe">%1$s safe to spend today</string>
+    <string name="home_empty_title">Waiting for your first bank alert</string>
+    <string name="home_empty_message">Salli reads bank messages on this phone. Your transactions will appear here when an alert arrives.</string>
+</resources>
