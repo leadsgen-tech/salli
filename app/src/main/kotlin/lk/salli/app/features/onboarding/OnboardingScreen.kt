@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     SideEffect {
         (context as? Activity)?.window?.let { window ->
             window.statusBarColor = SalliBrandColors.Cobalt.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = act > 1 || (act == 1 && sortAnimation.value > 0.65f)
         }
     }
     var tick by remember { mutableIntStateOf(0) }
@@ -98,7 +99,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 
 @Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
     val haptic = LocalHapticFeedback.current
-    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) }, 0f, Modifier.fillMaxWidth().height(380.dp), setOf(2, 5), reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
+    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) }, 0f, Modifier.fillMaxWidth().height(380.dp), setOf(2, 5), floorFraction = 0.92f, reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
@@ -108,11 +109,14 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     BubbleStage(
         bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) },
         sortProgress = progress,
-        modifier = Modifier.fillMaxWidth().height(280.dp),
+        modifier = Modifier.fillMaxWidth().height(350.dp),
         discarded = setOf(2, 5),
+        rowHeight = 44.dp,
+        rowGap = 4.dp,
+        columnTop = 8.dp,
         reducedMotion = LocalReducedMotion.current,
         bubble = { Bubble(BubbleLabels[it]) },
-        row = { Bubble(if (it == 0) "Keells Super · Groceries" else BubbleLabels[it]) },
+        row = { SortedRow(if (it == 0) "Keells Super · Groceries" else BubbleLabels[it].replace("\n", " · ")) },
     )
     Text("OTPs and promos: ignored.", style = MaterialTheme.typography.labelLarge)
     Text("One clean timeline.", style = MaterialTheme.typography.displaySmall)
@@ -166,6 +170,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     }
 }
 @Composable private fun Bubble(text: String) { Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 4.dp, modifier = Modifier.padding(4.dp)) { Text(text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge) } }
+@Composable private fun SortedRow(text: String) { Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize().padding(vertical = 2.dp)) { Box(contentAlignment = Alignment.CenterStart) { Text(text, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1) } } }
 private fun lerp(a: Color, b: Color, f: Float) = Color(a.red + (b.red-a.red)*f, a.green + (b.green-a.green)*f, a.blue + (b.blue-a.blue)*f, a.alpha + (b.alpha-a.alpha)*f)
 
 private fun hasSmsPermission(context: Context): Boolean = SmsPermissions.all {
