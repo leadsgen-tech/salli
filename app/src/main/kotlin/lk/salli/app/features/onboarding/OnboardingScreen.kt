@@ -52,6 +52,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     var sort by remember { mutableFloatStateOf(if (replay) 1f else 0f) }
     val sortAnimation = remember { Animatable(sort) }
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val view = LocalView.current
     SideEffect {
@@ -93,35 +94,41 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
                 1 -> SortAct(sortAnimation.value, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }, { if (replay) onDone() else viewModel.complete(deferHistory = true) })
                 else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
             }
+            if (act < 2) {
+                key("shared-onboarding-bubbles") {
+                    BubbleStage(
+                        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) },
+                        sortProgress = if (act == 0) 0f else sortAnimation.value,
+                        modifier = Modifier.fillMaxWidth().height(if (act == 0) 380.dp else 280.dp).padding(horizontal = 24.dp),
+                        discarded = setOf(2, 5),
+                        floorFraction = if (act == 0) 0.86f else 0.82f,
+                        rowHeight = 44.dp,
+                        rowGap = 4.dp,
+                        columnTop = 8.dp,
+                        reducedMotion = LocalReducedMotion.current,
+                        onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                        bubble = { Bubble(BubbleLabels[it]) },
+                        row = { SortedRow("Sorted transaction") },
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
     val haptic = LocalHapticFeedback.current
-    BubbleStage(BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) }, 0f, Modifier.fillMaxWidth().height(380.dp), setOf(2, 5), floorFraction = 0.92f, reducedMotion = LocalReducedMotion.current, bubble = { Bubble(BubbleLabels[it]) }, row = { Bubble(BubbleLabels[it]) })
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
 }
 
 @Composable private fun SortAct(progress: Float, granted: Boolean, onProgress: (Float) -> Unit, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) = StageScaffold(lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress), MaterialTheme.colorScheme.onBackground, onSkip) {
-    BubbleStage(
-        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) },
-        sortProgress = progress,
-        modifier = Modifier.fillMaxWidth().height(350.dp),
-        discarded = setOf(2, 5),
-        rowHeight = 44.dp,
-        rowGap = 4.dp,
-        columnTop = 8.dp,
-        reducedMotion = LocalReducedMotion.current,
-        bubble = { Bubble(BubbleLabels[it]) },
-        row = { SortedRow(if (it == 0) "Keells Super · Groceries" else BubbleLabels[it].replace("\n", " · ")) },
-    )
     Text("OTPs and promos: ignored.", style = MaterialTheme.typography.labelLarge)
     Text("One clean timeline.", style = MaterialTheme.typography.displaySmall)
     Text("Sorted on your phone. Nothing leaves it.", style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(20.dp)); SpringOdometer("Rs 27,830", style = MaterialTheme.typography.headlineLarge)
+    Spacer(Modifier.height(20.dp)); Text("7 useful rows from 9 messages", style = MaterialTheme.typography.titleLarge)
+    Text("2 OTPs and promos ignored. Your real history will be built from bank alerts on this phone.", style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(20.dp))
     if (granted) Text("SMS access is ready. Your existing bank messages can build your history.") else {
         Text("Salli needs to read your SMS to do this for real.")
