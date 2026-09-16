@@ -7,6 +7,8 @@
     <string name="activity_search_placeholder">Search merchant, note, category…</string>
     <string name="activity_income">In %1$s</string>
     <string name="activity_expense">Out %1$s</string>
+    <string name="activity_income_label">In</string>
+    <string name="activity_expense_label">Out</string>
     <string name="activity_no_matches">No matches</string>
     <string name="activity_no_matches_message">Try a different search term or widen the date range.</string>
     <string name="activity_nothing_here">Nothing in this range</string>

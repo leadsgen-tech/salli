@@ -211,8 +211,10 @@ private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> U
         backgroundContent = {
             Box(
                 contentAlignment = Alignment.CenterEnd,
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary).padding(end = 28.dp),
-            ) { Icon(Icons.Outlined.Label, contentDescription = stringResource(R.string.activity_category_action), tint = MaterialTheme.colorScheme.onPrimary) }
+                // TransactionRow retains its normal screen gutter at rest. A full cobalt
+                // background bled through that gutter and made every row look selected.
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer).padding(end = 28.dp),
+            ) { Icon(Icons.Outlined.Label, contentDescription = stringResource(R.string.activity_category_action), tint = MaterialTheme.colorScheme.primary) }
         },
         content = {
             TransactionRow(
@@ -383,13 +385,13 @@ private fun IncomeExpensePills(income: Money, expense: Money) {
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         SummaryPill(
-            label = stringResource(R.string.activity_income, formatMoney(income)),
+            label = stringResource(R.string.activity_income_label),
             amount = formatMoney(income),
             positive = true,
             modifier = Modifier.weight(1f),
         )
         SummaryPill(
-            label = stringResource(R.string.activity_expense, formatMoney(expense)),
+            label = stringResource(R.string.activity_expense_label),
             amount = formatMoney(expense),
             positive = false,
             modifier = Modifier.weight(1f),
@@ -425,7 +427,7 @@ private fun SummaryPill(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = if (positive) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.error,
+                else MaterialTheme.colorScheme.onSurface,
             )
         }
     }
