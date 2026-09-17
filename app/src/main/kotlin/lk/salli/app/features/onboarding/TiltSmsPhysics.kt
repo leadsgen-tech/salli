@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,7 +32,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.yield
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** A small sensor driven falling-card scene for onboarding previews. */
@@ -45,6 +50,7 @@ fun TiltSmsPhysics(
     val context = LocalContext.current
     val latestLanded by rememberUpdatedState(onBodyLanded)
     var tiltX by remember { mutableStateOf(0f) }
+    var tiltY by remember { mutableStateOf(0f) }
     val manager = remember(context) { context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager }
     DisposableEffect(manager) {
         val sensor = manager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
@@ -52,6 +58,7 @@ fun TiltSmsPhysics(
             override fun onSensorChanged(event: SensorEvent) {
                 // Screen coordinates: positive x tips the pile toward the right wall.
                 tiltX = event.values.getOrNull(0)?.coerceIn(-9f, 9f) ?: 0f
+                tiltY = -(event.values.getOrNull(1)?.coerceIn(-9f, 9f) ?: 0f)
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
@@ -62,43 +69,57 @@ fun TiltSmsPhysics(
     BoxWithConstraints(modifier) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val stageWidth = maxWidth
         val density = androidx.compose.ui.platform.LocalDensity.current
+        val bottomInset = with(density) { WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx() + 22.dp.toPx() }
         val sizes = remember(bodySizes, density) {
             bodySizes.map { with(density) { PhysicsSize(it.width.toPx(), it.height.toPx()) } }
         }
         val progress = sortProgress.coerceIn(0f, 1f)
+        val latestProgress by rememberUpdatedState(progress)
         val bodies = remember(sizes, widthPx, heightPx) {
+            val drift = floatArrayOf(-130f, 95f, 140f, -105f, 115f, -145f, 125f, -90f, 85f)
             sizes.mapIndexed { index, size ->
                 val x = (widthPx * (0.22f + (index % 4) * 0.19f)).coerceIn(size.width / 2f, widthPx - size.width / 2f)
-                PhysicsBody(index, size, x, -size.height - index * 18f, (index % 2 * 2 - 1) * 22f, 0f, (index % 3 - 1) * .08f)
+                PhysicsBody(index, size, x, -size.height - index * 18f, drift[index % drift.size], 0f, (index % 3 - 1) * .07f, (index % 4 - 1.5f) * .18f)
             }.toMutableList()
         }
-        val frame = remember { mutableStateOf(bodies.map { it.snapshot() }) }
+        val frame = remember(bodies) { mutableStateOf(bodies.map { it.snapshot() }) }
         LaunchedEffect(bodies, reducedMotion) {
             var previous = 0L
+            var elapsed = 0f
             while (isActive) {
                 val now = withFrameNanos { it }
                 val dt = if (previous == 0L) 0f else ((now - previous) / 1_000_000_000f).coerceIn(0f, 1f / 20f)
                 previous = now
+                elapsed += dt
                 bodies.forEachIndexed { index, body ->
-                    val row = rowIndex(index)
-                    val floor = heightPx - with(density) { 8.dp.toPx() } - body.size.height - row * with(density) { 18.dp.toPx() } - (index % 3) * with(density) { 6.dp.toPx() }
+                    val baseFloor = heightPx - bottomInset - body.size.height
+                    val supportFloor = bodies.asSequence()
+                        .filter { it.index < index && it.landed && abs(it.x - body.x) < (it.size.width + body.size.width) * .34f }
+                        .map { it.y - body.size.height + min(it.size.height, body.size.height) * .73f }
+                        .minOrNull() ?: baseFloor
+                    val floor = min(baseFloor, supportFloor)
                     if (reducedMotion) {
-                        body.y = floor - (index * 22f).coerceAtMost(heightPx * .7f)
+                        body.y = floor
                         body.vy = 0f
                         body.rotation = 0f
-                    } else if (progress > 0f) {
-                        val targetY = with(density) { (8 + index * 48).dp.toPx() }
+                        body.landed = true
+                    } else if (latestProgress > 0f) {
+                        val targetY = with(density) { 84.dp.toPx() } + rowIndex(index) * rowSpacing(heightPx, density)
                         val targetX = with(density) { 12.dp.toPx() } + body.size.width / 2f
-                        body.x += (targetX - body.x) * (0.16f * progress).coerceAtMost(0.16f)
-                        body.y += (targetY - body.y) * (0.16f * progress).coerceAtMost(0.16f)
+                        body.x += (targetX - body.x) * (0.16f * latestProgress).coerceAtMost(0.16f)
+                        body.y += (targetY - body.y) * (0.16f * latestProgress).coerceAtMost(0.16f)
                         body.rotation *= 0.84f
-                    } else {
-                        body.vx = (body.vx + tiltX * 35f * dt) * 0.992f
-                        if (!body.landed) body.vy = (body.vy + 2100f * dt) * 0.998f else body.vy = 0f
+                    } else if (elapsed >= index * .14f) {
+                        body.vx = (body.vx + tiltX * 150f * dt) * if (body.landed) .975f else .992f
+                        if (body.landed && body.y < floor - 3f) body.landed = false
+                        val gravity = (1800f + tiltY * 140f).coerceIn(400f, 3400f)
+                        body.vy = if (body.landed) 0f else (body.vy + gravity * dt) * .998f
                         body.x += body.vx * dt
                         body.y += body.vy * dt
-                        body.rotation += (body.vx / 900f) * dt
+                        body.rotation = (body.rotation + body.spin * dt).coerceIn(-.17f, .17f)
+                        body.spin *= if (body.landed) .90f else .97f
                         val left = body.size.width / 2f
                         val right = widthPx - left
                         if (body.x < left || body.x > right) {
@@ -108,27 +129,30 @@ fun TiltSmsPhysics(
                         if (body.y >= floor) {
                             body.y = floor
                             if (body.vy > 80f) body.vy *= -0.22f else {
-                                body.vy = 0f; body.vx *= 0.55f; body.landed = true
-                                latestLanded(index)
+                                body.vy = 0f
+                                if (!body.hapticPlayed) {
+                                    latestLanded(index)
+                                    body.hapticPlayed = true
+                                }
+                                body.landed = true
                             }
                         }
                     }
                 }
                 frame.value = bodies.map { it.snapshot() }
-                yield()
             }
         }
         Box(Modifier.fillMaxSize()) {
             frame.value.forEach { body ->
                 Box(
-                    Modifier.offset { IntOffset((body.x - body.size.width / 2f).roundToInt(), body.y.roundToInt()) }
+                        Modifier.offset { IntOffset((body.x - body.size.width / 2f).roundToInt(), body.y.roundToInt()) }
                         .size(with(density) { body.size.width.toDp() }, with(density) { body.size.height.toDp() })
                         .graphicsLayer { rotationZ = body.rotation * 57.29578f; alpha = 1f - progress },
                 ) { card(body.index) }
                 if (body.index !in setOf(2, 5)) {
                     Box(
-                        Modifier.offset { IntOffset(with(density) { 12.dp.toPx() }.roundToInt(), with(density) { (8 + rowIndex(body.index) * 56).dp.toPx() }.roundToInt()) }
-                            .fillMaxWidth().height(56.dp)
+                        Modifier.offset { IntOffset(with(density) { 24.dp.toPx() }.roundToInt(), (with(density) { 84.dp.toPx() } + rowIndex(body.index) * rowSpacing(heightPx, density)).roundToInt()) }
+                            .width(stageWidth - 48.dp).height(56.dp)
                             .graphicsLayer { alpha = progress },
                     ) { row(body.index) }
                 }
@@ -138,7 +162,10 @@ fun TiltSmsPhysics(
 }
 
 private data class PhysicsSize(val width: Float, val height: Float)
-private data class PhysicsBody(val index: Int, val size: PhysicsSize, var x: Float, var y: Float, var vx: Float, var vy: Float, var rotation: Float, var landed: Boolean = false)
+private data class PhysicsBody(val index: Int, val size: PhysicsSize, var x: Float, var y: Float, var vx: Float, var vy: Float, var rotation: Float, var spin: Float, var landed: Boolean = false, var hapticPlayed: Boolean = false)
 private data class PhysicsSnapshot(val index: Int, val size: PhysicsSize, val x: Float, val y: Float, val rotation: Float)
 private fun PhysicsBody.snapshot() = PhysicsSnapshot(index, size, x, y, rotation)
 private fun rowIndex(index: Int) = index - if (index > 5) 2 else if (index > 2) 1 else 0
+private fun rowSpacing(heightPx: Float, density: androidx.compose.ui.unit.Density): Float = with(density) {
+    ((heightPx - 390.dp.toPx()) / 7f).coerceIn(48.dp.toPx(), 64.dp.toPx())
+}
