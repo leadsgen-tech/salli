@@ -48,12 +48,19 @@ import lk.salli.design.theme.SalliBrandColors
 import kotlinx.coroutines.launch
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
-private val BubbleLabels = listOf(
-    "COMBANK · Card purchase\nRs 4,280 at KEELLS", "BOC · Cash withdrawal\nRs 5,000 at ATM",
-    "OTP 482913\nExpires in 5 min", "People's Bank · JustPay\nRs 2,400 sent",
-    "SLTBILL · Payment received\nRs 11,953", "DIALOG · Special offer\nReply YES to claim",
-    "HNB · Card alert\nRs 3,650 at CARGILLS", "1919 · Fuel purchase\nRs 8,200 at IOC",
-    "CEB · Bill paid\nRs 6,740",
+private data class SampleSms(val sender: String, val body: String, val result: String, val category: String, val amount: String)
+
+// Fictional, redacted previews. The real inbox is never used in the introduction.
+private val SampleMessages = listOf(
+    SampleSms("COMBANK", "Rs. 4,280.00 spent at KEELLS on card ending 4273.", "Keells", "Groceries", "−Rs 4,280"),
+    SampleSms("BOC", "Rs. 5,000.00 withdrawn from ATM using card ending 0870.", "BOC ATM", "Cash", "−Rs 5,000"),
+    SampleSms("482913", "Your verification code is 482913. It expires in 5 minutes.", "", "", ""),
+    SampleSms("PeoplesBank", "JustPay transfer of Rs. 2,400.00 was completed.", "JustPay transfer", "Transfers", "−Rs 2,400"),
+    SampleSms("SLTBILL", "Your SLT bill payment of Rs. 11,953.00 was received.", "SLT bill", "Utilities", "−Rs 11,953"),
+    SampleSms("DIALOG", "Special offer for you. Reply YES to claim.", "", "", ""),
+    SampleSms("HNB", "Rs. 3,650.00 spent at CARGILLS on card ending 1734.", "Cargills", "Groceries", "−Rs 3,650"),
+    SampleSms("1919", "Fuel purchase of Rs. 8,200.00 at IOC completed.", "IOC fuel", "Transport", "−Rs 8,200"),
+    SampleSms("CEB", "Your electricity bill of Rs. 6,740.00 has been paid.", "CEB bill", "Utilities", "−Rs 6,740"),
 )
 
 @Composable
@@ -132,26 +139,30 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     Button(onClick = onContinue, Modifier.fillMaxWidth()) { Text(if (granted) "Find my history" else "Continue without SMS") }
 }
 
-private val SortedLabels = listOf(
-    "COMBANK · KEELLS · Groceries", "BOC ATM · Cash withdrawal", "OTP ignored",
-    "People's Bank · JustPay · Transfer", "SLTBILL · Utilities", "DIALOG promo ignored",
-    "HNB · CARGILLS · Card purchase", "1919 · IOC · Fuel", "CEB · Utilities",
-)
-
 @Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
-    StageScaffold(stage, content, onSkip) {
-        // One persistent layer spans both acts. Its keyed bodies keep their physical positions
-        // when progress changes, so sorting is a continuation of the pile rather than a reset.
-        Box(Modifier.fillMaxWidth().height(720.dp)) {
-            Column(Modifier.align(Alignment.TopCenter)) { body() }
-            SmsCardStage(
-                sortProgress = if (act == 0) 0f else progress,
-                reducedMotion = LocalReducedMotion.current,
-                onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-            )
+    val color by animateColorAsState(stage, label = "onboarding stage")
+    Box(Modifier.fillMaxSize().background(color)) {
+        // The same card layer remains composed while Act 1 becomes Act 2.
+        SmsCardStage(
+            sortProgress = if (act == 0) 0f else progress,
+            reducedMotion = LocalReducedMotion.current,
+            onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+        )
+        Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 16.dp, top = 4.dp)) {
+            TextButton(onClick = onSkip, colors = ButtonDefaults.textButtonColors(contentColor = content)) { Text("Skip") }
+        }
+        CompositionLocalProvider(LocalContentColor provides content) {
+            Column(
+                Modifier.align(if (act == 0) Alignment.TopCenter else Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .then(if (act == 1) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(start = 24.dp, end = 24.dp, top = if (act == 0) 104.dp else 8.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = if (act == 0) 0.dp else 16.dp),
+            ) { body() }
         }
     }
 }
@@ -163,36 +174,43 @@ private fun SmsCardStage(sortProgress: Float, reducedMotion: Boolean, onBodyLand
         val density = androidx.compose.ui.platform.LocalDensity.current
         val width = with(density) { maxWidth.toPx() }
         val height = with(density) { maxHeight.toPx() }
-        val cardW = with(density) { 200.dp.toPx() }
-        val cardH = with(density) { 80.dp.toPx() }
-        val gap = with(density) { 26.dp.toPx() }
-        val cards = remember { List(BubbleLabels.size) { Animatable(-cardH) } }
+        val cardW = with(density) { 260.dp.toPx() }
+        val cardH = with(density) { 96.dp.toPx() }
+        val gap = with(density) { 25.dp.toPx() }
+        val bottomInset = with(density) { 8.dp.toPx() }
+        val cards = remember(height) { List(SampleMessages.size) { Animatable(-cardH - it * cardH * 0.5f) } }
         val progress = sortProgress.coerceIn(0f, 1f)
-        BubbleLabels.forEachIndexed { index, _ ->
-            val target = if (progress == 0f) {
-                height - cardH - with(density) { 12.dp.toPx() } - (index.toFloat() * gap).coerceAtMost(height - cardH)
-            } else {
-                with(density) { (8 + index * 48).dp.toPx() }
-            }
-            LaunchedEffect(index, target, reducedMotion) {
-                if (reducedMotion) cards[index].snapTo(target)
-                else if (progress == 0f) {
-                    kotlinx.coroutines.delay(index * 115L)
-                    cards[index].animateTo(target, spring(dampingRatio = 0.72f, stiffness = 300f))
+        val sortedIndices = remember { SampleMessages.indices.filterNot { it in setOf(2, 5) } }
+        val rowSpacing = ((height - with(density) { 390.dp.toPx() }) / 7f)
+            .coerceIn(with(density) { 48.dp.toPx() }, with(density) { 64.dp.toPx() })
+        SampleMessages.forEachIndexed { index, sample ->
+            val pileY = height - bottomInset - cardH - index * gap
+            LaunchedEffect(index, pileY, reducedMotion) {
+                if (reducedMotion) cards[index].snapTo(pileY)
+                else {
+                    kotlinx.coroutines.delay(index * 140L)
+                    cards[index].animateTo(pileY, spring(dampingRatio = 0.64f, stiffness = 210f))
                     onBodyLanded()
-                } else cards[index].animateTo(target, spring(dampingRatio = 0.86f, stiffness = 500f))
+                }
             }
-            val x = if (progress == 0f) ((width - cardW) / 2f + (index % 3 - 1) * 18f) else with(density) { 12.dp.toPx() }
+            val pileX = ((width - cardW) / 2f + with(density) { ((index % 3 - 1) * 18).dp.toPx() })
+            val rowX = with(density) { 24.dp.toPx() }
+            val rowY = with(density) { 84.dp.toPx() } + sortedIndices.indexOf(index) * rowSpacing
+            val x = pileX + (rowX - pileX) * progress
+            val y = cards[index].value + (rowY - cards[index].value) * progress
             val rowAlpha = if (progress > 0.35f) ((progress - 0.35f) / 0.25f).coerceIn(0f, 1f) else 0f
             Box(
-                Modifier.offset { IntOffset(x.roundToInt(), cards[index].value.roundToInt()) }
-                    .width(200.dp).height(80.dp).graphicsLayer { alpha = (1f - rowAlpha) * if (index in setOf(2, 5)) (1f - progress) else 1f },
-            ) { Bubble(BubbleLabels[index]) }
+                Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                    .width(260.dp).height(96.dp).graphicsLayer {
+                        alpha = (1f - rowAlpha) * if (index in setOf(2, 5)) (1f - progress) else 1f
+                        rotationZ = (index % 3 - 1) * 5f * (1f - progress)
+                    },
+            ) { Bubble(sample) }
             if (index !in setOf(2, 5)) {
                 Box(
-                    Modifier.offset { IntOffset(with(density) { 12.dp.toPx() }.roundToInt(), cards[index].value.roundToInt()) }
-                        .fillMaxWidth().height(44.dp).graphicsLayer { alpha = rowAlpha },
-                ) { SortedRow(SortedLabels[index]) }
+                    Modifier.offset { IntOffset(rowX.roundToInt(), y.roundToInt()) }
+                        .fillMaxWidth().height(56.dp).graphicsLayer { alpha = rowAlpha },
+                ) { SortedRow(sample) }
             }
         }
     }
@@ -236,8 +254,29 @@ private fun SmsCardStage(sortProgress: Float, reducedMotion: Boolean, onBodyLand
         CompositionLocalProvider(LocalContentColor provides content) { body() }
     }
 }
-@Composable private fun Bubble(text: String) { Surface(shape = RoundedCornerShape(14.dp), shadowElevation = 4.dp, modifier = Modifier.padding(2.dp)) { Text(text, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2) } }
-@Composable private fun SortedRow(text: String) { Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize().padding(vertical = 2.dp)) { Box(contentAlignment = Alignment.CenterStart) { Text(text, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1) } } }
+@Composable private fun Bubble(sample: SampleSms) {
+    Surface(shape = RoundedCornerShape(17.dp), shadowElevation = 5.dp, color = Color.White, modifier = Modifier.fillMaxSize().padding(2.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(sample.sender, style = MaterialTheme.typography.labelLarge, color = Color(0xFF111827))
+                Text("now", style = MaterialTheme.typography.labelSmall, color = Color(0xFF667085))
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(sample.body, style = MaterialTheme.typography.bodySmall, color = Color(0xFF303846), maxLines = 2)
+        }
+    }
+}
+@Composable private fun SortedRow(sample: SampleSms) {
+    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize().padding(vertical = 2.dp)) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(sample.result, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                Text(sample.category, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(sample.amount, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
 private fun lerp(a: Color, b: Color, f: Float) = Color(a.red + (b.red-a.red)*f, a.green + (b.green-a.green)*f, a.blue + (b.blue-a.blue)*f, a.alpha + (b.alpha-a.alpha)*f)
 
 private fun hasSmsPermission(context: Context): Boolean = SmsPermissions.all {
