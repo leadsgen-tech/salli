@@ -134,7 +134,7 @@ private val SortedLabels = listOf(
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     StageScaffold(stage, content, onSkip) {
         if (act < 2) BubbleStage(
-            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(110.dp, 60.dp) },
+            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(90.dp, 48.dp) },
             sortProgress = if (act == 0) 0f else progress,
             modifier = Modifier.fillMaxWidth().height(360.dp),
             discarded = setOf(2, 5), floorFraction = 0.92f,
