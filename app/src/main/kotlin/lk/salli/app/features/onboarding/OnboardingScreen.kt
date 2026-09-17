@@ -44,7 +44,13 @@ import lk.salli.design.theme.SalliBrandColors
 import kotlinx.coroutines.launch
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
-private val BubbleLabels = listOf("COMBANK\nCard", "BOC\nATM", "OTP code", "People's\nTransfer", "SLT\nBill", "DIALOG\nPromo", "HNB\nDeposit", "1919\nFuel", "CEB\nBill")
+private val BubbleLabels = listOf(
+    "COMBANK · Card purchase\nRs 4,280 at KEELLS", "BOC · Cash withdrawal\nRs 5,000 at ATM",
+    "OTP 482913\nExpires in 5 min", "People's Bank · JustPay\nRs 2,400 sent",
+    "SLTBILL · Payment received\nRs 11,953", "DIALOG · Special offer\nReply YES to claim",
+    "HNB · Card alert\nRs 3,650 at CARGILLS", "1919 · Fuel purchase\nRs 8,200 at IOC",
+    "CEB · Bill paid\nRs 6,740",
+)
 
 @Composable
 fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, replay: Boolean = false, viewModel: OnboardingViewModel = hiltViewModel()) {
@@ -133,18 +139,33 @@ private val SortedLabels = listOf(
     val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     StageScaffold(stage, content, onSkip) {
-        if (act < 2) BubbleStage(
-            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(90.dp, 48.dp) },
-            sortProgress = if (act == 0) 0f else progress,
-            modifier = Modifier.fillMaxWidth().height(360.dp),
-            discarded = setOf(2, 5), floorFraction = 0.92f,
-            rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
-            reducedMotion = LocalReducedMotion.current,
-            onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-            bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
-        )
-        Spacer(Modifier.height(12.dp))
-        body()
+        if (act == 0) {
+            Box(Modifier.fillMaxWidth().height(620.dp)) {
+                Column(Modifier.align(Alignment.TopCenter)) { body() }
+                BubbleStage(
+                    bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(190.dp, 76.dp) },
+                    sortProgress = 0f,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(360.dp),
+                    discarded = setOf(2, 5), floorFraction = 0.94f,
+                    rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
+                    reducedMotion = LocalReducedMotion.current,
+                    onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                    bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
+                )
+            }
+        } else {
+            BubbleStage(
+                bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(190.dp, 76.dp) },
+                sortProgress = progress,
+                modifier = Modifier.fillMaxWidth().height(360.dp),
+                discarded = setOf(2, 5), floorFraction = 0.94f,
+                rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
+                reducedMotion = LocalReducedMotion.current,
+                onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
+            )
+            Spacer(Modifier.height(12.dp)); body()
+        }
     }
 }
 
