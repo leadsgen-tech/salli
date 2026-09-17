@@ -1,0 +1,1 @@
+Polish before store submission: wider account cards with complete balances, clearer Plan and Insights, normalized transfer and bill-payment labels, Dialog merchant artwork, duplicate Fuel Pass fixes, and faster tab switching.

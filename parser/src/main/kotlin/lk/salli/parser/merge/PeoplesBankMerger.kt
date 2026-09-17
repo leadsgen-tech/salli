@@ -102,8 +102,14 @@ object PeoplesBankMerger {
         val merged = primary.copy(
             fee = fee,
             merchantRaw = confirm.merchantRaw,
-            // If the confirm was a fund-transfer, prefer that over the primary's LPAY label.
-            type = if (confirm.type == TransactionType.ONLINE_TRANSFER) confirm.type else primary.type,
+            // The confirmation is the authoritative description of the action. The primary
+            // carries the account and balance, but its generic channel label cannot tell a
+            // transfer from a telecom bill.
+            type = when (confirm.type) {
+                TransactionType.ONLINE_TRANSFER,
+                TransactionType.BILL_PAYMENT -> confirm.type
+                else -> primary.type
+            },
         )
         return MergeResult(merged = merged, supersedes = superseded)
     }

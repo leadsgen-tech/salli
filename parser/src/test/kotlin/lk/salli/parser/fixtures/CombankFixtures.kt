@@ -197,7 +197,7 @@ object CombankFixtures {
             sender = "COMBANK",
             body = "Bill Payment in the amount of LKR 547.00 was received on 31/03/2026 from the ComBank Digital.",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.BILL_PAYMENT,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 54700,
                 currency = Currency.LKR,

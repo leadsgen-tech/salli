@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -30,9 +34,9 @@ import lk.salli.design.motion.LocalReducedMotion
  * stay at 60 fps under a scrubbing finger, and a dependency that renders axes and legends we
  * don't want is a dependency that renders axes and legends we have to hide.
  *
- * Scrub semantics: dragging selects the bar under the finger and fires [onSelect] once per
- * change with a tick haptic, so the caller's list can follow without the chart knowing what a
- * list is.
+ * Scrub semantics: dragging previews the bar under the finger with a tick haptic, then fires
+ * [onSelect] once on release. This keeps an attached database-backed detail view from
+ * restarting its query for every bar crossed.
  *
  * @param values    raw magnitudes; scaled against the largest. Empty renders nothing.
  * @param highlight index drawn in the accent colour (today, or the selected period).
@@ -68,19 +72,17 @@ fun MiniBarChart(
     }
 
     val max = values.maxOrNull()?.coerceAtLeast(1L) ?: 1L
-    // Deliberately a plain array rather than a MutableState: this only dedupes repeat
-    // callbacks while a finger drags across one bar, and making it snapshot state would
-    // recompose the chart on every pointer event it is trying to filter out.
-    val lastSelected = remember { intArrayOf(-1) }
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    var previewIndex by remember { mutableIntStateOf(-1) }
 
-    fun pick(x: Float, width: Float) {
-        if (onSelect == null || width <= 0f) return
+    fun pick(x: Float, width: Float): Int? {
+        if (currentOnSelect == null || width <= 0f) return null
         val index = ((x / width) * values.size).toInt().coerceIn(0, values.size - 1)
-        if (index != lastSelected[0]) {
-            lastSelected[0] = index
+        if (index != previewIndex) {
+            previewIndex = index
             haptics.tick()
-            onSelect(index)
         }
+        return index
     }
 
     Canvas(
@@ -94,18 +96,18 @@ fun MiniBarChart(
                     Modifier
                         .pointerInput(values.size) {
                             detectTapGestures { offset ->
-                                pick(offset.x, size.width.toFloat())
-                                // The last-picked guard exists to dedupe a drag, not a
-                                // tap: without this reset, tapping the same bar twice is
-                                // silently swallowed the second time.
-                                lastSelected[0] = -1
+                                pick(offset.x, size.width.toFloat())?.let { currentOnSelect?.invoke(it) }
+                                previewIndex = -1
                             }
                         }
                         .pointerInput(values.size) {
                             detectHorizontalDragGestures(
                                 onDragStart = { offset -> pick(offset.x, size.width.toFloat()) },
-                                onDragEnd = { lastSelected[0] = -1 },
-                                onDragCancel = { lastSelected[0] = -1 },
+                                onDragEnd = {
+                                    previewIndex.takeIf { it >= 0 }?.let { currentOnSelect?.invoke(it) }
+                                    previewIndex = -1
+                                },
+                                onDragCancel = { previewIndex = -1 },
                             ) { change, _ -> pick(change.position.x, size.width.toFloat()) }
                         }
                 },
@@ -121,7 +123,11 @@ fun MiniBarChart(
             // A zero-height bar looks like missing data rather than a quiet day, so every
             // bucket keeps a 2 dp stub.
             val barHeight = (size.height * fraction).coerceAtLeast(2.dp.toPx())
-            val color = if (index == selected || index == highlight) accentColor else barColor
+            val color = if (index == previewIndex || index == selected || index == highlight) {
+                accentColor
+            } else {
+                barColor
+            }
             drawRoundRect(
                 color = color,
                 topLeft = Offset(x = index * slot, y = size.height - barHeight),

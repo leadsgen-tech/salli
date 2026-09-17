@@ -77,7 +77,7 @@ class PeoplesBankMergerTest {
     }
 
     @Test
-    fun `mobile-payment confirm merges and keeps MOBILE_PAYMENT type`() {
+    fun `mobile-payment confirm merges as a bill payment`() {
         val primary = peoplesPrimaryDebit(
             timestamp = 1_000_000_000L,
             amountMinor = 10_000, // Rs 100.00
@@ -90,7 +90,7 @@ class PeoplesBankMergerTest {
             balance = null,
             fee = null,
             flow = TransactionFlow.EXPENSE,
-            type = TransactionType.MOBILE_PAYMENT,
+            type = TransactionType.BILL_PAYMENT,
             merchantRaw = "Mobitel",
             location = null,
             timestamp = 1_000_002_000L,
@@ -99,7 +99,7 @@ class PeoplesBankMergerTest {
         )
         val result = PeoplesBankMerger.tryMerge(confirm, recent = listOf(primary))
         assertThat(result).isNotNull()
-        assertThat(result!!.merged.type).isEqualTo(TransactionType.MOBILE_PAYMENT)
+        assertThat(result!!.merged.type).isEqualTo(TransactionType.BILL_PAYMENT)
         assertThat(result.merged.merchantRaw).isEqualTo("Mobitel")
         // No fee when amounts match — primary for a reload often equals confirm.
         assertThat(result.merged.fee).isNull()

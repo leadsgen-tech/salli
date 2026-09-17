@@ -86,13 +86,16 @@ object PeoplesBankTemplate : BankTemplate {
             return parsePrimary(m, body, receivedAt)
         }
         mobilePayment.find(trimmed)?.let { m ->
-            return parseConfirm(m, body, receivedAt, TransactionType.MOBILE_PAYMENT)
+            // These confirms are reloads and merchant payments (Dialog, Mobitel, etc.), not
+            // bank-account transfers. Keep the merchant visible and let the shared UI show
+            // its logo.
+            return parseConfirm(m, body, receivedAt, TransactionType.BILL_PAYMENT)
         }
         fundTransfer.find(trimmed)?.let { m ->
             return parseConfirm(m, body, receivedAt, TransactionType.ONLINE_TRANSFER)
         }
         billPayment.find(trimmed)?.let { m ->
-            return parseConfirm(m, body, receivedAt, TransactionType.MOBILE_PAYMENT)
+            return parseConfirm(m, body, receivedAt, TransactionType.BILL_PAYMENT)
         }
         qrPayment.find(trimmed)?.let { m ->
             return parseConfirm(m, body, receivedAt, TransactionType.POS)
@@ -176,9 +179,9 @@ object PeoplesBankTemplate : BankTemplate {
         phrase.equals("POS", ignoreCase = true) -> TransactionType.POS
         phrase.equals("ATM", ignoreCase = true) -> TransactionType.ATM
         phrase.equals("CDM", ignoreCase = true) -> TransactionType.CDM
-        phrase.contains("LPAY", ignoreCase = true) -> TransactionType.MOBILE_PAYMENT
-        phrase.contains("PeoPAY", ignoreCase = true) -> TransactionType.MOBILE_PAYMENT
-        phrase.contains("Just Pay", ignoreCase = true) -> TransactionType.MOBILE_PAYMENT
+        phrase.contains("LPAY", ignoreCase = true) -> TransactionType.ONLINE_TRANSFER
+        phrase.contains("PeoPAY", ignoreCase = true) -> TransactionType.ONLINE_TRANSFER
+        phrase.contains("Just Pay", ignoreCase = true) -> TransactionType.ONLINE_TRANSFER
         // "Cash payment" is a physical cash deposit at a branch/agent — same semantic
         // bucket as a CDM (Cash Deposit Machine) deposit. Mapping to CDM means the
         // TypeCategorizer routes it to the Cash category instead of leaving it adrift

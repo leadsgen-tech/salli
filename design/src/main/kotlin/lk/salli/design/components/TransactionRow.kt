@@ -143,7 +143,7 @@ private fun TransactionRowContent(
             .padding(horizontal = SalliSpacing.md, vertical = SalliSpacing.sm),
     ) {
         when {
-            logoPath != null -> MerchantLogo(path = logoPath)
+            logoPath != null -> MerchantLogo(path = logoPath, size = LeadingSize)
             isOwnTransfer -> MutedAvatar(icon = Icons.Outlined.SwapHoriz)
             categoryColorSeed != null -> CategoryIcon(
                 iconName = categoryIconName,
@@ -197,23 +197,45 @@ private fun TransactionRowContent(
 private val LeadingSize = 44.dp
 
 @Composable
-private fun MerchantLogo(path: String) {
+fun MerchantAvatar(
+    merchantRaw: String,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = LeadingSize,
+) {
+    val path = MerchantLogos.resolve(merchantRaw)
+    if (path != null) {
+        MerchantLogo(path = path, size = size, modifier = modifier)
+    } else {
+        MutedAvatar(icon = Icons.Outlined.Receipt, size = size, modifier = modifier)
+    }
+}
+
+@Composable
+private fun MerchantLogo(
+    path: String,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+) {
     AsyncImage(
         model = MerchantLogos.asAssetUri(path),
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .size(LeadingSize)
+        modifier = modifier
+            .size(size)
             .clip(CircleShape),
     )
 }
 
 @Composable
-private fun MutedAvatar(icon: ImageVector) {
+private fun MutedAvatar(
+    icon: ImageVector,
+    size: androidx.compose.ui.unit.Dp = LeadingSize,
+    modifier: Modifier = Modifier,
+) {
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(LeadingSize)
+        modifier = modifier
+            .size(size)
             .clip(SalliShapeTokens.row)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {

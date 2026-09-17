@@ -323,41 +323,22 @@ private fun AccountStack(
 }
 
 /**
- * Horizontal strip of account chips that adapts to count:
- *  - 1–3 accounts → each takes equal weight, fills the row
- *  - 4+          → horizontal scroller with fixed-width chips
- *
- * A bank-colour edge keeps account identity visible without turning the whole card into an
- * inaccessible brand-colour surface.
+ * Horizontal strip of account cards. Every card keeps enough width for a full LKR balance,
+ * regardless of account count. The old equal-weight layout squeezed three accounts into roughly
+ * 100 dp each, so six-figure balances ended in an ellipsis even though the value was available.
  */
 @Composable
 private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Long) -> Unit) {
-    if (accounts.size <= 3) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            accounts.forEach { a ->
-                AccountChip(
-                    account = a,
-                    color = BankBrand.forSender(a.senderAddress).secondary,
-                    onClick = { onAccountClick(a.id) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    } else {
-        androidx.compose.foundation.lazy.LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(accounts, key = { it.id }) { a ->
-                AccountChip(
-                    account = a,
-                    color = BankBrand.forSender(a.senderAddress).secondary,
-                    onClick = { onAccountClick(a.id) },
-                    modifier = Modifier.width(160.dp),
-                )
-            }
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(accounts, key = { it.id }) { account ->
+            AccountChip(
+                account = account,
+                color = BankBrand.forSender(account.senderAddress).secondary,
+                onClick = { onAccountClick(account.id) },
+                modifier = Modifier.width(216.dp),
+            )
         }
     }
 }
@@ -371,37 +352,47 @@ private fun AccountChip(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(color.copy(alpha = 0.08f))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            BankAvatar(sender = account.senderAddress, displayName = account.displayName, size = 32.dp)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = account.displayName,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BankAvatar(sender = account.senderAddress, displayName = account.displayName, size = 36.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = account.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = account.accountLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
         // Single line, same style for every account. Real balances come from BOC's
         // `Av_Bal` / People's Bank's anchor-plus-delta imputation; for senders that never
         // ship a balance (ComBank cards, the Q+ account) we fall back to the signed net of
         // tracked activity. A card with only outflows reads as `−Rs 45,385.00`, an account
         // with mixed flow as `Rs 14,153.28` — same visual, no extra labels.
-            val display: Money? = account.balance ?: account.activityNet
-            if (display != null) {
-                Text(
-                    text = MoneyFormat.formatWithMinus(display),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
+        val display: Money? = account.balance ?: account.activityNet
+        if (display != null) {
+            Text(
+                text = MoneyFormat.formatWithMinus(display),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }

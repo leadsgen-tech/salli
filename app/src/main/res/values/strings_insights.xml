@@ -1,2 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources><string name="insights_title">Insights</string><string name="insights_previous">Previous period</string><string name="insights_next">Next period</string><string name="insights_spent">%1$s spent</string><string name="insights_empty_title">Nothing to analyse yet</string><string name="insights_empty_message">Your spending by category will appear here.</string><string name="insights_by_category">By category</string><string name="insights_category_subtitle">%1$d%% of spending</string><string name="insights_merchants">Top merchants</string><string name="insights_visits">%1$d visits</string><string name="insights_accounts">By account</string><string name="insights_account_subtitle">Spent this period</string><string name="insights_cash_flow">Cash flow</string><string name="insights_income">In %1$s</string><string name="insights_expense">Out %1$s</string><string name="insights_net">Net %1$s</string></resources>
+<resources>
+    <string name="insights_title">Insights</string>
+    <string name="insights_previous">Previous period</string>
+    <string name="insights_next">Next period</string>
+    <string name="insights_spent">%1$s spent</string>
+    <string name="insights_spent_this_period">spent this period</string>
+    <string name="insights_top_category">%1$s · %2$d%%</string>
+    <string name="insights_empty_title">Nothing to analyse yet</string>
+    <string name="insights_empty_message">Your spending by category will appear here.</string>
+    <string name="insights_by_category">By category</string>
+    <string name="insights_category_subtitle">%1$d%% of spending</string>
+    <string name="insights_category_detail">%1$d transactions · %2$d%% of spending</string>
+    <string name="insights_merchants">Top merchants</string>
+    <string name="insights_visits">%1$d visits</string>
+    <string name="insights_accounts">By account</string>
+    <string name="insights_account_subtitle">Spent this period</string>
+    <string name="insights_cash_flow">Cash flow</string>
+    <string name="insights_income">In %1$s</string>
+    <string name="insights_expense">Out %1$s</string>
+    <string name="insights_net">Net %1$s</string>
+    <string name="insights_income_label">In</string>
+    <string name="insights_expense_label">Out</string>
+    <string name="insights_net_label">Net</string>
+</resources>

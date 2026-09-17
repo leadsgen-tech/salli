@@ -410,7 +410,7 @@ object CombankTemplate : BankTemplate {
                     balance = null,
                     fee = null,
                     flow = TransactionFlow.EXPENSE,
-                    type = TransactionType.MOBILE_PAYMENT,
+                    type = TransactionType.BILL_PAYMENT,
                     // No biller name in the body — best we can surface is the channel.
                     merchantRaw = "ComBank Digital",
                     location = null,

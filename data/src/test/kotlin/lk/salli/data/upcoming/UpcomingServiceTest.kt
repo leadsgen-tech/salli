@@ -293,17 +293,18 @@ class UpcomingServiceTest {
     // ---------------------------------------------------------------- fuel pass
 
     @Test
-    fun `an even plate is eligible on an even day and resets later`() = runBlocking<Unit> {
+    fun `an even plate produces one actionable eligible row`() = runBlocking<Unit> {
         // 14 September is even; BAM-0786 ends in 6.
         fuel("BAM-0786", resetsOn = day(4))
 
-        val byKind = items().associateBy { it.kind }
+        val rows = items()
+        val byKind = rows.associateBy { it.kind }
 
+        assertThat(rows).hasSize(1)
         assertThat(byKind.getValue(UpcomingKind.FUEL_ELIGIBLE).dueEpochDay).isEqualTo(today.toEpochDay())
         assertThat(byKind.getValue(UpcomingKind.FUEL_ELIGIBLE).tone).isEqualTo(UpcomingTone.POSITIVE)
         assertThat(byKind.getValue(UpcomingKind.FUEL_ELIGIBLE).title).isEqualTo("BAM-0786")
         assertThat(byKind.getValue(UpcomingKind.FUEL_ELIGIBLE).amountMinor).isNull()
-        assertThat(byKind.getValue(UpcomingKind.FUEL_RESET).dueEpochDay).isEqualTo(day(4).toEpochDay())
         assertThat(byKind.getValue(UpcomingKind.FUEL_ELIGIBLE).deepLink).isEqualTo(UpcomingRoutes.FUEL_PASS)
     }
 
@@ -329,19 +330,24 @@ class UpcomingServiceTest {
         fuel("BAM-0786", at = today.minusDays(9), balanceMilli = 20_000, resetsOn = today.minusDays(2))
         fuel("BAM-0786", at = today.minusDays(1), balanceMilli = 9_000, resetsOn = day(5))
 
-        assertThat(items().map { it.kind }).containsExactly(
-            UpcomingKind.FUEL_ELIGIBLE,
-            UpcomingKind.FUEL_RESET,
-        )
+        assertThat(items().map { it.kind }).containsExactly(UpcomingKind.FUEL_ELIGIBLE)
     }
 
     @Test
-    fun `the reset day reads as a deadline, not as an opportunity`() = runBlocking<Unit> {
-        fuel("BAM-0786", resetsOn = day(4))
+    fun `a reset fallback reads as a deadline not an opportunity`() = runBlocking<Unit> {
+        fuel("GOV", resetsOn = day(4))
 
         val reset = items().first { it.kind == UpcomingKind.FUEL_RESET }
 
         assertThat(reset.tone).isEqualTo(UpcomingTone.WARNING)
+    }
+
+    @Test
+    fun `plate casing and whitespace do not create duplicate upcoming rows`() = runBlocking<Unit> {
+        fuel(" bam-0786 ", at = today.minusDays(2), resetsOn = day(4))
+        fuel("BAM-0786", at = today.minusDays(1), resetsOn = day(5))
+
+        assertThat(items().map { it.title }).containsExactly("BAM-0786")
     }
 
     @Test
@@ -381,7 +387,6 @@ class UpcomingServiceTest {
             UpcomingKind.FUEL_ELIGIBLE, // today
             UpcomingKind.BILL,
             UpcomingKind.RECURRING,
-            UpcomingKind.FUEL_RESET,
         ).inOrder()
         assertThat(merged.map { it.dueEpochDay }).isInOrder()
     }

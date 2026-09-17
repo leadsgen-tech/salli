@@ -32,7 +32,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 500.25 (LPAY Tfr @08:58 22/04/2026).[Av_Bal: Rs. 1,046.27 at the time of SMS generated]",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 50025,
                 currency = Currency.LKR,
@@ -47,7 +47,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001******68 has been debited by Rs. 100.00 (LPAY Tfr @10:00 01/01/2025).[Av_Bal: Rs. 5,000.00 at the time of SMS generated]",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 10000,
                 currency = Currency.LKR,
@@ -60,7 +60,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001****68 has been credited by Rs. 700.50 (LPAY Tfr @13:18 05/04/2026).[Av_Bal: Rs. 9,486.15 at the time of SMS generated]",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.INCOME,
                 amountMinor = 70050,
                 currency = Currency.LKR,
@@ -145,7 +145,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001****68 has been credited by Rs. 500.00 (PeoPAY Tfr @08:55 02/04/2026).[Av_Bal: Rs. 636.15 at the time of SMS generated]",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.INCOME,
                 amountMinor = 50000,
                 currency = Currency.LKR,
@@ -159,7 +159,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Mobile Payment Successful, LKR 100.00 to Mobitel Ref No [PHONE] on 2026-04-15 21:53:17. Call 1961",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.BILL_PAYMENT,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 10000,
                 currency = Currency.LKR,
@@ -171,7 +171,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Mobile Payment Successful, LKR 385.00 to Dialog  Ref No [PHONE] on 2026-04-06 20:47:21. Call 1961",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.BILL_PAYMENT,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 38500,
                 currency = Currency.LKR,
@@ -212,7 +212,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001****68 has been debited by Rs. 6525.00 (LPAY Tfr @00:21 28/04/2026). Thank You- Inquiries Dial: 1961",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.EXPENSE,
                 amountMinor = 652500,
                 currency = Currency.LKR,
@@ -268,7 +268,7 @@ object PeoplesBankFixtures {
             sender = "PeoplesBank",
             body = "Dear Sir/Madam, Your A/C 280-2001****68 has been Credited (Reversal) by Rs. 0.99 (Just Pay Transaction @23:00 11/08/2026).Thank You.",
             expected = Expectation.Success(
-                type = TransactionType.MOBILE_PAYMENT,
+                type = TransactionType.ONLINE_TRANSFER,
                 flow = TransactionFlow.INCOME,
                 amountMinor = 99,
                 currency = Currency.LKR,

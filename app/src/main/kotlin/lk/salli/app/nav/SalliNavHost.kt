@@ -195,6 +195,7 @@ private fun UnlockedSalliNavHost(
                     onOpenGoals = { navController.navigate(Route.GOALS) },
                     onOpenSplit = { navController.navigate(Route.splitGroups()) },
                     onOpenFuelPass = { navController.navigate(Route.FUEL_PASS) },
+                    onOpenSafeToSpend = { navController.navigate(Route.SAFE_TO_SPEND) },
                 )
             }
             composable(Destination.INSIGHTS.route) {
@@ -314,7 +315,10 @@ private const val UNLOCKED_STATE_KEY = "salli-unlocked-content"
 
 private fun NavHostController.navigateToTab(dest: Destination) {
     navigate(dest.route) {
-        popUpTo(Destination.HOME.route)
+        popUpTo(Destination.HOME.route) {
+            saveState = true
+        }
         launchSingleTop = true
+        restoreState = true
     }
 }

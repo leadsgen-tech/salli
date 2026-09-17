@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.CreditCardOff
 import androidx.compose.material.icons.outlined.CurrencyExchange
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.LocalAtm
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Receipt
@@ -113,7 +114,11 @@ fun TransactionEntity.toTimelineItem(
     accountDisplayName: String?,
     counterpartAccountName: String? = null,
 ): TimelineItem {
-    val type = TransactionType.fromId(typeId)
+    val parsedType = TransactionType.fromId(typeId)
+    // Older rows stored People's Bank transfers and bill payments under MOBILE_PAYMENT.
+    // Normalise them while presenting so existing installs become consistent immediately;
+    // newly parsed rows use the specific types directly.
+    val type = canonicalType(parsedType, senderAddress, rawBody)
     val flow = TransactionFlow.fromId(flowId)
     // A user-written note wins over everything — if they took the time to type a name, use
     // it as the row title. Falls through to merchantRaw, then the type's generic label.
@@ -163,7 +168,7 @@ private fun deriveTitle(
     isDeclined: Boolean,
 ): String {
     val prefix = if (isDeclined) "Declined · " else ""
-    val base = merchantRaw?.takeIf { it.isNotBlank() } ?: when (type) {
+    val generic = when (type) {
         TransactionType.ATM -> "ATM"
         TransactionType.CDM -> "Cash deposit"
         TransactionType.CHEQUE -> "Cheque"
@@ -175,13 +180,18 @@ private fun deriveTitle(
         TransactionType.ONLINE_TRANSFER,
         TransactionType.CEFT,
         TransactionType.SLIPS -> "Transfer"
+        TransactionType.MOBILE_PAYMENT -> "Mobile payment"
         TransactionType.POS -> "Purchase"
-        TransactionType.MOBILE_PAYMENT -> "Mobile Payment"
+        TransactionType.BILL_PAYMENT -> "Bill payment"
         TransactionType.FEE -> "Fee"
         TransactionType.DECLINED -> "Declined"
         TransactionType.BALANCE_CORRECTION -> "Balance correction"
         TransactionType.OTHER -> "Transaction"
     }
+    val isTransfer = type == TransactionType.ONLINE_TRANSFER ||
+        type == TransactionType.CEFT ||
+        type == TransactionType.SLIPS
+    val base = if (isTransfer) generic else merchantRaw?.takeIf { it.isNotBlank() } ?: generic
     return prefix + base
 }
 
@@ -196,8 +206,26 @@ private fun iconFor(type: TransactionType): ImageVector = when (type) {
     TransactionType.CEFT,
     TransactionType.SLIPS -> Icons.Outlined.SwapHoriz
     TransactionType.MOBILE_PAYMENT -> Icons.Outlined.PhoneAndroid
+    TransactionType.BILL_PAYMENT -> Icons.Outlined.Bolt
     TransactionType.FEE -> Icons.Outlined.CurrencyExchange
     TransactionType.DECLINED -> Icons.Outlined.CreditCardOff
     TransactionType.BALANCE_CORRECTION -> Icons.Outlined.AutoFixHigh
     TransactionType.OTHER -> Icons.Outlined.AttachMoney
+}
+
+private fun canonicalType(
+    type: TransactionType,
+    senderAddress: String?,
+    rawBody: String?,
+): TransactionType = when {
+    type != TransactionType.MOBILE_PAYMENT -> type
+    !senderAddress.orEmpty().trim().equals("PeoplesBank", ignoreCase = true) -> type
+    rawBody.orEmpty().contains("Mobile Payment Successful", ignoreCase = true) ->
+        TransactionType.BILL_PAYMENT
+    rawBody.orEmpty().contains("LPAY Tfr", ignoreCase = true) ||
+        rawBody.orEmpty().contains("PeoPAY", ignoreCase = true) ||
+        rawBody.orEmpty().contains("Just Pay", ignoreCase = true) ||
+        rawBody.orEmpty().contains("Fund transfer", ignoreCase = true) ->
+        TransactionType.ONLINE_TRANSFER
+    else -> type
 }

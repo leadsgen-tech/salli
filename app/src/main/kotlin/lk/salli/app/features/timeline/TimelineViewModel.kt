@@ -9,11 +9,15 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.app.ui.TimelineItem
@@ -135,9 +139,13 @@ class TimelineViewModel @Inject constructor(
     //  - query present → widened to all-time so the user sees every hit regardless of
     //                    the currently-active period. This matches what the user
     //                    actually intends — "find this merchant everywhere".
-    private val txns = kotlinx.coroutines.flow.combine(_range, _query) { r, q -> r to q }
-        .flatMapLatest { (r, q) ->
-            if (q.isBlank()) db.transactions().observeInRange(r.fromMillis, r.untilMillis)
+    private val searchAllTime = _query
+        .map { it.isNotBlank() }
+        .distinctUntilChanged()
+
+    private val txns = kotlinx.coroutines.flow.combine(_range, searchAllTime) { r, allTime -> r to allTime }
+        .flatMapLatest { (r, allTime) ->
+            if (!allTime) db.transactions().observeInRange(r.fromMillis, r.untilMillis)
             else db.transactions().observeInRange(0L, Long.MAX_VALUE)
         }
 
@@ -252,7 +260,9 @@ class TimelineViewModel @Inject constructor(
             selectedAccountId = filters.accountId,
             selectedCategoryId = filters.categoryId,
         )
-    }.stateIn(
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = TimelineUiState(

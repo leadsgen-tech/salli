@@ -8,11 +8,13 @@ import java.util.Calendar
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import lk.salli.data.db.SalliDatabase
@@ -38,6 +40,7 @@ data class InsightSlice(
 /** One month's stacked expense, broken down by top-N categories. */
 data class MonthlyBar(
     val label: String,                  // "Mar"
+    val range: DateRange,
     val totalMinor: Long,
     /** Per-category contributions. The slice at index `i` shares the `i`-th colour tint. */
     val slices: List<BarSlice>,
@@ -51,7 +54,13 @@ data class BarSlice(
 )
 
 data class MerchantInsight(val name: String, val totalMinor: Long, val count: Int, val currency: String)
-data class AccountInsight(val id: Long, val name: String, val totalMinor: Long, val currency: String)
+data class AccountInsight(
+    val id: Long,
+    val name: String,
+    val senderAddress: String,
+    val totalMinor: Long,
+    val currency: String,
+)
 
 data class InsightsUiState(
     val range: DateRange,
@@ -125,6 +134,7 @@ class InsightsViewModel @Inject constructor(
             accounts.filter { it.id !in hidden },
         )
     }
+        .flowOn(Dispatchers.Default)
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
@@ -138,6 +148,9 @@ class InsightsViewModel @Inject constructor(
     fun onPrevRange() { _range.value = DateRange.prevCycle(_range.value, monthStartDay.value) }
     fun onNextRange() { _range.value = DateRange.nextCycle(_range.value, monthStartDay.value) }
     fun onPickRange(range: DateRange) { _range.value = range }
+    fun onSelectMonthlyBar(index: Int) {
+        state.value.monthlyBars.getOrNull(index)?.let { _range.value = it.range }
+    }
 
     private fun aggregate(
         range: DateRange,
@@ -146,7 +159,7 @@ class InsightsViewModel @Inject constructor(
         categories: List<CategoryEntity>,
         accounts: List<lk.salli.data.db.entities.AccountEntity>,
     ): InsightsUiState {
-        val real = txns.filter { !it.isDeclined && it.transferGroupId == null }
+        val real = txns.filter { !it.isDeclined && it.transferGroupId == null && !it.isHidden }
         val expense = real.filter { it.flowId == TransactionFlow.EXPENSE.id }
         val income = real.filter { it.flowId == TransactionFlow.INCOME.id }
 
@@ -188,9 +201,16 @@ class InsightsViewModel @Inject constructor(
             .groupBy({ it.first }, { it.second })
             .map { (name, rows) -> MerchantInsight(name, rows.sumOf { it.amountMinor }, rows.size, dominantCurrency) }
             .sortedByDescending { it.totalMinor }.take(5)
-        val accountNames = accounts.associate { it.id to it.displayName }
+        val accountNames = accounts.associateBy { it.id }
         val accountInsights = expenseInCurrency.groupBy { it.accountId }.map { (id, rows) ->
-            AccountInsight(id, accountNames[id] ?: "Account", rows.sumOf { it.amountMinor }, dominantCurrency)
+            val account = accountNames[id]
+            AccountInsight(
+                id = id,
+                name = account?.displayName ?: "Account",
+                senderAddress = account?.senderAddress.orEmpty(),
+                totalMinor = rows.sumOf { it.amountMinor },
+                currency = dominantCurrency,
+            )
         }.sortedByDescending { it.totalMinor }
 
         return InsightsUiState(
@@ -219,9 +239,6 @@ class InsightsViewModel @Inject constructor(
         range: DateRange,
     ): List<MonthlyBar> {
         val fmt = SimpleDateFormat("MMM", Locale.getDefault())
-        val monthMs = 30L * 24 * 60 * 60 * 1000  // approximate — only used for grouping key
-        @Suppress("UNUSED_VARIABLE") val _m = monthMs
-
         val now = Calendar.getInstance()
         now.set(Calendar.DAY_OF_MONTH, 1)
         now.set(Calendar.HOUR_OF_DAY, 0); now.set(Calendar.MINUTE, 0)
@@ -238,9 +255,10 @@ class InsightsViewModel @Inject constructor(
                 timeInMillis = start.timeInMillis
                 add(Calendar.MONTH, 1)
             }
+            val monthRange = DateRange.monthContaining(start.timeInMillis)
             val label = fmt.format(start.time)
             val inMonth = sixMonth.filter {
-                !it.isDeclined && it.transferGroupId == null &&
+                !it.isDeclined && it.transferGroupId == null && !it.isHidden &&
                     it.flowId == TransactionFlow.EXPENSE.id &&
                     it.amountCurrency == dominantCurrency &&
                     it.timestamp in start.timeInMillis until end.timeInMillis
@@ -256,6 +274,7 @@ class InsightsViewModel @Inject constructor(
             val total = inMonth.sumOf { it.amountMinor }
             MonthlyBar(
                 label = label,
+                range = monthRange,
                 totalMinor = total,
                 slices = barSlices,
                 // Bars stay calendar months; the highlighted one is the month the active

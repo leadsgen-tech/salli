@@ -160,20 +160,31 @@ class UpcomingService(
             }
         }
 
-        // Newest record per vehicle carries the live balance and reset date; observeAll() is
-        // already newest-first, so the first hit per vehicle is the current one.
-        for ((_, record) in fuel.groupBy { it.vehicle }.mapValues { it.value.first() }) {
+        // Newest record per canonical vehicle carries the live balance and reset date. A plate
+        // can arrive with different casing or stray spacing across SMS vintages, so normalise
+        // before grouping instead of rendering the same vehicle several times.
+        val currentFuel = mutableMapOf<String, FuelPassRecordEntity>()
+        for (record in fuel) {
+            val vehicle = FuelPassRules.canonicalVehicle(record.vehicle)
+            val current = currentFuel[vehicle]
+            if (current == null || record.timestamp > current.timestamp) {
+                currentFuel[vehicle] = record
+            }
+        }
+        for ((vehicle, record) in currentFuel) {
             if (record.weeklyBalanceMilli <= 0L) continue
             val resetsOn = record.resetsOn?.let { localDate(it) }
             // A quota that has already rolled over tells us nothing until the next fill-up SMS.
             if (resetsOn != null && !today.isBefore(resetsOn)) continue
 
-            UpcomingRules.nextEligibleDay(record.vehicle, today, resetsOn)?.let { day ->
+            val eligibleDay = UpcomingRules.nextEligibleDay(vehicle, today, resetsOn)
+            if (eligibleDay != null) {
+                val day = eligibleDay
                 val epoch = day.toEpochDay()
                 if (epoch <= lastDay) {
                     items += UpcomingItem(
                         kind = UpcomingKind.FUEL_ELIGIBLE,
-                        title = record.vehicle,
+                        title = vehicle,
                         amountMinor = null,
                         currency = null,
                         dueEpochDay = epoch,
@@ -181,13 +192,15 @@ class UpcomingService(
                         deepLink = UpcomingRoutes.FUEL_PASS,
                     )
                 }
-            }
-
-            val resetDay = resetsOn?.toEpochDay() ?: continue
-            if (resetDay <= lastDay) {
+            } else {
+                // The eligible day is the useful action. Only fall back to the reset deadline
+                // when no eligible day exists before it, so Home and Plan never show two rows
+                // with the same number plate.
+                val resetDay = resetsOn?.toEpochDay() ?: continue
+                if (resetDay > lastDay) continue
                 items += UpcomingItem(
                     kind = UpcomingKind.FUEL_RESET,
-                    title = record.vehicle,
+                    title = vehicle,
                     amountMinor = null,
                     currency = null,
                     dueEpochDay = resetDay,

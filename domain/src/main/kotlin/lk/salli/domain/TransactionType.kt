@@ -39,6 +39,9 @@ enum class TransactionType(val id: Int) {
     /** Balance reconciliation (system-generated). */
     BALANCE_CORRECTION(10),
 
+    /** Utility, telecom or other bill payment made through a bank channel. */
+    BILL_PAYMENT(11),
+
     /** Anything else. */
     OTHER(99);
 

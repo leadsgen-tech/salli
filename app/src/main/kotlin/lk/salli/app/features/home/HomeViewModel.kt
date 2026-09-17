@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.stateIn
 import lk.salli.app.ui.TimelineItem
 import lk.salli.app.ui.toTimelineItems
@@ -262,7 +264,9 @@ class HomeViewModel @Inject constructor(
             topSpenders = topSpenders,
             isEmpty = accountSummaries.isEmpty() && items.isEmpty(),
         )
-    }.stateIn(
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
         initialValue = HomeUiState(),

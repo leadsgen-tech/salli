@@ -43,7 +43,8 @@ class FuelPassViewModel @Inject constructor(
         .map { records ->
             val today = LocalDate.now(colombo)
             FuelPassUiState(
-                vehicles = records.groupBy { it.vehicle }.map { (vehicle, list) -> card(vehicle, list, today) }
+                vehicles = records.groupBy { FuelPassRules.canonicalVehicle(it.vehicle) }
+                    .map { (vehicle, list) -> card(vehicle, list, today) }
                     .sortedBy { it.vehicle },
                 loading = false,
             )

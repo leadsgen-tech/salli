@@ -54,6 +54,8 @@ import lk.salli.data.upcoming.UpcomingKind
 import lk.salli.data.upcoming.UpcomingTone
 import lk.salli.design.components.HeroCard
 import lk.salli.design.components.HeroEyebrow
+import lk.salli.design.components.HeroFact
+import lk.salli.design.components.HeroSplit
 import lk.salli.design.components.RingProgress
 import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.theme.LocalSalliColors
@@ -68,6 +70,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import lk.salli.domain.planning.CommitmentKind
 import lk.salli.design.components.GroupedList
+import lk.salli.design.components.CategoryIcon
 import lk.salli.design.components.ListDivider
 import lk.salli.design.components.ListRow
 import lk.salli.design.components.PaceBar
@@ -105,6 +108,7 @@ fun PlanScreen(
     onOpenGoals: () -> Unit = {},
     onOpenSplit: () -> Unit = {},
     onOpenFuelPass: () -> Unit = {},
+    onOpenSafeToSpend: () -> Unit = {},
     viewModel: PlanViewModel = hiltViewModel(),
     budgetsViewModel: BudgetsViewModel = hiltViewModel(),
     goalsViewModel: GoalsViewModel = hiltViewModel(),
@@ -151,29 +155,75 @@ fun PlanScreen(
         item { Spacer(Modifier.height(SalliSpacing.sm)) }
         planning?.let { snapshot ->
             item {
-                val spokenFor = snapshot.safeToSpend.commitments
+                val safe = snapshot.safeToSpend
+                val spokenFor = safe.commitments
                     .filter { it.kind == CommitmentKind.BILL || it.kind == CommitmentKind.RECURRING }
                     .sumOf { it.amountMinor }
-                HeroCard {
-                    HeroEyebrow(stringResource(R.string.plan_spoken_for))
+                HeroCard(modifier = Modifier.clickable(onClick = onOpenSafeToSpend)) {
+                    HeroEyebrow(stringResource(R.string.plan_safe_today))
                     Spacer(Modifier.height(SalliSpacing.xs))
                     SpringOdometer(
-                        text = MoneyFormat.formatMinor(spokenFor, snapshot.currency),
+                        text = safe.perDayMinor?.let { MoneyFormat.formatMinor(it, snapshot.currency) }
+                            ?: stringResource(R.string.plan_safe_today_unavailable),
                         style = MaterialTheme.typography.displayMedium,
                         color = LocalSalliColors.current.onHero,
                     )
+                    if (safe.leftMinor != null || spokenFor > 0L) {
+                        HeroSplit {
+                            safe.leftMinor?.let { left ->
+                                HeroFact(
+                                    label = stringResource(R.string.plan_left_this_period),
+                                    value = MoneyFormat.formatMinor(left, snapshot.currency),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (spokenFor > 0L) {
+                                HeroFact(
+                                    label = stringResource(R.string.plan_committed),
+                                    value = MoneyFormat.formatMinor(spokenFor, snapshot.currency),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
                     upcoming.firstOrNull()?.let { next ->
-                        Spacer(Modifier.height(SalliSpacing.sm))
+                        Spacer(Modifier.height(SalliSpacing.xs))
                         Text(
                             text = stringResource(R.string.plan_next_due, next.title),
                             style = MaterialTheme.typography.bodySmall,
-                            color = LocalSalliColors.current.onHero.copy(alpha = 0.8f),
+                            color = LocalSalliColors.current.onHero.copy(alpha = 0.82f),
                         )
                     }
                 }
             }
             item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
         }
+        item {
+            SectionHeader(
+                title = stringResource(R.string.plan_budgets_header),
+                actionLabel = stringResource(R.string.plan_budgets_manage),
+                onAction = onOpenBudgets,
+            )
+        }
+        item { Spacer(Modifier.height(SalliSpacing.xs)) }
+        item {
+            GroupedList {
+                if (budgets.budgets.isEmpty()) {
+                    ListRow(
+                        title = stringResource(R.string.plan_budgets_empty_title),
+                        subtitle = stringResource(R.string.plan_budgets_empty_subtitle),
+                        onClick = onOpenBudgets,
+                    )
+                } else {
+                    budgets.budgets.forEachIndexed { index, budget ->
+                        if (index > 0) ListDivider()
+                        BudgetSummaryRow(budget = budget, onClick = onOpenBudgets)
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+
         if (upcoming.isNotEmpty()) {
             item { SectionHeader(title = stringResource(R.string.plan_up_next)) }
             item { Spacer(Modifier.height(SalliSpacing.xs)) }
@@ -199,31 +249,6 @@ fun PlanScreen(
             }
             item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
         }
-        item { SectionHeader(title = stringResource(R.string.plan_budgets_header)) }
-        item { Spacer(Modifier.height(SalliSpacing.xs)) }
-        item {
-            GroupedList {
-                if (budgets.budgets.isEmpty()) {
-                    ListRow(
-                        title = stringResource(R.string.plan_budgets_empty_title),
-                        subtitle = stringResource(R.string.plan_budgets_empty_subtitle),
-                        onClick = onOpenBudgets,
-                    )
-                } else {
-                    budgets.budgets.forEach { budget ->
-                        BudgetSummaryRow(budget = budget, onClick = onOpenBudgets)
-                        ListDivider()
-                    }
-                    ListRow(
-                        title = stringResource(R.string.plan_budgets_all),
-                        subtitle = stringResource(R.string.plan_budgets_all_subtitle),
-                        onClick = onOpenBudgets,
-                    )
-                }
-            }
-        }
-
-        item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
         item {
             SectionHeader(
                 title = stringResource(R.string.plan_goals_title),
@@ -232,7 +257,18 @@ fun PlanScreen(
             )
         }
         val liveGoals = goals.goals.filter { !it.isArchived }
-        if (liveGoals.isNotEmpty()) {
+        if (!goals.loading && liveGoals.isEmpty()) {
+            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            item {
+                GroupedList {
+                    ListRow(
+                        title = stringResource(R.string.plan_goals_title),
+                        subtitle = stringResource(R.string.plan_goals_empty),
+                        onClick = onOpenGoals,
+                    )
+                }
+            }
+        } else {
             item { Spacer(Modifier.height(SalliSpacing.xs)) }
             item {
                 Row(
@@ -377,6 +413,20 @@ private fun PlanUpcomingRow(
         title = item.title,
         subtitle = subtitle,
         modifier = modifier,
+        leading = {
+            CategoryIcon(
+                iconName = when (item.kind) {
+                    UpcomingKind.BILL -> "receipt_long"
+                    UpcomingKind.RECURRING -> "autorenew"
+                    UpcomingKind.FUEL_ELIGIBLE, UpcomingKind.FUEL_RESET -> "local_gas_station"
+                },
+                colorSeed = when (item.kind) {
+                    UpcomingKind.BILL -> 4
+                    UpcomingKind.RECURRING -> 8
+                    UpcomingKind.FUEL_ELIGIBLE, UpcomingKind.FUEL_RESET -> 3
+                },
+            )
+        },
         trailing = item.amountMinor?.let { amount ->
             { Text(MoneyFormat.formatMinor(amount, item.currency ?: "LKR")) }
         },

@@ -53,6 +53,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent.getStringExtra(EXTRA_START_ROUTE)?.let { route ->
+            widgetRouteRequest = route
+            widgetRouteRequestId = 1
+        }
         // Recreating BiometricPrompt reconnects its callback to the retained prompt fragment
         // after rotation. Window protection is applied before Compose can draw its first frame.
         appLock.attach(this)
@@ -89,7 +93,7 @@ class MainActivity : FragmentActivity() {
                     // Keep the initial graph stable when onboarding saves completion before
                     // navigating. Skipping SMS is a valid, persistent first-run choice.
                     val start = remember {
-                        if (introduced == true) intent.getStringExtra(EXTRA_START_ROUTE) ?: Destination.HOME.route else Route.ONBOARDING
+                        if (introduced == true) Destination.HOME.route else Route.ONBOARDING
                     }
                     SalliNavHost(
                         startDestination = start,

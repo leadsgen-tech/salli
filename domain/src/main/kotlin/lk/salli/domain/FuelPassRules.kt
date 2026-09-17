@@ -10,8 +10,12 @@ import java.time.LocalDate
  */
 object FuelPassRules {
 
+    /** Stable display/grouping key across SMS vintages with inconsistent casing or spaces. */
+    fun canonicalVehicle(vehicle: String): String = vehicle.trim().uppercase()
+
     /** Last digit of the registration number, or null when the plate has no trailing digit. */
-    fun lastDigit(vehicle: String): Int? = vehicle.trim().lastOrNull { it.isDigit() }?.digitToInt()
+    fun lastDigit(vehicle: String): Int? =
+        canonicalVehicle(vehicle).lastOrNull { it.isDigit() }?.digitToInt()
 
     fun isEligible(vehicle: String, date: LocalDate): Boolean {
         val digit = lastDigit(vehicle) ?: return true

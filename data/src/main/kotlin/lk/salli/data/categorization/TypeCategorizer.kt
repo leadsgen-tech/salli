@@ -39,6 +39,7 @@ class TypeCategorizer(private val categoryDao: CategoryDao) {
             TransactionType.SLIPS,
             TransactionType.MOBILE_PAYMENT ->
                 "Transfers"
+            TransactionType.BILL_PAYMENT -> "Utilities"
             TransactionType.FEE -> "Fees"
             // POS without a keyword hit — land in Shopping as a sensible catch-all.
             // Users can re-categorise individual rows via the transaction detail sheet and

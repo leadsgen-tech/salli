@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="plan_spoken_for">Spoken for this period</string>
+    <string name="plan_safe_today">Safe to spend today</string>
+    <string name="plan_safe_today_unavailable">Set a limit</string>
+    <string name="plan_left_this_period">Left this period</string>
+    <string name="plan_committed">Bills &amp; recurring</string>
     <string name="plan_next_due">Next: %1$s</string>
     <string name="plan_up_next">Up next</string>
     <string name="plan_goals_all">See all</string>
@@ -13,6 +17,7 @@
 
     <!-- Budgets, rendered inline: Plan is where you set caps, not a menu that leads to one. -->
     <string name="plan_budgets_header">Budgets</string>
+    <string name="plan_budgets_manage">Manage</string>
     <string name="plan_budgets_all">All budgets</string>
     <string name="plan_budgets_all_subtitle">Create, edit and set caps</string>
     <string name="plan_budgets_empty_title">Budgets</string>

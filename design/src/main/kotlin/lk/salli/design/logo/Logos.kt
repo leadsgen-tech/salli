@@ -46,9 +46,8 @@ object MerchantLogos {
         "netflix" to "merchants/netflix.jpg",
         "spotify" to "merchants/spotify.jpg",
         "steam" to "merchants/steam.jpg",
+        "dialog" to "merchants/dialog.png",
         // SLT Mobitel is one brand — Mobitel is SLT's mobile arm — so they share a logo.
-        // Dialog is a separate telco; until we bundle a dedicated asset, let it fall through
-        // to the Utilities category icon rather than show a competitor's mark.
         "slt" to "merchants/slt.jpg",
         "mobitel" to "merchants/slt.jpg",
         "carnage" to "merchants/carnage.jpg",

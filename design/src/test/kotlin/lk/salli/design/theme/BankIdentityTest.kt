@@ -2,6 +2,7 @@ package lk.salli.design.theme
 
 import com.google.common.truth.Truth.assertThat
 import lk.salli.design.logo.BankLogos
+import lk.salli.design.logo.MerchantLogos
 import org.junit.jupiter.api.Test
 
 /**
@@ -95,5 +96,11 @@ class BankIdentityTest {
         assertThat(BankBrand.forSender("SAMPCCTXN")).isEqualTo(BankBrand.forSender("SAMPATH"))
         assertThat(BankBrand.forSender("NDB CARD")).isEqualTo(BankBrand.forSender("NDB"))
         assertThat(BankBrand.forSender("BOCONLINE")).isEqualTo(BankBrand.forSender("BOC"))
+    }
+
+    @Test
+    fun `Dialog reload merchants resolve to the Dialog logo`() {
+        assertThat(MerchantLogos.resolve("Dialog")).isEqualTo("merchants/dialog.png")
+        assertThat(MerchantLogos.resolve("DIALOG AXIATA PLC")).isEqualTo("merchants/dialog.png")
     }
 }
