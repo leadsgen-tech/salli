@@ -224,6 +224,10 @@ interface TransactionDao {
         """,
     )
     suspend fun merchantTotals(merchantKey: String, hiddenAccountIds: List<Long>): List<MerchantTotalRow>
+
+    /** Rows per account, hidden or not: the coverage table in the formats export. */
+    @Query("SELECT account_id AS accountId, COUNT(*) AS count FROM transactions GROUP BY account_id")
+    suspend fun countByAccount(): List<AccountTransactionCount>
 }
 
 /**
@@ -251,3 +255,6 @@ data class MerchantTotalRow(
     @ColumnInfo(name = "first_seen") val firstSeen: Long,
     @ColumnInfo(name = "last_seen") val lastSeen: Long,
 )
+
+/** Result row for [TransactionDao.countByAccount]. */
+data class AccountTransactionCount(val accountId: Long, val count: Int)

@@ -16,6 +16,7 @@ import lk.salli.data.categorization.TypeCategorizer
 import lk.salli.data.db.SalliDatabase
 import lk.salli.data.export.DataWiper
 import lk.salli.data.export.TransactionExporter
+import lk.salli.data.export.ReviewExporter
 import lk.salli.data.ingest.TransactionIngestor
 import lk.salli.data.ingest.UtilityIngestor
 import lk.salli.data.merchant.MerchantStatsService
@@ -81,6 +82,13 @@ object AppModule {
         db: SalliDatabase,
         @ApplicationContext context: Context,
     ): TransactionExporter = TransactionExporter(db = db, context = context)
+
+    @Provides
+    @Singleton
+    fun provideReviewExporter(
+        db: SalliDatabase,
+        @ApplicationContext context: Context,
+    ): ReviewExporter = ReviewExporter(db = db, context = context)
 
     @Provides
     @Singleton

@@ -24,7 +24,7 @@ Salli reads your bank SMS, parses transactions locally, and shows you where your
 - **Timeline** — all transactions grouped by day with daily totals, income vs expense pills, search.
 - **Transfer detection** — when a debit on one of your accounts matches a credit on another within 48h, they're paired into a single transfer and excluded from income/expense totals.
 - **Fee extraction** — PeoplesBank debit + Fund Transfer confirm SMS get merged into one row with the fee (the difference) shown inline.
-- **Unknown SMS queue** — bank messages Salli can't parse show up in a triage list so you can see what's missing.
+- **Unknown SMS queue** — bank messages Salli can't parse show up in a triage list so you can see what's missing. **Send formats** turns that list into a masked JSON file (account numbers cut to their last four digits, no names, phones or OTPs; amounts and wording kept) that you can share with a maintainer so a template gets written. Optionally it also scans your inbox for banks Salli doesn't list yet.
 - **Bills & Fuel Pass** — SLT-MOBITEL bill SMS (issued, reminders, overdue, payment received) become a to-pay list with due dates and a "due in N days" reminder you can tune; Dialog postpaid, CEB and Water Board shapes are provisional until real samples land. National Fuel Pass confirmations from 1919 show each vehicle's weekly quota left, whether today is its odd/even eligible day, and a last-chance reminder before the quota resets. Both live under Settings → Trackers.
 - **Export** — your full transaction history as CSV, your device.
 - **Delete** — wipe everything at any time with a single tap. No dark patterns.

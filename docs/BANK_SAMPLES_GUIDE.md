@@ -7,6 +7,20 @@ maintainer.
 
 This guide walks you through producing samples that are safe to share.
 
+## The easiest path: send formats from the app
+
+Open **Unknown messages** in Salli (Home shows "N messages need a look", or Settings → Your data) and tap **Send formats**. The app builds a JSON file on your phone and opens the share sheet; send it to a maintainer however you like. Nothing is uploaded by the app itself.
+
+What's in the file, and what isn't:
+
+- Every message from a recognised bank that Salli couldn't parse, with the sender ID **exactly as it arrived** (including stray control characters; those have caused real bugs).
+- Account, card and reference numbers keep only their last four digits (`XXXXXX4273`). Phone numbers, e-mail addresses and names after "Dear"/"Mr"/"Ms" are replaced. **Amounts, balances, dates and wording are kept**, because that is what a template is written against. Masked digits are `X`, which the committed fixtures already use, so templates accept it in account positions.
+- OTPs are excluded twice: by the parser's guard and by a second check on the way out.
+- Optionally, tick **Also look for banks Salli doesn't know yet**: the app scans the last 180 days of your inbox once for money-looking messages from alphanumeric senders it doesn't list (up to five per sender) and adds them under `candidates`. This is how new banks and wallets get found. Nothing from this scan is stored.
+- A `coverage` table (sender, parsed count, review count) with no message bodies, so the maintainer can see what your inbox looks like.
+
+Each entry carries a short hash of the original message so re-sends can be de-duplicated. Maintainers still review every file by hand before anything lands in `samples/redacted/`.
+
 ## The low-effort path: just paste redacted SMS
 
 If filling out a structured form feels like too much, **it is genuinely

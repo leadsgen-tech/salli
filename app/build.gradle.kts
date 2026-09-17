@@ -14,8 +14,8 @@ android {
         applicationId = "lk.salli.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = 6
+        versionName = "0.4.1"
         manifestPlaceholders["salliAppLabel"] = "@string/app_name"
     }
 

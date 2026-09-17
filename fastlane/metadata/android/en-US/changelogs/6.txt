@@ -1,0 +1,1 @@
+Send formats: export the bank messages Salli couldn't read as a masked JSON file (account numbers cut to their last four digits; no names, phone numbers or OTPs; amounts and wording kept) and share it with a maintainer so a template can be written. Optional one-time inbox scan for banks Salli doesn't list yet.
