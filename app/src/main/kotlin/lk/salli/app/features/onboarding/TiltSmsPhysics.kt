@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -68,9 +69,11 @@ fun TiltSmsPhysics(
         val progress = sortProgress.coerceIn(0f, 1f)
         val bodies = remember(sizes, widthPx, heightPx) {
             sizes.mapIndexed { index, size ->
-                PhysicsBody(index, size, widthPx / 2f, -size.height - index * 18f, 0f, 0f, 0f)
+                val x = (widthPx * (0.22f + (index % 4) * 0.19f)).coerceIn(size.width / 2f, widthPx - size.width / 2f)
+                PhysicsBody(index, size, x, -size.height - index * 18f, (index % 2 * 2 - 1) * 22f, 0f, (index % 3 - 1) * .08f)
             }.toMutableList()
         }
+        val frame = remember { mutableStateOf(bodies.map { it.snapshot() }) }
         LaunchedEffect(bodies, reducedMotion) {
             var previous = 0L
             while (isActive) {
@@ -78,7 +81,8 @@ fun TiltSmsPhysics(
                 val dt = if (previous == 0L) 0f else ((now - previous) / 1_000_000_000f).coerceIn(0f, 1f / 20f)
                 previous = now
                 bodies.forEachIndexed { index, body ->
-                    val floor = heightPx - with(density) { 12.dp.toPx() } - body.size.height
+                    val row = rowIndex(index)
+                    val floor = heightPx - with(density) { 8.dp.toPx() } - body.size.height - row * with(density) { 18.dp.toPx() } - (index % 3) * with(density) { 6.dp.toPx() }
                     if (reducedMotion) {
                         body.y = floor - (index * 22f).coerceAtMost(heightPx * .7f)
                         body.vy = 0f
@@ -89,9 +93,9 @@ fun TiltSmsPhysics(
                         body.x += (targetX - body.x) * (0.16f * progress).coerceAtMost(0.16f)
                         body.y += (targetY - body.y) * (0.16f * progress).coerceAtMost(0.16f)
                         body.rotation *= 0.84f
-                    } else if (!body.landed) {
+                    } else {
                         body.vx = (body.vx + tiltX * 35f * dt) * 0.992f
-                        body.vy = (body.vy + 2100f * dt) * 0.998f
+                        if (!body.landed) body.vy = (body.vy + 2100f * dt) * 0.998f else body.vy = 0f
                         body.x += body.vx * dt
                         body.y += body.vy * dt
                         body.rotation += (body.vx / 900f) * dt
@@ -101,8 +105,8 @@ fun TiltSmsPhysics(
                             body.x = body.x.coerceIn(left, right)
                             body.vx *= -0.32f
                         }
-                        if (body.y >= floor - index * 22f) {
-                            body.y = floor - index * 22f
+                        if (body.y >= floor) {
+                            body.y = floor
                             if (body.vy > 80f) body.vy *= -0.22f else {
                                 body.vy = 0f; body.vx *= 0.55f; body.landed = true
                                 latestLanded(index)
@@ -110,19 +114,21 @@ fun TiltSmsPhysics(
                         }
                     }
                 }
+                frame.value = bodies.map { it.snapshot() }
                 yield()
             }
         }
         Box(Modifier.fillMaxSize()) {
-            bodies.forEach { body ->
+            frame.value.forEach { body ->
                 Box(
                     Modifier.offset { IntOffset((body.x - body.size.width / 2f).roundToInt(), body.y.roundToInt()) }
+                        .size(with(density) { body.size.width.toDp() }, with(density) { body.size.height.toDp() })
                         .graphicsLayer { rotationZ = body.rotation * 57.29578f; alpha = 1f - progress },
                 ) { card(body.index) }
                 if (body.index !in setOf(2, 5)) {
                     Box(
-                        Modifier.offset { IntOffset(with(density) { 12.dp.toPx() }.roundToInt(), with(density) { (8 + body.index * 48).dp.toPx() }.roundToInt()) }
-                            .fillMaxWidth().height(44.dp)
+                        Modifier.offset { IntOffset(with(density) { 12.dp.toPx() }.roundToInt(), with(density) { (8 + rowIndex(body.index) * 56).dp.toPx() }.roundToInt()) }
+                            .fillMaxWidth().height(56.dp)
                             .graphicsLayer { alpha = progress },
                     ) { row(body.index) }
                 }
@@ -133,3 +139,6 @@ fun TiltSmsPhysics(
 
 private data class PhysicsSize(val width: Float, val height: Float)
 private data class PhysicsBody(val index: Int, val size: PhysicsSize, var x: Float, var y: Float, var vx: Float, var vy: Float, var rotation: Float, var landed: Boolean = false)
+private data class PhysicsSnapshot(val index: Int, val size: PhysicsSize, val x: Float, val y: Float, val rotation: Float)
+private fun PhysicsBody.snapshot() = PhysicsSnapshot(index, size, x, y, rotation)
+private fun rowIndex(index: Int) = index - if (index > 5) 2 else if (index > 2) 1 else 0
