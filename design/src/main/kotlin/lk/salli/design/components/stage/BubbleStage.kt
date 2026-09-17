@@ -195,14 +195,20 @@ fun BubbleStage(
                 }
                 last = now
                 val bodies = simulation.bodies
-                pile.value = bodies
+                // Publish a fresh list on every tick. The simulation deliberately caches its
+                // immutable snapshot, so assigning the same list instance can leave Compose
+                // with no observable change on devices that coalesce snapshot writes.
+                pile.value = bodies.toList()
                 // Kept in step with the pile so the first frame of Act 2 starts from where the
                 // bubbles actually are, rather than from where they were spawned.
                 choreography.value = choreographyOf(bodies, discarded, column)
                 bodies.forEach { if (it.visible && it.resting) landedNotifier.onSettled(it.index) }
                 // A settled pile does not need a frame callback. A drag bumps `wake`, which
                 // restarts this effect.
-                if (simulation.isAtRest) break
+                // Keep publishing frames through the complete drop wave. A pile can briefly
+                // report rest while the later staggered bodies are still above the stage; on a
+                // throttled device that used to park the loop and leave those bubbles suspended.
+                if (simulation.isAtRest && simulation.elapsedSeconds >= 2.5f) break
             }
         }
 
