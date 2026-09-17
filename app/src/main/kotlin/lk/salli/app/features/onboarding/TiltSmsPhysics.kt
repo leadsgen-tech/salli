@@ -35,6 +35,7 @@ import kotlinx.coroutines.isActive
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 /** A small sensor driven falling-card scene for onboarding previews. */
 @Composable
@@ -56,8 +57,8 @@ fun TiltSmsPhysics(
         val sensor = manager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                // Screen coordinates: positive x tips the pile toward the right wall.
-                tiltX = event.values.getOrNull(0)?.coerceIn(-9f, 9f) ?: 0f
+                // Android's gravity X runs opposite to the visual direction of a left tilt here.
+                tiltX = -(event.values.getOrNull(0)?.coerceIn(-9f, 9f) ?: 0f)
                 tiltY = -(event.values.getOrNull(1)?.coerceIn(-9f, 9f) ?: 0f)
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -78,10 +79,23 @@ fun TiltSmsPhysics(
         val progress = sortProgress.coerceIn(0f, 1f)
         val latestProgress by rememberUpdatedState(progress)
         val bodies = remember(sizes, widthPx, heightPx) {
-            val drift = floatArrayOf(-130f, 95f, 140f, -105f, 115f, -145f, 125f, -90f, 85f)
+            val random = Random(System.nanoTime())
+            // Spread each new replay across the width, then vary the entry point and momentum.
+            val lanes = listOf(.24f, .70f, .42f, .59f, .20f, .77f, .35f, .65f, .51f).shuffled(random)
             sizes.mapIndexed { index, size ->
-                val x = (widthPx * (0.22f + (index % 4) * 0.19f)).coerceIn(size.width / 2f, widthPx - size.width / 2f)
-                PhysicsBody(index, size, x, -size.height - index * 18f, drift[index % drift.size], 0f, (index % 3 - 1) * .07f, (index % 4 - 1.5f) * .18f)
+                val half = size.width / 2f
+                val laneX = (widthPx * (lanes[index % lanes.size] + (random.nextFloat() - .5f) * .045f))
+                    .coerceIn(half, widthPx - half)
+                val entryX = (laneX + (random.nextFloat() - .5f) * widthPx * .18f)
+                    .coerceIn(half, widthPx - half)
+                PhysicsBody(
+                    index = index, size = size, x = entryX,
+                    y = -size.height - random.nextFloat() * size.height,
+                    vx = (random.nextFloat() - .5f) * 300f, vy = 0f,
+                    rotation = (random.nextFloat() - .5f) * .14f,
+                    spin = (random.nextFloat() - .5f) * .60f,
+                    dropAt = index * .13f + random.nextFloat() * .11f,
+                )
             }.toMutableList()
         }
         val frame = remember(bodies) { mutableStateOf(bodies.map { it.snapshot() }) }
@@ -96,10 +110,13 @@ fun TiltSmsPhysics(
                 bodies.forEachIndexed { index, body ->
                     val baseFloor = heightPx - bottomInset - body.size.height
                     val supportFloor = bodies.asSequence()
-                        .filter { it.index < index && it.landed && abs(it.x - body.x) < (it.size.width + body.size.width) * .34f }
+                        .filter { it.index < index && it.landed && abs(it.x - body.x) < (it.size.width + body.size.width) * .24f }
                         .map { it.y - body.size.height + min(it.size.height, body.size.height) * .73f }
                         .minOrNull() ?: baseFloor
-                    val floor = min(baseFloor, supportFloor)
+                    val support = min(baseFloor, supportFloor)
+                    // A sideways slide can remove support, but gaining support must not pop a
+                    // settled card upward through another card.
+                    val floor = if (body.landed && support < body.y - with(density) { 4.dp.toPx() }) body.y else support
                     if (reducedMotion) {
                         body.y = floor
                         body.vy = 0f
@@ -111,8 +128,17 @@ fun TiltSmsPhysics(
                         body.x += (targetX - body.x) * (0.16f * latestProgress).coerceAtMost(0.16f)
                         body.y += (targetY - body.y) * (0.16f * latestProgress).coerceAtMost(0.16f)
                         body.rotation *= 0.84f
-                    } else if (elapsed >= index * .14f) {
-                        body.vx = (body.vx + tiltX * 150f * dt) * if (body.landed) .975f else .992f
+                    } else if (elapsed >= body.dropAt) {
+                        val half = body.size.width / 2f
+                        val tiltShift = with(density) { 5.dp.toPx() } * tiltX
+                        // Capture the actual landing spot. Never pull a fallen card back to a
+                        // prearranged lane; tilt only shifts the pile from where it landed.
+                        body.vx = if (body.landed) {
+                            val desiredX = (body.restX + tiltShift).coerceIn(half, widthPx - half)
+                            (body.vx + (desiredX - body.x) * 18f * dt) * .88f
+                        } else {
+                            (body.vx + tiltX * 90f * dt) * .992f
+                        }
                         if (body.landed && body.y < floor - 3f) body.landed = false
                         val gravity = (1800f + tiltY * 140f).coerceIn(400f, 3400f)
                         body.vy = if (body.landed) 0f else (body.vy + gravity * dt) * .998f
@@ -134,6 +160,7 @@ fun TiltSmsPhysics(
                                     latestLanded(index)
                                     body.hapticPlayed = true
                                 }
+                                if (!body.landed) body.restX = body.x - tiltShift
                                 body.landed = true
                             }
                         }
@@ -162,7 +189,12 @@ fun TiltSmsPhysics(
 }
 
 private data class PhysicsSize(val width: Float, val height: Float)
-private data class PhysicsBody(val index: Int, val size: PhysicsSize, var x: Float, var y: Float, var vx: Float, var vy: Float, var rotation: Float, var spin: Float, var landed: Boolean = false, var hapticPlayed: Boolean = false)
+private data class PhysicsBody(
+    val index: Int, val size: PhysicsSize, var x: Float, var y: Float,
+    var vx: Float, var vy: Float, var rotation: Float, var spin: Float,
+    val dropAt: Float,
+    var landed: Boolean = false, var hapticPlayed: Boolean = false, var restX: Float = 0f,
+)
 private data class PhysicsSnapshot(val index: Int, val size: PhysicsSize, val x: Float, val y: Float, val rotation: Float)
 private fun PhysicsBody.snapshot() = PhysicsSnapshot(index, size, x, y, rotation)
 private fun rowIndex(index: Int) = index - if (index > 5) 2 else if (index > 2) 1 else 0

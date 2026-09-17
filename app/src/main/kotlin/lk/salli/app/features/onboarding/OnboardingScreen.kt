@@ -12,6 +12,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -36,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
+import java.time.LocalDate
+import java.util.Locale
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
@@ -46,6 +50,9 @@ import lk.salli.design.components.stage.HeatGrid
 import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.motion.LocalReducedMotion
 import lk.salli.design.theme.SalliBrandColors
+import lk.salli.design.theme.SalliTheme
+import lk.salli.domain.TransactionFlow
+import lk.salli.domain.money.MoneyFormat
 import kotlinx.coroutines.launch
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
@@ -71,6 +78,13 @@ private val SampleCardSizes = listOf(
 
 @Composable
 fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, replay: Boolean = false, viewModel: OnboardingViewModel = hiltViewModel()) {
+    SalliTheme(darkTheme = false) {
+        OnboardingContent(onDone, onReviewUnknown, replay, viewModel)
+    }
+}
+
+@Composable
+private fun OnboardingContent(onDone: () -> Unit, onReviewUnknown: (() -> Unit)?, replay: Boolean, viewModel: OnboardingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var act by rememberSaveable { mutableIntStateOf(if (replay) 0 else state.stage.ordinal.coerceIn(0, 2)) }
     var sort by remember { mutableFloatStateOf(if (replay) 1f else 0f) }
@@ -85,7 +99,10 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     SideEffect {
         (context as? Activity)?.window?.let { window ->
             window.statusBarColor = if (lightStage) backgroundColor.toArgb() else SalliBrandColors.Cobalt.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStage
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = lightStage
+                isAppearanceLightNavigationBars = lightStage
+            }
         }
     }
     var tick by remember { mutableIntStateOf(0) }
@@ -177,15 +194,18 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     }
 }
 
-@Composable private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Unit, onDone: () -> Unit, onReview: () -> Unit) = StageScaffold(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, null) {
-    val total = if (replay) 120 else state.import.total
-    val found = if (replay) 890 else state.import.inserted
-    Text(if (replay) "Sample history" else "${total} messages from ${state.accounts.size.coerceAtLeast(1)} banks", style = MaterialTheme.typography.headlineSmall)
-    Text(if (replay) "A private preview of your year" else "Your history lights up as Salli reads it", style = MaterialTheme.typography.bodyLarge)
-    val cells = remember(state.import.previews, replay) {
+@Composable
+private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Unit, onDone: () -> Unit, onReview: () -> Unit) {
+    val total = state.inboxSummary?.totalMessages ?: state.import.total
+    val checkedTarget = if (replay) state.savedTransactionCount else state.import.processed
+    val checked by animateIntAsState(checkedTarget, tween(durationMillis = 450), label = "history count")
+    val cells = remember(state.historyDays, state.import.previews) {
+        val firstDay = LocalDate.now().toEpochDay() - 363
         FloatArray(364).also { values ->
-            if (replay) for (i in values.indices) values[i] = (i % 7).toFloat()
-            else state.import.previews.forEach { values[(it.dayEpoch % 364).toInt().coerceAtLeast(0)] += 1f }
+            (state.historyDays + state.import.previews.map { it.dayEpoch }).forEach { day ->
+                val position = (day - firstDay).toInt()
+                if (position in values.indices) values[position] += 1f
+            }
         }
     }
     val haptic = LocalHapticFeedback.current
@@ -196,23 +216,81 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
             lastInserted = state.import.inserted
         }
     }
-    Spacer(Modifier.height(16.dp)); HeatGrid(columns = 52, rows = 7, values = cells, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth(), reducedMotion = LocalReducedMotion.current)
-    Spacer(Modifier.height(12.dp)); SpringOdometer("${found}", style = MaterialTheme.typography.displayLarge)
-    Text(if (state.import.running) "Reading ${state.import.processed} of ${total}" else "transactions found")
-    state.import.previews.firstOrNull()?.let { Text((it.title ?: "Transaction") + " · " + it.amountMinor, style = MaterialTheme.typography.bodySmall) }
-    if (!replay && !state.import.running && !state.import.finished) Button(onClick = onStart, Modifier.fillMaxWidth()) { Text("Read my history") }
-    state.import.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    if (!state.import.running && (replay || state.import.finished || state.import.error != null)) {
-        Button(onClick = onDone, Modifier.fillMaxWidth()) { Text("Open Salli") }
-        if (state.import.queued > 0) TextButton(onClick = onReview) { Text("Review ${state.import.queued} unknown messages") }
+    StageScaffold(footer = {
+        state.import.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (!replay && !state.import.running && !state.import.finished && state.import.error == null) {
+            Button(onClick = onStart, Modifier.fillMaxWidth()) { Text("Read my history") }
+        }
+        if (!state.import.running && (replay || state.import.finished || state.import.error != null)) {
+            Button(onClick = onDone, Modifier.fillMaxWidth()) { Text("Open Salli") }
+            if (state.import.queued > 0) TextButton(onClick = onReview, Modifier.fillMaxWidth()) { Text("Review ${state.import.queued} unknown messages") }
+        }
+    }) {
+        Text(if (replay) "Your saved history" else if (state.import.running) "Your history is coming together" else "Your history is ready", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            if (replay) "A look at what Salli already found on this phone."
+            else "${String.format(Locale.US, "%,d", total)} messages from ${state.inboxSummary?.senders?.size ?: state.accounts.size} banks, read on this phone.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+            Column(Modifier.padding(16.dp)) {
+                Text("YOUR YEAR", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                HeatGrid(columns = 26, rows = 14, values = cells, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth(), minAlpha = 0.12f, reducedMotion = LocalReducedMotion.current,
+                    contentDescription = "Spending activity across the past year")
+                Spacer(Modifier.height(10.dp))
+                Text("Each square is a day. Your saved transactions light it up.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(22.dp))
+        Text(String.format(Locale.US, "%,d", checked), style = MaterialTheme.typography.displayLarge)
+        Text(if (replay) "transactions already in Salli" else "messages checked${if (state.import.running && total > 0) " of ${String.format(Locale.US, "%,d", total)}" else ""}", style = MaterialTheme.typography.bodyMedium)
+        if (!replay) {
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                RevealMetric("${state.import.inserted}", "new added", Modifier.weight(1f))
+                RevealMetric("${state.savedTransactionCount}", "in Salli", Modifier.weight(1f))
+                RevealMetric("${state.import.queued}", "to review", Modifier.weight(1f))
+            }
+        }
+        if (state.import.previews.isNotEmpty()) {
+            Spacer(Modifier.height(22.dp))
+            Text("JUST ADDED", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            state.import.previews.asReversed().forEach { preview ->
+                val amount = if (preview.flow == TransactionFlow.EXPENSE) -preview.amountMinor else preview.amountMinor
+                Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(preview.title ?: preview.sender ?: "Bank transaction", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1)
+                    Spacer(Modifier.width(8.dp))
+                    Text(MoneyFormat.formatMinor(amount, preview.currency, signed = true), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
+            }
+        }
     }
 }
 
-@Composable private fun StageScaffold(stage: Color, content: Color, skip: (() -> Unit)?, body: @Composable () -> Unit) {
-    val color by animateColorAsState(stage, label = "onboarding stage")
-    Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.Top) {
-        if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip, colors = ButtonDefaults.textButtonColors(contentColor = if (stage.luminance() < 0.5f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.primary)) { Text("Skip") } }
-        CompositionLocalProvider(LocalContentColor provides content) { body() }
+@Composable
+private fun RevealMetric(value: String, label: String, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.padding(12.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun StageScaffold(footer: @Composable () -> Unit, body: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp,
+                start = 24.dp, end = 24.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp),
+    ) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { body() }
+        footer()
     }
 }
 @Composable private fun Bubble(sample: SampleSms) {

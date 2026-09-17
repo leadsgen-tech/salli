@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.concurrent.atomic.AtomicBoolean
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +53,11 @@ data class OnboardingState(
     val completionError: String? = null,
     val completionTarget: OnboardingCompletionTarget? = null,
     val inboxSummary: InboxSummary? = null,
+    val savedTransactionCount: Int = 0,
+    val historyDays: List<Long> = emptyList(),
 )
+
+private data class SavedHistory(val count: Int = 0, val days: List<Long> = emptyList())
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -85,13 +91,19 @@ class OnboardingViewModel @Inject constructor(
     private val completionTarget = MutableStateFlow<OnboardingCompletionTarget?>(null)
     private val completionStarted = AtomicBoolean(false)
     private val inboxSummary = MutableStateFlow<InboxSummary?>(null)
+    private val savedHistory = MutableStateFlow(SavedHistory())
+
+    init {
+        viewModelScope.launch { runCatching { refreshHistory() }.onFailure { Log.w("SalliOnboarding", "History summary unavailable", it) } }
+    }
 
     val state: StateFlow<OnboardingState> = combine(
         combine(savedStage, importState) { stageName, import -> stageName to import },
         combine(db.accounts().observeAll().onStart { emit(emptyList()) }, completing) { accounts, isCompleting -> accounts to isCompleting },
         combine(completionError, completionTarget) { error, target -> error to target },
         inboxSummary,
-    ) { stageAndImport, accountsAndCompleting, completion, summary ->
+        savedHistory,
+    ) { stageAndImport, accountsAndCompleting, completion, summary, history ->
         val (stageName, import) = stageAndImport
         val (accounts, isCompleting) = accountsAndCompleting
         val (saveError, savedTarget) = completion
@@ -104,6 +116,8 @@ class OnboardingViewModel @Inject constructor(
             completionError = saveError,
             completionTarget = savedTarget,
             inboxSummary = summary,
+            savedTransactionCount = history.count,
+            historyDays = history.days,
         )
     }.stateIn(
         viewModelScope,
@@ -152,6 +166,7 @@ class OnboardingViewModel @Inject constructor(
                 savedStateHandle[IMPORT_STARTED_KEY] = false
                 importState.value = importState.value.copy(running = false, finished = true)
                 saveFinishedImport(importState.value)
+                runCatching { refreshHistory() }.onFailure { Log.w("SalliOnboarding", "History summary unavailable", it) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -164,6 +179,14 @@ class OnboardingViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun refreshHistory() {
+        val dao = db.transactions()
+        val days = dao.recentVisibleTimestamps().map { timestamp ->
+            Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        }
+        savedHistory.value = SavedHistory(dao.visibleCount(), days)
     }
 
     /** Persist first-run completion before navigation. Rapid taps remain a single operation. */

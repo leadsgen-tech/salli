@@ -96,6 +96,13 @@ interface TransactionDao {
     )
     fun observeTimeline(limit: Int = 200): Flow<List<TransactionEntity>>
 
+    /** Lightweight dates and count for the onboarding year reveal, including earlier imports. */
+    @Query("SELECT timestamp FROM transactions WHERE is_hidden = 0 ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun recentVisibleTimestamps(limit: Int = 2000): List<Long>
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE is_hidden = 0")
+    suspend fun visibleCount(): Int
+
     /**
      * Reactive stream of all transactions within a half-open `[from, until)` timestamp window.
      * Feeds the Insights screen — we compute category breakdowns, totals, and trend deltas in
