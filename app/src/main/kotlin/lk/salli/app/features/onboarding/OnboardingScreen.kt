@@ -55,10 +55,13 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     val haptic = LocalHapticFeedback.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val view = LocalView.current
+    val visualSortProgress = sortAnimation.value
+    val lightStage = act > 1 || (act == 1 && visualSortProgress > 0.65f)
+    val backgroundColor = MaterialTheme.colorScheme.background
     SideEffect {
         (context as? Activity)?.window?.let { window ->
-            window.statusBarColor = SalliBrandColors.Cobalt.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = act > 1 || (act == 1 && sortAnimation.value > 0.65f)
+            window.statusBarColor = if (lightStage) backgroundColor.toArgb() else SalliBrandColors.Cobalt.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStage
         }
     }
     var tick by remember { mutableIntStateOf(0) }
@@ -88,42 +91,24 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
     }
     BackHandler(enabled = importing) {}
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize()) {
+        OnboardingStage(act, visualSortProgress, { if (replay) onDone() else viewModel.complete(deferHistory = true) }) {
             when (act) {
-                0 -> ChaosAct({ if (replay) onDone() else viewModel.complete(deferHistory = true) }, ::startSort)
-                1 -> SortAct(sortAnimation.value, granted, { sort = it }, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 }, { if (replay) onDone() else viewModel.complete(deferHistory = true) })
+                0 -> ChaosCopy(::startSort)
+                1 -> SortCopy(granted, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 })
                 else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
-            }
-            if (act < 2) {
-                key("shared-onboarding-bubbles") {
-                    BubbleStage(
-                        bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 74.dp) },
-                        sortProgress = if (act == 0) 0f else sortAnimation.value,
-                        modifier = Modifier.fillMaxWidth().height(if (act == 0) 380.dp else 280.dp).padding(horizontal = 24.dp),
-                        discarded = setOf(2, 5),
-                        floorFraction = if (act == 0) 0.86f else 0.82f,
-                        rowHeight = 44.dp,
-                        rowGap = 4.dp,
-                        columnTop = 8.dp,
-                        reducedMotion = LocalReducedMotion.current,
-                        onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-                        bubble = { Bubble(BubbleLabels[it]) },
-                        row = { SortedRow("Sorted transaction") },
-                    )
-                }
             }
         }
     }
 }
 
-@Composable private fun ChaosAct(onSkip: () -> Unit, onSort: () -> Unit) = StageScaffold(SalliBrandColors.Cobalt, SalliBrandColors.OnCobalt, onSkip) {
+@Composable private fun ChaosCopy(onSort: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     Text("There's a money app hiding in your inbox.", style = MaterialTheme.typography.headlineMedium)
     Text("Every swipe, transfer and bill already texts you. Salli sorts them.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(18.dp)); Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSort() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SalliBrandColors.AcidLime, contentColor = SalliBrandColors.OnAcidLime)) { Text("Sort them") }
 }
 
-@Composable private fun SortAct(progress: Float, granted: Boolean, onProgress: (Float) -> Unit, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) = StageScaffold(lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress), MaterialTheme.colorScheme.onBackground, onSkip) {
+@Composable private fun SortCopy(granted: Boolean, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit) {
     Text("OTPs and promos: ignored.", style = MaterialTheme.typography.labelLarge)
     Text("One clean timeline.", style = MaterialTheme.typography.displaySmall)
     Text("Sorted on your phone. Nothing leaves it.", style = MaterialTheme.typography.bodyLarge)
@@ -136,6 +121,32 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
         Button(onClick = onAllow, Modifier.fillMaxWidth()) { Text("Allow SMS access") }; TextButton(onClick = onSettings) { Text("Open settings") }
     }
     Button(onClick = onContinue, Modifier.fillMaxWidth()) { Text("Continue") }
+}
+
+private val SortedLabels = listOf(
+    "Keells Super · Groceries", "BOC ATM · Cash", "OTP ignored",
+    "PickMe · Transport", "SLT bill · Utilities", "DIALOG promo ignored",
+    "HNB · Income", "Fuel Pass · Transport", "CEB · Utilities",
+)
+
+@Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
+    val content = if (act == 0) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
+    StageScaffold(stage, content, onSkip) {
+        if (act < 2) BubbleStage(
+            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 64.dp) },
+            sortProgress = if (act == 0) 0f else progress,
+            modifier = Modifier.fillMaxWidth().height(360.dp),
+            discarded = setOf(2, 5), floorFraction = 0.74f,
+            rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
+            reducedMotion = LocalReducedMotion.current,
+            onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
+        )
+        Spacer(Modifier.height(12.dp))
+        body()
+    }
 }
 
 @Composable private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Unit, onDone: () -> Unit, onReview: () -> Unit) = StageScaffold(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, null) {
