@@ -56,8 +56,20 @@ fun InsightsScreen(
 }
 
 @Composable private fun Header(range: String, spent: Money, previous: () -> Unit, next: () -> Unit) = Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-    Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.insights_title), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(previous) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, stringResource(R.string.insights_previous)) }; Text(range); IconButton(next) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, stringResource(R.string.insights_next)) } }
-    Text(stringResource(R.string.insights_spent, MoneyFormat.format(spent)), style = MaterialTheme.typography.titleLarge)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.insights_title), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        IconButton(previous) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, stringResource(R.string.insights_previous), tint = MaterialTheme.colorScheme.onSurface) }
+        Text(range, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(next) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, stringResource(R.string.insights_next), tint = MaterialTheme.colorScheme.onSurface) }
+    }
+    Text(stringResource(R.string.insights_spent, MoneyFormat.format(spent)), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
 }
 
-@Composable private fun CashFlow(income: Money, expense: Money) = Column(Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) { SectionHeader(stringResource(R.string.insights_cash_flow)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(stringResource(R.string.insights_income, MoneyFormat.format(income)), color = MaterialTheme.colorScheme.tertiary); Text(stringResource(R.string.insights_expense, MoneyFormat.format(expense))); Text(stringResource(R.string.insights_net, MoneyFormat.format(Money(income.minorUnits - expense.minorUnits, expense.currency)))) } }
+@Composable private fun CashFlow(income: Money, expense: Money) = Column(Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) {
+    SectionHeader(stringResource(R.string.insights_cash_flow))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(stringResource(R.string.insights_income, MoneyFormat.format(income)), color = MaterialTheme.colorScheme.tertiary)
+        Text(stringResource(R.string.insights_expense, MoneyFormat.format(expense)), color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.insights_net, MoneyFormat.format(Money(income.minorUnits - expense.minorUnits, expense.currency))), color = MaterialTheme.colorScheme.onSurface)
+    }
+}
