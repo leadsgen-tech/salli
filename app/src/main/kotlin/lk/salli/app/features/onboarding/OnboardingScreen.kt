@@ -44,7 +44,7 @@ import lk.salli.design.theme.SalliBrandColors
 import kotlinx.coroutines.launch
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
-private val BubbleLabels = listOf("COMBANK\nCard purchase", "BOC\nATM withdrawal", "OTP 482913", "PeoplesBank\nJustPay", "SLTBILL\nRs 11,953", "DIALOG promo", "HNB\nCard alert", "1919\nFuel", "CEB\nBill")
+private val BubbleLabels = listOf("COMBANK\nCard", "BOC\nATM", "OTP code", "People's\nTransfer", "SLT\nBill", "DIALOG\nPromo", "HNB\nDeposit", "1919\nFuel", "CEB\nBill")
 
 @Composable
 fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, replay: Boolean = false, viewModel: OnboardingViewModel = hiltViewModel()) {
@@ -134,7 +134,7 @@ private val SortedLabels = listOf(
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     StageScaffold(stage, content, onSkip) {
         if (act < 2) BubbleStage(
-            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 64.dp) },
+            bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(110.dp, 60.dp) },
             sortProgress = if (act == 0) 0f else progress,
             modifier = Modifier.fillMaxWidth().height(360.dp),
             discarded = setOf(2, 5), floorFraction = 0.92f,
