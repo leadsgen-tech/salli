@@ -694,13 +694,13 @@ private fun MonthOffsetPills(
             val isSelected = off == selectedOffset
             val isFuture = off > 0
             val bg by androidx.compose.animation.animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.primary
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer
                 else androidx.compose.ui.graphics.Color.Transparent,
                 label = "pill-bg-$off",
             )
             val fg by androidx.compose.animation.animateColorAsState(
                 targetValue = when {
-                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
                     isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -711,15 +711,18 @@ private fun MonthOffsetPills(
                 modifier = Modifier
                     .width(48.dp)
                     .height(48.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(bg)
                     .clickable(enabled = !isFuture) { onPick(off) },
             ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = fg,
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(bg),
+                ) {
+                    Text(text = label, style = MaterialTheme.typography.labelMedium, color = fg)
+                }
             }
         }
     }
