@@ -23,6 +23,11 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -116,7 +121,11 @@ private fun UnlockedSalliNavHost(
             startDestination = startDestination,
             modifier = Modifier.fillMaxSize(),
         ) {
-            composable(Route.ONBOARDING) {
+            composable(
+                Route.ONBOARDING,
+                // Landing on Home: the reveal lifts away while Home settles in underneath.
+                exitTransition = { fadeOut(tween(220)) + scaleOut(targetScale = 1.04f, animationSpec = tween(220)) },
+            ) {
                 OnboardingScreen(
                     onDone = {
                         navController.navigate(Destination.HOME.route) {
@@ -131,7 +140,14 @@ private fun UnlockedSalliNavHost(
                     },
                 )
             }
-            composable(Destination.HOME.route) {
+            composable(
+                Destination.HOME.route,
+                enterTransition = {
+                    if (initialState.destination.route == Route.ONBOARDING) {
+                        fadeIn(tween(360, delayMillis = 60)) + scaleIn(initialScale = 0.96f, animationSpec = tween(360))
+                    } else null
+                },
+            ) {
                 HomeScreen(
                     onOpenSafeToSpend = { navController.navigate(Route.SAFE_TO_SPEND) },
                     onSeeAllActivity = { navController.navigateToTab(Destination.ACTIVITY) },

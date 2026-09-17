@@ -11,7 +11,21 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import lk.salli.design.components.BankAvatar
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.Animatable
@@ -113,7 +127,8 @@ private fun OnboardingContent(onDone: () -> Unit, onReviewUnknown: (() -> Unit)?
         act = 1
         scope.launch {
             sortAnimation.snapTo(0f)
-            sortAnimation.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 420f))
+            // ~0.9 s: long enough to read the fling, the fly-in and the stage brightening.
+            sortAnimation.animateTo(1f, spring(dampingRatio = 0.9f, stiffness = 110f))
             sort = 1f
         }
     }
@@ -132,8 +147,8 @@ private fun OnboardingContent(onDone: () -> Unit, onReviewUnknown: (() -> Unit)?
     }
     BackHandler(enabled = importing) {}
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        OnboardingStage(act, visualSortProgress, { if (replay) onDone() else viewModel.complete(deferHistory = true) }) {
-            when (act) {
+        OnboardingStage(act, visualSortProgress, { if (replay) onDone() else viewModel.complete(deferHistory = true) }) { current ->
+            when (current) {
                 0 -> ChaosCopy(::startSort)
                 1 -> SortCopy(granted, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { if (granted || replay) act = 2 else viewModel.complete(deferHistory = true) })
                 else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
@@ -162,34 +177,58 @@ private fun OnboardingContent(onDone: () -> Unit, onReviewUnknown: (() -> Unit)?
     Button(onClick = onContinue, Modifier.fillMaxWidth()) { Text(if (granted) "Find my history" else "Continue without SMS") }
 }
 
-@Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable () -> Unit) {
+@Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable (Int) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     val color by animateColorAsState(stage, label = "onboarding stage")
+    // The pile stays composed from Act 1 into Act 2 and fades out under the reveal instead of cutting.
+    val pileAlpha by animateFloatAsState(if (act < 2) 1f else 0f, tween(320), label = "pile")
+    val copyBottom by animateDpAsState(if (act == 0) 290.dp else 16.dp, spring(stiffness = Spring.StiffnessLow), label = "copy")
     Box(Modifier.fillMaxSize().background(color)) {
-        // The same card layer remains composed while Act 1 becomes Act 2.
-        TiltSmsPhysics(
-            bodySizes = SampleCardSizes,
-            sortProgress = if (act == 0) 0f else progress,
-            modifier = Modifier.fillMaxSize(),
-            reducedMotion = LocalReducedMotion.current,
-            onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-            card = { Bubble(SampleMessages[it]) },
-            row = { SortedRow(SampleMessages[it]) },
-        )
-        Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 16.dp, top = 4.dp)) {
-            TextButton(onClick = onSkip, colors = ButtonDefaults.textButtonColors(contentColor = content)) { Text("Skip") }
+        if (pileAlpha > 0f) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = pileAlpha }) {
+                TiltSmsPhysics(
+                    bodySizes = SampleCardSizes,
+                    sortProgress = if (act == 0) 0f else progress,
+                    modifier = Modifier.fillMaxSize(),
+                    reducedMotion = LocalReducedMotion.current,
+                    onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                    card = { Bubble(SampleMessages[it]) },
+                    row = { SortedRow(SampleMessages[it]) },
+                )
+            }
+        }
+        if (act < 2) {
+            Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 16.dp, top = 4.dp)) {
+                TextButton(onClick = onSkip, colors = ButtonDefaults.textButtonColors(contentColor = content)) { Text("Skip") }
+            }
         }
         CompositionLocalProvider(LocalContentColor provides content) {
-            Column(
-                Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .then(if (act == 1) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(start = 24.dp, end = 24.dp, top = 8.dp)
-                    .navigationBarsPadding()
-                    .padding(bottom = if (act == 0) 290.dp else 16.dp),
-            ) { body() }
+            // Shared-axis Y between acts: the old copy lifts away, the new one rises in.
+            AnimatedContent(
+                targetState = act,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                contentAlignment = Alignment.BottomCenter,
+                transitionSpec = {
+                    (fadeIn(tween(320, delayMillis = 90)) + slideInVertically(tween(380)) { it / 10 })
+                        .togetherWith(fadeOut(tween(180)) + slideOutVertically(tween(220)) { -it / 14 })
+                        .using(SizeTransform(clip = false) { _, _ -> tween(260) })
+                },
+                label = "act",
+            ) { current ->
+                if (current == 2) {
+                    body(current)
+                } else {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .then(if (current == 1) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                            .padding(start = 24.dp, end = 24.dp, top = 8.dp)
+                            .navigationBarsPadding()
+                            .padding(bottom = copyBottom),
+                    ) { body(current) }
+                }
+            }
         }
     }
 }
@@ -198,7 +237,7 @@ private fun OnboardingContent(onDone: () -> Unit, onReviewUnknown: (() -> Unit)?
 private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Unit, onDone: () -> Unit, onReview: () -> Unit) {
     val total = state.inboxSummary?.totalMessages ?: state.import.total
     val checkedTarget = if (replay) state.savedTransactionCount else state.import.processed
-    val checked by animateIntAsState(checkedTarget, tween(durationMillis = 450), label = "history count")
+    val senders = remember(state.accounts) { state.accounts.map { it.senderAddress }.distinct() }
     val cells = remember(state.historyDays, state.import.previews) {
         val firstDay = LocalDate.now().toEpochDay() - 363
         FloatArray(364).also { values ->
@@ -210,6 +249,11 @@ private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Un
     }
     val haptic = LocalHapticFeedback.current
     var lastInserted by remember { mutableIntStateOf(0) }
+    var knownBanks by remember { mutableIntStateOf(0) }
+    LaunchedEffect(senders.size) {
+        if (senders.size > knownBanks) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        knownBanks = senders.size
+    }
     LaunchedEffect(state.import.inserted) {
         if (state.import.inserted >= lastInserted + 25) {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -233,6 +277,21 @@ private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Un
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (senders.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            // Banks pop in as the scan first meets them, one spring each.
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                senders.take(6).forEach { sender ->
+                    key(sender) {
+                        val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+                        AnimatedVisibility(
+                            visibleState = shown,
+                            enter = fadeIn(tween(200)) + scaleIn(initialScale = 0.55f, animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f)),
+                        ) { BankAvatar(sender = sender, size = 44.dp) }
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(24.dp))
         Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(16.dp)) {
@@ -245,7 +304,11 @@ private fun RevealAct(state: OnboardingState, replay: Boolean, onStart: () -> Un
             }
         }
         Spacer(Modifier.height(22.dp))
-        Text(String.format(Locale.US, "%,d", checked), style = MaterialTheme.typography.displayLarge)
+        SpringOdometer(
+            text = String.format(Locale.US, "%,d", checkedTarget),
+            style = MaterialTheme.typography.displayLarge,
+            reducedMotion = LocalReducedMotion.current,
+        )
         Text(if (replay) "transactions already in Salli" else "messages checked${if (state.import.running && total > 0) " of ${String.format(Locale.US, "%,d", total)}" else ""}", style = MaterialTheme.typography.bodyMedium)
         if (!replay) {
             Spacer(Modifier.height(16.dp))

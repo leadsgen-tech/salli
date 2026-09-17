@@ -127,7 +127,7 @@ class SettingsViewModel @Inject constructor(
      * — a dedicated flow keeps that dependency visible.
      */
     val themeMode: StateFlow<ThemeMode> = prefs.themeMode
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.LIGHT)
 
     fun setThemeMode(mode: ThemeMode) {
         if (themeMode.value == mode) return

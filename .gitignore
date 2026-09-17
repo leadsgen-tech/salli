@@ -37,3 +37,6 @@ signing.properties
 
 # Coverage reports written next to raw inbox dumps by RawInboxRunner
 *.report.txt
+
+# Claude Code worktrees and session files
+.claude/

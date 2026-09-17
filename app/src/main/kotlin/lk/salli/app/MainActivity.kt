@@ -71,7 +71,7 @@ class MainActivity : FragmentActivity() {
             // Tri-state preference collapsed at the last possible moment: SYSTEM has to be
             // resolved inside composition so the app repaints when the phone flips into
             // night mode, rather than only on the next cold start.
-            val themeMode by prefs.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val themeMode by prefs.themeMode.collectAsState(initial = ThemeMode.LIGHT)
             val dark = themeMode.resolve(isSystemInDarkTheme())
             val introduced by prefs.onboardingCompleted.collectAsState(initial = null)
             SideEffect {

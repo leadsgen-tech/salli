@@ -52,8 +52,8 @@ class ThemeModeTest {
     @Test
     fun `an unknown id falls back to following the system`() {
         // A backup written by a future build, or a corrupted pref, must not break the theme.
-        assertThat(ThemeMode.fromId(99)).isEqualTo(ThemeMode.SYSTEM)
-        assertThat(ThemeMode.fromId(-1)).isEqualTo(ThemeMode.SYSTEM)
+        assertThat(ThemeMode.fromId(99)).isEqualTo(ThemeMode.LIGHT)
+        assertThat(ThemeMode.fromId(-1)).isEqualTo(ThemeMode.LIGHT)
     }
 
     @Test
@@ -67,8 +67,8 @@ class ThemeModeTest {
     }
 
     @Test
-    fun `a fresh install follows the system`() = runBlocking {
-        assertThat(preferences().themeMode.first()).isEqualTo(ThemeMode.SYSTEM)
+    fun `a fresh install opens in light`() = runBlocking {
+        assertThat(preferences().themeMode.first()).isEqualTo(ThemeMode.LIGHT)
     }
 
     @Test
@@ -79,7 +79,7 @@ class ThemeModeTest {
         assertThat(preferences().themeMode.first()).isEqualTo(ThemeMode.DARK)
 
         store.edit { it[legacyDark] = false }
-        assertThat(preferences().themeMode.first()).isEqualTo(ThemeMode.SYSTEM)
+        assertThat(preferences().themeMode.first()).isEqualTo(ThemeMode.LIGHT)
     }
 
     @Test
@@ -127,7 +127,7 @@ class ThemeModeTest {
         val oldLightBackup = PreferencesSnapshot(darkTheme = false)
         prefs.setThemeMode(ThemeMode.DARK)
         prefs.restore(oldLightBackup)
-        assertThat(prefs.themeMode.first()).isEqualTo(ThemeMode.SYSTEM)
+        assertThat(prefs.themeMode.first()).isEqualTo(ThemeMode.LIGHT)
     }
 
     @Test

@@ -37,8 +37,8 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
     }
 
     /**
-     * Theme preference: System / Light / Dark. [ThemeMode.SYSTEM] is the default — a money app
-     * that ignores the phone's night mode is a money app that blinds you at 2 a.m.
+     * Theme preference: System / Light / Dark. [ThemeMode.LIGHT] is the default: every install opens
+     * in light, and dark or follow-system is a deliberate choice in Settings → Appearance.
      *
      * Installs that only ever used the old flat `dark_theme` toggle fall back to it, so a user
      * sitting on dark stays on dark instead of being silently handed back to the system. The
@@ -47,7 +47,7 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
      */
     val themeMode: Flow<ThemeMode> = store.data.map { prefs ->
         prefs[KEY_THEME_MODE]?.let(ThemeMode::fromId)
-            ?: if (prefs[KEY_DARK_THEME] == true) ThemeMode.DARK else ThemeMode.SYSTEM
+            ?: if (prefs[KEY_DARK_THEME] == true) ThemeMode.DARK else ThemeMode.LIGHT
     }.distinctUntilChanged()
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -213,7 +213,7 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
         return PreferencesSnapshot(
             userName = p[KEY_USER_NAME].orEmpty(),
             darkTheme = p[KEY_DARK_THEME] ?: false,
-            themeModeId = p[KEY_THEME_MODE] ?: (if (p[KEY_DARK_THEME] == true) ThemeMode.DARK.id else ThemeMode.SYSTEM.id),
+            themeModeId = p[KEY_THEME_MODE] ?: (if (p[KEY_DARK_THEME] == true) ThemeMode.DARK.id else ThemeMode.LIGHT.id),
             historicalImportCompleted = p[KEY_HISTORICAL_IMPORT_DONE] ?: false,
             billReminderDays = p[KEY_BILL_REMINDER_DAYS] ?: DEFAULT_BILL_REMINDER_DAYS,
             monthStartDay = p[KEY_MONTH_START_DAY] ?: 1,
@@ -250,10 +250,10 @@ class SalliPreferences private constructor(private val store: DataStore<Preferen
             e[KEY_USER_NAME] = s.userName
             e[KEY_DARK_THEME] = s.darkTheme
             // A backup old enough to predate the setting can still say "this user was on
-            // dark", and dropping them back to System on restore would be a visible loss.
+            // dark", and dropping them back to Light on restore would be a visible loss.
             e[KEY_THEME_MODE] = s.themeModeId?.let { ThemeMode.fromId(it) }
                 ?.id
-                ?: (if (s.darkTheme) ThemeMode.DARK else ThemeMode.SYSTEM).id
+                ?: (if (s.darkTheme) ThemeMode.DARK else ThemeMode.LIGHT).id
             e[KEY_HISTORICAL_IMPORT_DONE] = s.historicalImportCompleted
             e[KEY_BILL_REMINDER_DAYS] = s.billReminderDays
             e[KEY_MONTH_START_DAY] = s.monthStartDay.coerceIn(1, 28)
@@ -317,7 +317,7 @@ enum class ThemeMode(val id: Int) {
     }
 
     companion object {
-        fun fromId(id: Int): ThemeMode = entries.firstOrNull { it.id == id } ?: SYSTEM
+        fun fromId(id: Int): ThemeMode = entries.firstOrNull { it.id == id } ?: LIGHT
     }
 }
 
