@@ -139,32 +139,20 @@ private val SortedLabels = listOf(
     val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
     val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     StageScaffold(stage, content, onSkip) {
-        if (act == 0) {
-            Box(Modifier.fillMaxWidth().height(620.dp)) {
-                Column(Modifier.align(Alignment.TopCenter)) { body() }
-                BubbleStage(
-                    bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(190.dp, 76.dp) },
-                    sortProgress = 0f,
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(360.dp),
-                    discarded = setOf(2, 5), floorFraction = 0.94f,
-                    rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
-                    reducedMotion = LocalReducedMotion.current,
-                    onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-                    bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
-                )
-            }
-        } else {
+        // One persistent layer spans both acts. Its keyed bodies keep their physical positions
+        // when progress changes, so sorting is a continuation of the pile rather than a reset.
+        Box(Modifier.fillMaxWidth().height(720.dp)) {
+            Column(Modifier.align(Alignment.TopCenter)) { body() }
             BubbleStage(
-                bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(190.dp, 76.dp) },
-                sortProgress = progress,
-                modifier = Modifier.fillMaxWidth().height(360.dp),
+                bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(200.dp, 80.dp) },
+                sortProgress = if (act == 0) 0f else progress,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(400.dp),
                 discarded = setOf(2, 5), floorFraction = 0.94f,
                 rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
                 reducedMotion = LocalReducedMotion.current,
                 onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
                 bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
             )
-            Spacer(Modifier.height(12.dp)); body()
         }
     }
 }
@@ -202,7 +190,7 @@ private val SortedLabels = listOf(
 
 @Composable private fun StageScaffold(stage: Color, content: Color, skip: (() -> Unit)?, body: @Composable () -> Unit) {
     val color by animateColorAsState(stage, label = "onboarding stage")
-    Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.Center) {
+    Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.Top) {
         if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip, colors = ButtonDefaults.textButtonColors(contentColor = if (stage.luminance() < 0.5f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.primary)) { Text("Skip") } }
         CompositionLocalProvider(LocalContentColor provides content) { body() }
     }
