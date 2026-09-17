@@ -16,6 +16,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,8 +30,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
@@ -129,9 +133,9 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 }
 
 private val SortedLabels = listOf(
-    "Keells Super · Groceries", "BOC ATM · Cash", "OTP ignored",
-    "PickMe · Transport", "SLT bill · Utilities", "DIALOG promo ignored",
-    "HNB · Income", "Fuel Pass · Transport", "CEB · Utilities",
+    "COMBANK · KEELLS · Groceries", "BOC ATM · Cash withdrawal", "OTP ignored",
+    "People's Bank · JustPay · Transfer", "SLTBILL · Utilities", "DIALOG promo ignored",
+    "HNB · CARGILLS · Card purchase", "1919 · IOC · Fuel", "CEB · Utilities",
 )
 
 @Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable () -> Unit) {
@@ -143,16 +147,53 @@ private val SortedLabels = listOf(
         // when progress changes, so sorting is a continuation of the pile rather than a reset.
         Box(Modifier.fillMaxWidth().height(720.dp)) {
             Column(Modifier.align(Alignment.TopCenter)) { body() }
-            BubbleStage(
-                bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(200.dp, 80.dp) },
+            SmsCardStage(
                 sortProgress = if (act == 0) 0f else progress,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(400.dp),
-                discarded = setOf(2, 5), floorFraction = 0.94f,
-                rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
                 reducedMotion = LocalReducedMotion.current,
                 onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-                bubble = { Bubble(BubbleLabels[it]) }, row = { SortedRow(SortedLabels[it]) },
             )
+        }
+    }
+}
+
+/** A responsive, deliberately overlapping SMS scene. The cards share keys across sorting. */
+@Composable
+private fun SmsCardStage(sortProgress: Float, reducedMotion: Boolean, onBodyLanded: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val width = with(density) { maxWidth.toPx() }
+        val height = with(density) { maxHeight.toPx() }
+        val cardW = with(density) { 200.dp.toPx() }
+        val cardH = with(density) { 80.dp.toPx() }
+        val gap = with(density) { 26.dp.toPx() }
+        val cards = remember { List(BubbleLabels.size) { Animatable(-cardH) } }
+        val progress = sortProgress.coerceIn(0f, 1f)
+        BubbleLabels.forEachIndexed { index, _ ->
+            val target = if (progress == 0f) {
+                height - cardH - with(density) { 12.dp.toPx() } - (index.toFloat() * gap).coerceAtMost(height - cardH)
+            } else {
+                with(density) { (8 + index * 48).dp.toPx() }
+            }
+            LaunchedEffect(index, target, reducedMotion) {
+                if (reducedMotion) cards[index].snapTo(target)
+                else if (progress == 0f) {
+                    kotlinx.coroutines.delay(index * 115L)
+                    cards[index].animateTo(target, spring(dampingRatio = 0.72f, stiffness = 300f))
+                    onBodyLanded()
+                } else cards[index].animateTo(target, spring(dampingRatio = 0.86f, stiffness = 500f))
+            }
+            val x = if (progress == 0f) ((width - cardW) / 2f + (index % 3 - 1) * 18f) else with(density) { 12.dp.toPx() }
+            val rowAlpha = if (progress > 0.35f) ((progress - 0.35f) / 0.25f).coerceIn(0f, 1f) else 0f
+            Box(
+                Modifier.offset { IntOffset(x.roundToInt(), cards[index].value.roundToInt()) }
+                    .width(200.dp).height(80.dp).graphicsLayer { alpha = (1f - rowAlpha) * if (index in setOf(2, 5)) (1f - progress) else 1f },
+            ) { Bubble(BubbleLabels[index]) }
+            if (index !in setOf(2, 5)) {
+                Box(
+                    Modifier.offset { IntOffset(with(density) { 12.dp.toPx() }.roundToInt(), cards[index].value.roundToInt()) }
+                        .fillMaxWidth().height(44.dp).graphicsLayer { alpha = rowAlpha },
+                ) { SortedRow(SortedLabels[index]) }
+            }
         }
     }
 }
