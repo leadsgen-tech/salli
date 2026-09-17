@@ -186,7 +186,7 @@ private val SortedLabels = listOf(
         CompositionLocalProvider(LocalContentColor provides content) { body() }
     }
 }
-@Composable private fun Bubble(text: String) { Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 4.dp, modifier = Modifier.padding(4.dp)) { Text(text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge) } }
+@Composable private fun Bubble(text: String) { Surface(shape = RoundedCornerShape(14.dp), shadowElevation = 4.dp, modifier = Modifier.padding(2.dp)) { Text(text, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2) } }
 @Composable private fun SortedRow(text: String) { Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize().padding(vertical = 2.dp)) { Box(contentAlignment = Alignment.CenterStart) { Text(text, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1) } } }
 private fun lerp(a: Color, b: Color, f: Float) = Color(a.red + (b.red-a.red)*f, a.green + (b.green-a.green)*f, a.blue + (b.blue-a.blue)*f, a.alpha + (b.alpha-a.alpha)*f)
 
