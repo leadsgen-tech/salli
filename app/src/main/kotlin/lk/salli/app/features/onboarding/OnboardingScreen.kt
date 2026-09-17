@@ -94,7 +94,7 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
         OnboardingStage(act, visualSortProgress, { if (replay) onDone() else viewModel.complete(deferHistory = true) }) {
             when (act) {
                 0 -> ChaosCopy(::startSort)
-                1 -> SortCopy(granted, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { act = 2 })
+                1 -> SortCopy(granted, { launcher.launch(SmsPermissions) }, { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))) }, { if (granted || replay) act = 2 else viewModel.complete(deferHistory = true) })
                 else -> RevealAct(state, replay, { if (!replay && granted) viewModel.runImport() }, { if (replay) onDone() else viewModel.complete() }) { if (onReviewUnknown != null) viewModel.complete(target = OnboardingCompletionTarget.REVIEW_UNKNOWN) }
             }
         }
@@ -109,18 +109,16 @@ fun OnboardingScreen(onDone: () -> Unit, onReviewUnknown: (() -> Unit)? = null, 
 }
 
 @Composable private fun SortCopy(granted: Boolean, onAllow: () -> Unit, onSettings: () -> Unit, onContinue: () -> Unit) {
-    Text("OTPs and promos: ignored.", style = MaterialTheme.typography.labelLarge)
-    Text("One clean timeline.", style = MaterialTheme.typography.displaySmall)
-    Text("Sorted on your phone. Nothing leaves it.", style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(20.dp)); Text("7 useful rows from 9 messages", style = MaterialTheme.typography.titleLarge)
-    Text("2 OTPs and promos ignored. Your real history will be built from bank alerts on this phone.", style = MaterialTheme.typography.bodyMedium)
+    Text("9 messages in", style = MaterialTheme.typography.labelLarge)
+    Text("7 transactions out.", style = MaterialTheme.typography.displaySmall)
+    Text("OTPs and promos stay out of your spending. Everything is sorted on your phone.", style = MaterialTheme.typography.bodyLarge)
     Spacer(Modifier.height(20.dp))
     if (granted) Text("SMS access is ready. Your existing bank messages can build your history.") else {
         Text("Salli needs to read your SMS to do this for real.")
         Row { FilterChip(true, {}, label = { Text("Reads bank alerts") }); Spacer(Modifier.width(8.dp)); FilterChip(true, {}, label = { Text("Never keeps chats") }) }
         Button(onClick = onAllow, Modifier.fillMaxWidth()) { Text("Allow SMS access") }; TextButton(onClick = onSettings) { Text("Open settings") }
     }
-    Button(onClick = onContinue, Modifier.fillMaxWidth()) { Text("Continue") }
+    Button(onClick = onContinue, Modifier.fillMaxWidth()) { Text(if (granted) "Find my history" else "Continue without SMS") }
 }
 
 private val SortedLabels = listOf(
@@ -138,7 +136,7 @@ private val SortedLabels = listOf(
             bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 64.dp) },
             sortProgress = if (act == 0) 0f else progress,
             modifier = Modifier.fillMaxWidth().height(360.dp),
-            discarded = setOf(2, 5), floorFraction = 0.74f,
+            discarded = setOf(2, 5), floorFraction = 0.92f,
             rowHeight = 44.dp, rowGap = 4.dp, columnTop = 8.dp,
             reducedMotion = LocalReducedMotion.current,
             onBodyLanded = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
