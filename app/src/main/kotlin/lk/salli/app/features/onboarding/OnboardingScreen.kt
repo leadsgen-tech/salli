@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -130,7 +131,7 @@ private val SortedLabels = listOf(
 @Composable private fun OnboardingStage(act: Int, progress: Float, onSkip: () -> Unit, body: @Composable () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val stage = if (act == 0) SalliBrandColors.Cobalt else lerp(SalliBrandColors.Cobalt, MaterialTheme.colorScheme.background, progress)
-    val content = if (act == 0) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
+    val content = if (act == 0 || progress < 0.65f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.onBackground
     StageScaffold(stage, content, onSkip) {
         if (act < 2) BubbleStage(
             bodySizes = BubbleLabels.map { androidx.compose.ui.unit.DpSize(150.dp, 64.dp) },
@@ -181,7 +182,7 @@ private val SortedLabels = listOf(
 @Composable private fun StageScaffold(stage: Color, content: Color, skip: (() -> Unit)?, body: @Composable () -> Unit) {
     val color by animateColorAsState(stage, label = "onboarding stage")
     Column(Modifier.fillMaxSize().background(color).verticalScroll(rememberScrollState()).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.Center) {
-        if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip, colors = ButtonDefaults.textButtonColors(contentColor = if (stage == SalliBrandColors.Cobalt) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.primary)) { Text("Skip") } }
+        if (skip != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = skip, colors = ButtonDefaults.textButtonColors(contentColor = if (stage.luminance() < 0.5f) SalliBrandColors.OnCobalt else MaterialTheme.colorScheme.primary)) { Text("Skip") } }
         CompositionLocalProvider(LocalContentColor provides content) { body() }
     }
 }
