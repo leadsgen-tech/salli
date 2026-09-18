@@ -22,7 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,8 +45,8 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 /**
- * A savings goal drawn as a jar of liquid. The level is progress; the dashed line is where the
- * level should be by the end of this period; tilt the phone and the liquid follows.
+ * A savings goal drawn as a see-through piggy bank. The level is progress; the dashed line is
+ * where the level should be by the end of this period; tilt the phone and the liquid follows.
  *
  * **Hold the jar to pour.** The amount climbs faster the longer the press is held, with a tick
  * haptic at each detent, and lands on release through [onPour]. A goal that is already full
@@ -167,62 +171,81 @@ fun GoalJarTile(
         ) {
             val w = size.width
             val h = size.height
-            val lip = 8.dp.toPx()
-            val bodyLeft = w * 0.18f
-            val bodyRight = w * 0.82f
-            val radius = 12.dp.toPx()
-            val body = Path().apply {
-                moveTo(bodyLeft, lip)
-                lineTo(bodyRight, lip)
-                lineTo(bodyRight, h - radius)
-                quadraticTo(bodyRight, h, bodyRight - radius, h)
-                lineTo(bodyLeft + radius, h)
-                quadraticTo(bodyLeft, h, bodyLeft, h - radius)
-                close()
+            // A piggy you can see into. Body, snout, ear, legs and a coin slot are drawn as
+            // outlines; the liquid is clipped to the body and snout so the level stays the
+            // whole point. The pig faces right.
+            val bodyRect = Rect(left = w * 0.10f, top = h * 0.24f, right = w * 0.84f, bottom = h * 0.86f)
+            val snoutRect = Rect(left = w * 0.80f, top = h * 0.46f, right = w * 0.97f, bottom = h * 0.66f)
+            val snoutRadius = CornerRadius(w * 0.06f, w * 0.06f)
+            val vessel = Path().apply {
+                addOval(bodyRect)
+                addRoundRect(RoundRect(snoutRect, snoutRadius))
             }
-            // Glass, then liquid clipped to it, then the line and the rim on top.
-            drawPath(body, inside)
-            clipPath(body) {
-                val level = h - (h - lip) * fill.value
+            val liquidTop = bodyRect.top
+            val liquidBottom = bodyRect.bottom
+            drawPath(vessel, inside)
+            clipPath(vessel) {
+                val level = liquidBottom - (liquidBottom - liquidTop) * fill.value
                 val amp = if (pouring) 2.5.dp.toPx() else 1.2.dp.toPx()
                 val slope = tilt * 14.dp.toPx()
                 val wave = Path().apply {
-                    moveTo(bodyLeft, h)
-                    var x = bodyLeft
-                    while (x <= bodyRight + 2f) {
-                        val t = (x - bodyLeft) / (bodyRight - bodyLeft)
+                    moveTo(0f, h)
+                    var x = 0f
+                    while (x <= w + 2f) {
+                        val t = x / w
                         val y = level - slope * (0.5f - t) * 2f + amp * sin(phase + t * 2f * PI.toFloat() * 1.3f)
                         lineTo(x, y)
                         x += 4f
                     }
-                    lineTo(bodyRight, h)
+                    lineTo(w, h)
                     close()
                 }
                 drawPath(wave, liquid)
                 lineFraction?.let { lf ->
-                    val y = h - (h - lip) * lf
+                    val y = liquidBottom - (liquidBottom - liquidTop) * lf
                     drawLine(
                         color = lineColor,
-                        start = Offset(bodyLeft, y),
-                        end = Offset(bodyRight, y),
+                        start = Offset(bodyRect.left, y),
+                        end = Offset(bodyRect.right, y),
                         strokeWidth = 1.5.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f)),
                     )
                 }
             }
-            drawPath(body, outline, style = Stroke(width = 2.dp.toPx()))
-            // The rim: a slightly wider band at the mouth, so it reads as a jar and not a bar.
-            drawLine(
-                color = outline,
-                start = Offset(bodyLeft - 4.dp.toPx(), lip),
-                end = Offset(bodyRight + 4.dp.toPx(), lip),
-                strokeWidth = 3.dp.toPx(),
-            )
+            val stroke = Stroke(width = 2.dp.toPx())
+            // Legs first so the body outline sits over them.
+            val legW = w * 0.11f
+            val legH = h * 0.12f
+            listOf(w * 0.26f, w * 0.58f).forEach { lx ->
+                drawRoundRect(inside, Offset(lx, bodyRect.bottom - legH * 0.4f), Size(legW, legH), CornerRadius(legW * 0.3f))
+                drawRoundRect(outline, Offset(lx, bodyRect.bottom - legH * 0.4f), Size(legW, legH), CornerRadius(legW * 0.3f), style = stroke)
+            }
+            drawOval(outline, topLeft = Offset(bodyRect.left, bodyRect.top), size = Size(bodyRect.width, bodyRect.height), style = stroke)
+            drawRoundRect(outline, Offset(snoutRect.left, snoutRect.top), Size(snoutRect.width, snoutRect.height), snoutRadius, style = stroke)
+            // Nostrils, ear, eye, tail: the few marks that make it a pig and not a bean.
+            val nostril = 1.6.dp.toPx()
+            drawCircle(outline, nostril, Offset(snoutRect.left + snoutRect.width * 0.38f, snoutRect.top + snoutRect.height * 0.5f))
+            drawCircle(outline, nostril, Offset(snoutRect.left + snoutRect.width * 0.68f, snoutRect.top + snoutRect.height * 0.5f))
+            val ear = Path().apply {
+                moveTo(w * 0.62f, bodyRect.top + h * 0.04f)
+                lineTo(w * 0.70f, bodyRect.top - h * 0.06f)
+                lineTo(w * 0.76f, bodyRect.top + h * 0.08f)
+                close()
+            }
+            drawPath(ear, inside); drawPath(ear, outline, style = stroke)
+            drawCircle(outline, 2.dp.toPx(), Offset(w * 0.66f, bodyRect.top + h * 0.20f))
+            val tail = Path().apply {
+                moveTo(bodyRect.left + 2f, bodyRect.top + bodyRect.height * 0.45f)
+                cubicTo(w * 0.02f, bodyRect.top + bodyRect.height * 0.30f, w * 0.06f, bodyRect.top + bodyRect.height * 0.62f, w * 0.01f, bodyRect.top + bodyRect.height * 0.52f)
+            }
+            drawPath(tail, outline, style = Stroke(width = 1.5.dp.toPx()))
+            // The coin slot on the back.
+            drawLine(outline, Offset(w * 0.36f, bodyRect.top + 1.dp.toPx()), Offset(w * 0.50f, bodyRect.top + 1.dp.toPx()), strokeWidth = 3.dp.toPx())
             if (burst.value > 0f) {
                 drawCircle(
                     color = burstColor.copy(alpha = (1f - burst.value) * 0.9f),
                     radius = burst.value * w * 0.6f,
-                    center = Offset(w / 2f, lip),
+                    center = Offset(w * 0.43f, bodyRect.top),
                 )
             }
         }

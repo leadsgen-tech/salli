@@ -36,6 +36,8 @@ data class InsightSlice(
     val currency: String,
     val count: Int,
     val percent: Float,
+    /** Change against the previous period, in percent; null when there is nothing to compare to. */
+    val deltaPercent: Int? = null,
 )
 
 /** One month's stacked expense, broken down by top-N categories. */
@@ -87,6 +89,9 @@ data class InsightsUiState(
     val loading: Boolean = true,
     val merchants: List<MerchantInsight> = emptyList(),
     val accounts: List<AccountInsight> = emptyList(),
+    /** 24 × 7 counts of when money went out (hours across, Monday to Sunday down). */
+    val weekHour: FloatArray = FloatArray(0),
+    val heatCaption: lk.salli.domain.motion.HeatCaption? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -190,12 +195,21 @@ class InsightsViewModel @Inject constructor(
 
         val catLookup = categories.associateBy { it.id }
 
+        // Last period's spend per category, for the delta beside each bar.
+        val previous = DateRange.prevCycle(range, monthStartDay.value)
+        val previousByCategory = sixMonth
+            .filter { !it.isHidden && TransactionSpending.counts(it) && it.amountCurrency == dominantCurrency &&
+                it.timestamp in previous.fromMillis until previous.untilMillis }
+            .groupBy { it.categoryId }
+            .mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
+
         val slices = expenseInCurrency
             .groupBy { it.categoryId }
             .map { (catId, list) ->
                 val total = list.sumOf { it.amountMinor }
                 val pct = if (totalSpendMinor > 0) total.toFloat() / totalSpendMinor else 0f
                 val cat = catId?.let { catLookup[it] }
+                val before = previousByCategory[catId] ?: 0L
                 InsightSlice(
                     categoryId = catId,
                     categoryName = cat?.name ?: "Uncategorised",
@@ -205,9 +219,18 @@ class InsightsViewModel @Inject constructor(
                     currency = dominantCurrency,
                     count = list.size,
                     percent = pct,
+                    deltaPercent = if (before > 0L) (((total - before).toDouble() / before) * 100).toInt() else null,
                 )
             }
             .sortedByDescending { it.totalMinor }
+
+        // When the money goes out: spent rows, or every outgoing row when nothing was spent.
+        val outgoing = expenseInCurrency.ifEmpty { real.filter { it.flowId == TransactionFlow.EXPENSE.id } }
+        val zoneOffset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
+        val weekHour = lk.salli.domain.motion.GridBucketing.buildWeekHourGrid(
+            outgoing.map { lk.salli.domain.motion.GridBucketing.weekHourOf(it.timestamp, zoneOffset) },
+        )
+        val heatCaption = if (outgoing.isEmpty()) null else lk.salli.domain.motion.GridBucketing.caption(weekHour)
 
         val monthlyBars = buildMonthlyBars(sixMonth, catLookup, dominantCurrency, range)
         val merchants = expenseInCurrency
@@ -240,6 +263,8 @@ class InsightsViewModel @Inject constructor(
             loading = false,
             merchants = merchants,
             accounts = accountInsights,
+            weekHour = weekHour,
+            heatCaption = heatCaption,
         )
     }
 

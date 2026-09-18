@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.LocalAtm
+import androidx.compose.material.icons.outlined.Percent
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Icon
@@ -25,12 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.alpha
@@ -90,8 +88,9 @@ fun TransactionRow(
     pairSenders: Pair<String?, String?>? = null,
     /** Two letters for the leading tile when there is no logo; null falls back to the category glyph. */
     monogram: String? = null,
-    /** 0..1, how heavy this amount is against the user's typical one; sets the ring around the tile. */
-    weight: Float = 0f,
+    /** The row's bank and what happened there; used when there is no merchant to show. */
+    accountSender: String? = null,
+    badge: TileBadge? = null,
 ) {
     if (standalone) {
         Surface(
@@ -117,7 +116,8 @@ fun TransactionRow(
                 excludedLabel = excludedLabel,
                 pairSenders = pairSenders,
                 monogram = monogram,
-                weight = weight,
+                accountSender = accountSender,
+                badge = badge,
             )
         }
     } else {
@@ -137,7 +137,8 @@ fun TransactionRow(
             excludedLabel = excludedLabel,
             pairSenders = pairSenders,
             monogram = monogram,
-            weight = weight,
+            accountSender = accountSender,
+            badge = badge,
             modifier = modifier,
         )
     }
@@ -161,7 +162,8 @@ private fun TransactionRowContent(
     excludedLabel: String? = null,
     pairSenders: Pair<String?, String?>? = null,
     monogram: String? = null,
-    weight: Float = 0f,
+    accountSender: String? = null,
+    badge: TileBadge? = null,
 ) {
     val salli = LocalSalliColors.current
     val logoPath = MerchantLogos.resolve(merchantRaw)
@@ -176,21 +178,20 @@ private fun TransactionRowContent(
             // real transactions, just ones the totals ignore.
             .alpha(if (excludedLabel != null) 0.5f else 1f),
     ) {
+        // The tile answers "who or what": a merchant we know, the two banks of a move, the
+        // merchant's initials on its category colour, or your own bank with a mark for what
+        // the account did. One rule, every row.
         when {
-            logoPath != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
-                MerchantLogo(path = logoPath, size = RingInnerSize)
-            }
+            logoPath != null -> MerchantLogo(path = logoPath, size = LeadingSize)
             isOwnTransfer && pairSenders != null -> PairAvatar(from = pairSenders.first, to = pairSenders.second)
-            isOwnTransfer -> MutedAvatar(icon = Icons.Outlined.SwapHoriz)
-            monogram != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
-                MonogramTile(text = monogram, colorSeed = categoryColorSeed ?: NeutralSeed, size = RingInnerSize)
-            }
-            categoryColorSeed != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
-                CategoryIcon(iconName = categoryIconName, colorSeed = categoryColorSeed, size = RingInnerSize)
-            }
-            else -> WeightRing(weight = weight, seed = null, declined = isDeclined) {
-                MutedAvatar(icon = leadingIcon, size = RingInnerSize)
-            }
+            monogram != null -> MonogramTile(text = monogram, colorSeed = categoryColorSeed ?: NeutralSeed, size = LeadingSize)
+            accountSender != null && badge != null -> BankTile(sender = accountSender, badge = badge)
+            categoryColorSeed != null -> CategoryIcon(
+                iconName = categoryIconName,
+                colorSeed = categoryColorSeed,
+                size = LeadingSize,
+            )
+            else -> MutedAvatar(icon = leadingIcon)
         }
 
         Spacer(Modifier.width(SalliSpacing.sm))
@@ -245,10 +246,11 @@ fun MerchantAvatar(
     size: androidx.compose.ui.unit.Dp = LeadingSize,
 ) {
     val path = MerchantLogos.resolve(merchantRaw)
-    if (path != null) {
-        MerchantLogo(path = path, size = size, modifier = modifier)
-    } else {
-        MutedAvatar(icon = Icons.Outlined.Receipt, size = size, modifier = modifier)
+    val monogram = lk.salli.design.format.Monogram.of(merchantRaw)
+    when {
+        path != null -> MerchantLogo(path = path, size = size, modifier = modifier)
+        monogram != null -> Box(modifier = modifier) { MonogramTile(text = monogram, colorSeed = NeutralSeed, size = size) }
+        else -> MutedAvatar(icon = Icons.Outlined.Receipt, size = size, modifier = modifier)
     }
 }
 
@@ -268,8 +270,10 @@ private fun MerchantLogo(
     )
 }
 
-private val RingInnerSize = 36.dp
 private const val NeutralSeed = 11
+
+/** What an account did, for the mark on a [BankTile]. */
+enum class TileBadge { SENT, RECEIVED, ATM, DEPOSIT, CHEQUE, FEE, CARD }
 
 /**
  * Two letters on the category's tinted tile. Recognition (KE is Keells) and category colour at
@@ -287,7 +291,7 @@ private fun MonogramTile(text: String, colorSeed: Int, size: androidx.compose.ui
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
             color = hue.onContainer,
             maxLines = 1,
         )
@@ -295,39 +299,38 @@ private fun MonogramTile(text: String, colorSeed: Int, size: androidx.compose.ui
 }
 
 /**
- * The ring around a leading tile whose thickness is the amount against the user's typical
- * transaction: a hairline for small change, a fat band for the month's big hit. Dashed when the
- * bank declined it. Information, not decoration: a list scans for weight before any digit.
+ * Your own bank's logo with a small mark for what the account did: an arrow out for money
+ * sent, an arrow in for money received, a note for cash, a cheque, a percent for a fee. Used
+ * when the SMS named no merchant, which is every transfer, withdrawal and deposit.
  */
 @Composable
-private fun WeightRing(
-    weight: Float,
-    seed: Int?,
-    declined: Boolean,
-    content: @Composable () -> Unit,
-) {
-    val hue = LocalSalliColors.current.categoryHue(seed ?: NeutralSeed)
-    val ringColor = if (declined) LocalSalliColors.current.negative else hue.accent
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(LeadingSize)
-            .drawBehind {
-                val stroke = (1.5f + weight.coerceIn(0f, 1f) * 6f).dp.toPx()
-                val inset = stroke / 2f
-                drawRoundRect(
-                    color = ringColor,
-                    topLeft = Offset(inset, inset),
-                    size = Size(size.width - stroke, size.height - stroke),
-                    cornerRadius = CornerRadius(14.dp.toPx()),
-                    style = Stroke(
-                        width = stroke,
-                        pathEffect = if (declined) PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())) else null,
-                    ),
-                )
-            },
-    ) {
-        content()
+private fun BankTile(sender: String, badge: TileBadge) {
+    val salli = LocalSalliColors.current
+    val (icon, tint, container) = when (badge) {
+        TileBadge.SENT -> Triple(Icons.AutoMirrored.Outlined.ArrowForward, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+        TileBadge.RECEIVED, TileBadge.DEPOSIT -> Triple(Icons.Outlined.ArrowDownward, salli.onIncome, salli.income)
+        TileBadge.ATM -> Triple(Icons.Outlined.LocalAtm, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+        TileBadge.CHEQUE -> Triple(Icons.Outlined.Receipt, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+        TileBadge.FEE -> Triple(Icons.Outlined.Percent, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+        TileBadge.CARD -> Triple(Icons.Outlined.CreditCard, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+    }
+    Box(modifier = Modifier.size(LeadingSize)) {
+        BankAvatar(sender = sender, size = 40.dp, modifier = Modifier.align(Alignment.TopStart))
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(18.dp)
+                .background(container, CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(10.dp),
+            )
+        }
     }
 }
 

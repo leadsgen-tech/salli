@@ -60,6 +60,7 @@ import lk.salli.app.features.budgets.BudgetPace
 import lk.salli.app.features.budgets.BudgetUi
 import lk.salli.app.features.budgets.BudgetsViewModel
 import lk.salli.app.features.goals.GoalsViewModel
+import lk.salli.app.features.goals.JarSheet
 import lk.salli.app.features.goals.GoalRow
 import lk.salli.data.upcoming.UpcomingItem
 import lk.salli.data.upcoming.UpcomingKind
@@ -130,6 +131,7 @@ fun PlanScreen(
     val goals by goalsViewModel.state.collectAsStateWithLifecycle()
     val lastPour by goalsViewModel.lastPour.collectAsStateWithLifecycle()
     var capSheet by remember { mutableStateOf<CapSheetRequest?>(null) }
+    var jarSheet by remember { mutableStateOf(false) }
     // The undo chip for a pour lives five seconds, then the pour is final.
     LaunchedEffect(lastPour) {
         if (lastPour != null) { delay(5_000); goalsViewModel.forgetLastPour() }
@@ -283,7 +285,7 @@ fun PlanScreen(
             SectionHeader(
                 title = stringResource(R.string.plan_goals_title),
                 actionLabel = stringResource(if (liveGoals.isEmpty()) R.string.plan_new_goal else R.string.plan_goals_all),
-                onAction = onOpenGoals,
+                onAction = { if (liveGoals.isEmpty()) jarSheet = true else onOpenGoals() },
             )
         }
         item { Spacer(Modifier.height(SalliSpacing.xs)) }
@@ -293,7 +295,7 @@ fun PlanScreen(
                     eyebrow = stringResource(R.string.plan_goal_suggestion_title),
                     body = stringResource(R.string.plan_goal_suggestion),
                     action = stringResource(R.string.plan_goal_start),
-                    onAction = onOpenGoals,
+                    onAction = { jarSheet = true },
                 )
             }
         } else {
@@ -321,7 +323,9 @@ fun PlanScreen(
                     }
                 }
             }
-            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            item {
+                TextButton(onClick = { jarSheet = true }) { Text("+ " + stringResource(R.string.plan_new_goal)) }
+            }
             item {
                 val pour = lastPour
                 if (pour != null) {
@@ -403,6 +407,15 @@ fun PlanScreen(
             }
         }
     }
+    }
+    if (jarSheet) {
+        JarSheet(
+            onDismiss = { jarSheet = false },
+            onStart = { name, target, date ->
+                goalsViewModel.saveGoal(id = null, name = name, targetMinor = target, targetDate = date, linkedAccountId = null)
+                jarSheet = false
+            },
+        )
     }
     capSheet?.let { request ->
         CapDialSheet(

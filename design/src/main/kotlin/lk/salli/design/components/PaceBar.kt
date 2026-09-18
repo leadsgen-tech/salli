@@ -38,6 +38,8 @@ fun PaceBar(
     tone: SalliTone = SalliTone.NEUTRAL,
     trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     tickColor: Color = MaterialTheme.colorScheme.onSurface,
+    /** Overrides the tone's fill, e.g. a category's own hue on Insights. */
+    fillColor: Color? = null,
 ) {
     val target = progress.coerceIn(0f, 1f)
     val animated by animateFloatAsState(
@@ -45,7 +47,7 @@ fun PaceBar(
         animationSpec = SalliMotionSpecs.slowSpatial(),
         label = "pace-fill",
     )
-    val fill = tone.colors().accent
+    val fill = fillColor ?: tone.colors().accent
 
     Canvas(
         modifier = modifier

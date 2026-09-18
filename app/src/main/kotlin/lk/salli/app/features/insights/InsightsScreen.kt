@@ -131,6 +131,11 @@ fun InsightsScreen(
                     }
                 }
 
+                if (state.weekHour.isNotEmpty() && state.heatCaption != null) {
+                    item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+                    item { WhenYouSpend(values = state.weekHour, caption = state.heatCaption?.english) }
+                }
+
                 if (state.merchants.isNotEmpty()) {
                     item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
                     item {
@@ -211,7 +216,11 @@ fun InsightsScreen(
                                         else -> moved.name
                                     },
                                     subtitle = pluralStringResource(R.plurals.insights_moved_count, moved.count, moved.count),
-                                    leading = { CategoryIcon(iconName = "swap_horiz", colorSeed = 11) },
+                                    // The counterparty's initials where we have a name; the neutral swap tile otherwise.
+                                    leading = {
+                                        if (!moved.isOwn && moved.name.isNotBlank()) MerchantAvatar(moved.name)
+                                        else CategoryIcon(iconName = "swap_horiz", colorSeed = 11)
+                                    },
                                     trailing = { Text(MoneyFormat.format(Money(moved.totalMinor, moved.currency))) },
                                 )
                             }
@@ -366,6 +375,8 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
 
 @Composable
 private fun CategoryInsightRow(slice: InsightSlice, onClick: (() -> Unit)?) {
+    val hue = lk.salli.design.theme.LocalSalliColors.current.categoryHue(slice.colorSeed)
+    val salli = lk.salli.design.theme.LocalSalliColors.current
     Column {
         ListRow(
             title = slice.categoryName,
@@ -375,17 +386,70 @@ private fun CategoryInsightRow(slice: InsightSlice, onClick: (() -> Unit)?) {
                 (slice.percent * 100).toInt(),
             ),
             leading = { CategoryIcon(slice.iconName, slice.colorSeed) },
-            trailing = { Text(MoneyFormat.format(Money(slice.totalMinor, slice.currency))) },
+            trailing = {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(MoneyFormat.format(Money(slice.totalMinor, slice.currency)))
+                    // Up is bad for spending, so the arrow's colour says so.
+                    slice.deltaPercent?.let { d ->
+                        Text(
+                            text = if (d >= 0) stringResource(R.string.insights_delta_up, d) else stringResource(R.string.insights_delta_down, -d),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (d > 0) salli.negative else salli.income,
+                        )
+                    }
+                }
+            },
             onClick = onClick,
         )
+        // The bar wears the category's own colour, so the list reads as a palette, not a ledger.
         PaceBar(
             progress = slice.percent,
+            fillColor = hue.accent,
             modifier = Modifier.padding(
                 start = 76.dp,
                 end = SalliSpacing.md,
                 bottom = SalliSpacing.sm,
             ),
         )
+    }
+}
+
+/**
+ * When the money goes out: 24 hours across, Monday to Sunday down, one rules-based caption.
+ * The same grid that lit up the year in onboarding, reused here and nowhere else.
+ */
+@Composable
+private fun WhenYouSpend(values: FloatArray, caption: String?) {
+    Column(modifier = Modifier.padding(horizontal = SalliSpacing.screenGutter)) {
+        SectionHeader(title = stringResource(R.string.insights_when_header))
+        Spacer(Modifier.height(SalliSpacing.xs))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            shape = SalliShapeTokens.row,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(SalliSpacing.md)) {
+                caption?.let {
+                    Text(it, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(SalliSpacing.xs))
+                }
+                lk.salli.design.components.stage.HeatGrid(
+                    columns = 24,
+                    rows = 7,
+                    values = values,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxCellSize = 14.dp,
+                    reducedMotion = lk.salli.design.motion.LocalReducedMotion.current,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(SalliSpacing.xs))
+                Text(
+                    stringResource(R.string.insights_when_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

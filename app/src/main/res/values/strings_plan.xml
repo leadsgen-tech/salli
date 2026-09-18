@@ -93,4 +93,13 @@
     <string name="cap_name_placeholder">Name this cap</string>
     <string name="cap_resets">Resets on day %1$d of the month</string>
     <string name="cap_set">Set cap</string>
+    <string name="jar_title">Jar</string>
+    <string name="jar_name_placeholder">What is it for?</string>
+    <string name="jar_by_when">By when</string>
+    <string name="jar_no_date">No date</string>
+    <string name="jar_months">%1$d months</string>
+    <string name="jar_one_year">1 year</string>
+    <string name="jar_per_month">That\'s %1$s a month</string>
+    <string name="jar_pick_date">Pick a horizon to see the monthly pace</string>
+    <string name="jar_start">Start the jar</string>
 </resources>

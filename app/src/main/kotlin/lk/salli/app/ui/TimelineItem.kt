@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import lk.salli.data.db.entities.CategoryEntity
 import lk.salli.data.db.entities.TransactionEntity
 import lk.salli.data.transactions.TransactionSpending
+import lk.salli.design.format.Monogram
 import lk.salli.domain.Money
 import lk.salli.domain.money.MoneyFormat
 import lk.salli.domain.TransactionFlow
@@ -51,47 +52,33 @@ data class TimelineItem(
     val categoryIconName: String? = null,
     /** Two letters for the leading tile when there is a real name to take them from. */
     val monogram: String? = null,
+    /** The bank this row happened at, for the leading tile of account events. */
+    val accountSender: String? = null,
+    /** What happened at the account, when there is no merchant to show instead. */
+    val badge: RowBadge? = null,
 )
 
-/**
- * Two letters that stand for a name: the first letters of the first two words, or the first
- * two letters of a single word. "Keells Super" → KE, "PickMe" → PI, "Bank Of Ceylon - BOC" → BO.
- * Null when the name has no letters to give.
- */
-fun monogramFor(name: String): String? {
-    val words = name.removePrefix("Declined · ")
-        .split(' ', '-', '·', '/', '.', '_', ',')
-        .map { w -> w.filter(Char::isLetter) }
-        .filter { it.isNotEmpty() }
-    return when {
-        words.isEmpty() -> null
-        words.size >= 2 -> (words[0].take(1) + words[1].take(1)).uppercase()
-        else -> words[0].take(2).uppercase()
-    }
-}
+/** The small mark on a bank tile: what the account did. */
+enum class RowBadge { SENT, RECEIVED, ATM, DEPOSIT, CHEQUE, FEE, CARD }
 
 /**
- * How heavy a transaction is against the user's typical one, 0..1 on a log scale: a typical
- * amount lands near 0.3, ten times typical at 1. Drives the ring around the leading tile so a
- * list can be scanned for the big hits without reading a digit.
+ * Which badge a row wears when it has no named merchant: transfers by direction, cash and
+ * cheques by kind, everything else by the card.
  */
-fun amountWeight(minor: Long, medianMinor: Long): Float {
-    if (medianMinor <= 0L || minor <= 0L) return 0f
-    val ratio = minor.toDouble() / medianMinor
-    return (kotlin.math.log10(ratio + 1.0) / kotlin.math.log10(11.0)).toFloat().coerceIn(0f, 1f)
-}
-
-/** The middle absolute amount of [rows], the yardstick for [amountWeight]. */
-fun medianAmount(rows: List<Long>): Long {
-    if (rows.isEmpty()) return 0L
-    val sorted = rows.map { kotlin.math.abs(it) }.sorted()
-    return sorted[sorted.size / 2]
+fun badgeFor(type: TransactionType, flow: TransactionFlow): RowBadge = when (type) {
+    TransactionType.ONLINE_TRANSFER, TransactionType.CEFT, TransactionType.SLIPS ->
+        if (flow == TransactionFlow.INCOME) RowBadge.RECEIVED else RowBadge.SENT
+    TransactionType.ATM -> if (flow == TransactionFlow.INCOME) RowBadge.DEPOSIT else RowBadge.ATM
+    TransactionType.CDM -> RowBadge.DEPOSIT
+    TransactionType.CHEQUE -> RowBadge.CHEQUE
+    TransactionType.FEE -> RowBadge.FEE
+    else -> if (flow == TransactionFlow.INCOME) RowBadge.RECEIVED else RowBadge.CARD
 }
 
 /**
  * Folds two or more own transfers in [rows] into one "moved between your accounts" row, placed
  * where the first of them was. Home's Recent list uses it per day so a run of moves reads as one
- * line instead of a wall of "Own transfer"; a single move stays as it is.
+ * line instead of a wall of "Moved to …"; a single move stays as it is.
  */
 fun foldOwnTransfers(rows: List<TimelineItem>, title: String, subtitle: (Int) -> String): List<TimelineItem> {
     val moves = rows.filter { it.isOwnTransfer }
@@ -169,7 +156,7 @@ private fun ownTransferItem(
     }.joinToString(" · ")
     return TimelineItem(
         id = from.id,
-        title = "Own transfer",
+        title = "Moved to $toName",
         subtitle = subtitle,
         // What actually moved between the accounts is the credited amount; the fee is
         // surfaced separately so the row never reads as spending.
@@ -202,7 +189,7 @@ fun TransactionEntity.toTimelineItem(
     // A user-written note wins over everything — if they took the time to type a name, use
     // it as the row title. Falls through to merchantRaw, then the type's generic label.
     val title = note?.takeIf { it.isNotBlank() }
-        ?: deriveTitle(type = type, merchantRaw = merchantRaw, isDeclined = isDeclined)
+        ?: deriveTitle(type = type, merchantRaw = merchantRaw, isDeclined = isDeclined, flow = flow)
 
     // For a paired transfer the subtitle becomes "Source → Destination" instead of the
     // generic category/account join — clearer about what moved where.
@@ -244,14 +231,20 @@ fun TransactionEntity.toTimelineItem(
         isExcluded = isHidden,
         categoryColorSeed = category?.colorSeed,
         categoryIconName = category?.iconName,
-        monogram = if (named) monogramFor(title) else null,
+        monogram = if (named && !isTransfer(type)) Monogram.of(title) else null,
+        accountSender = senderAddress,
+        badge = badgeFor(type, flow),
     )
 }
+
+private fun isTransfer(type: TransactionType): Boolean =
+    type == TransactionType.ONLINE_TRANSFER || type == TransactionType.CEFT || type == TransactionType.SLIPS
 
 private fun deriveTitle(
     type: TransactionType,
     merchantRaw: String?,
     isDeclined: Boolean,
+    flow: TransactionFlow = TransactionFlow.EXPENSE,
 ): String {
     val prefix = if (isDeclined) "Declined · " else ""
     val generic = when (type) {
@@ -279,9 +272,14 @@ private fun deriveTitle(
     // detail screen already showed the counterparty; the row used to throw it away.
     val raw = merchantRaw?.trim().orEmpty()
     val counterparty = raw.takeIf { it.isNotBlank() && it.any(Char::isLetter) }
-    // An account number is still worth its last four digits: "Transfer to ····9435" beats "Transfer".
+    if (!isTransfer(type)) return prefix + (counterparty ?: generic)
+    // Every transfer starts with the same verb; the counterparty follows when the bank named
+    // one (People's Bank does, BOC does not). An account number keeps its last four digits.
+    val verb = if (flow == TransactionFlow.INCOME) "Received" else "Sent"
+    val joiner = if (flow == TransactionFlow.INCOME) "from" else "to"
     val accountTail = raw.filter(Char::isDigit).takeIf { counterparty == null && it.length >= 4 }?.takeLast(4)
-    return prefix + (counterparty ?: accountTail?.let { "$generic to ····$it" } ?: generic)
+    val who = counterparty ?: accountTail?.let { "····$it" }
+    return prefix + if (who != null) "$verb $joiner $who" else verb
 }
 
 private fun iconFor(type: TransactionType): ImageVector = when (type) {

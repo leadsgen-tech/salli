@@ -210,7 +210,6 @@ fun TimelineScreen(
                     Box(modifier = Modifier.animateItem()) {
                         CategorySwipeRow(
                             row = row,
-                            medianMinor = state.medianMinor,
                             onClick = { onTransactionClick(row.id) },
                             onCategory = { categoryTarget = row.id },
                         )
@@ -246,7 +245,7 @@ fun TimelineScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, medianMinor: Long, onClick: () -> Unit, onCategory: () -> Unit) {
+private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> Unit, onCategory: () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         if (value == SwipeToDismissBoxValue.EndToStart) onCategory()
         false
@@ -271,7 +270,8 @@ private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, medianMinor: Lon
                 categoryIconName = row.categoryIconName,
                 categoryColorSeed = row.categoryColorSeed,
                 monogram = row.monogram,
-                weight = lk.salli.app.ui.amountWeight(row.amount.minorUnits, medianMinor),
+                accountSender = row.accountSender,
+                badge = row.badge?.let { lk.salli.design.components.TileBadge.valueOf(it.name) },
                 modifier = Modifier.clickable { onClick() },
             )
         },

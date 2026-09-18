@@ -25,6 +25,10 @@
         <item quantity="one">%1$d transfer</item>
         <item quantity="other">%1$d transfers</item>
     </plurals>
+    <string name="insights_when_header">When you spend</string>
+    <string name="insights_when_hint">Midnight to midnight across · Monday to Sunday down</string>
+    <string name="insights_delta_up">↑ %1$d%%</string>
+    <string name="insights_delta_down">↓ %1$d%%</string>
     <string name="insights_cash_flow">Cash flow</string>
     <string name="insights_income">In %1$s</string>
     <string name="insights_expense">Out %1$s</string>

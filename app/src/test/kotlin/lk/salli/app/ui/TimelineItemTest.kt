@@ -3,6 +3,7 @@ package lk.salli.app.ui
 import androidx.compose.material.icons.outlined.Receipt
 import com.google.common.truth.Truth.assertThat
 import lk.salli.data.db.entities.TransactionEntity
+import lk.salli.design.format.Monogram
 import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
 import lk.salli.domain.TransactionMethod
@@ -19,8 +20,10 @@ class TimelineItemTest {
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Commercial Bank PLC")
+        assertThat(item.title).isEqualTo("Sent to Commercial Bank PLC")
         assertThat(item.subtitle).isEqualTo("People's Bank 0068")
+        assertThat(item.badge).isEqualTo(RowBadge.SENT)
+        assertThat(item.monogram).isNull()
         assertThat(item.merchantRaw).isEqualTo("Commercial Bank PLC")
     }
 
@@ -45,7 +48,7 @@ class TimelineItemTest {
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
         assertThat(item.type).isEqualTo(TransactionType.ONLINE_TRANSFER)
-        assertThat(item.title).isEqualTo("Commercial Bank PLC")
+        assertThat(item.title).isEqualTo("Sent to Commercial Bank PLC")
     }
 
     @Test
@@ -56,8 +59,22 @@ class TimelineItemTest {
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Transfer to ····9435")
+        assertThat(item.title).isEqualTo("Sent to ····9435")
         assertThat(item.monogram).isNull()
+    }
+
+    @Test
+    fun `a transfer with no counterparty is just the verb, by direction`() {
+        val sent = row(type = TransactionType.ONLINE_TRANSFER, merchant = "", body = "Online Transfer Debit Rs 175000.00", sender = "BOC")
+            .toTimelineItem(category = null, accountDisplayName = "BOC 870")
+        val received = row(type = TransactionType.ONLINE_TRANSFER, merchant = "", body = "Credited by Rs. 120190.45(eRem Payment", sender = "PeoplesBank")
+            .copy(flowId = TransactionFlow.INCOME.id).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
+
+        assertThat(sent.title).isEqualTo("Sent")
+        assertThat(sent.badge).isEqualTo(RowBadge.SENT)
+        assertThat(sent.accountSender).isEqualTo("BOC")
+        assertThat(received.title).isEqualTo("Received")
+        assertThat(received.badge).isEqualTo(RowBadge.RECEIVED)
     }
 
     @Test
@@ -82,21 +99,12 @@ class TimelineItemTest {
 
     @Test
     fun `monograms take two letters from a name and nothing from digits`() {
-        assertThat(monogramFor("Keells Super")).isEqualTo("KS")
-        assertThat(monogramFor("Keells")).isEqualTo("KE")
-        assertThat(monogramFor("PickMe")).isEqualTo("PI")
-        assertThat(monogramFor("Bank Of Ceylon - BOC")).isEqualTo("BO")
-        assertThat(monogramFor("Declined · RAILWAY *14157")).isEqualTo("RA")
-        assertThat(monogramFor("94279435")).isNull()
-    }
-
-    @Test
-    fun `weight is log scaled against the typical amount`() {
-        assertThat(amountWeight(3_200_00, 3_200_00)).isWithin(0.02f).of(0.29f)
-        assertThat(amountWeight(32_000_00, 3_200_00)).isEqualTo(1f)
-        assertThat(amountWeight(0, 3_200_00)).isEqualTo(0f)
-        assertThat(amountWeight(500_00, 0)).isEqualTo(0f)
-        assertThat(medianAmount(listOf(100, -900, 300))).isEqualTo(300)
+        assertThat(Monogram.of("Keells Super")).isEqualTo("KS")
+        assertThat(Monogram.of("Keells")).isEqualTo("KE")
+        assertThat(Monogram.of("PickMe")).isEqualTo("PI")
+        assertThat(Monogram.of("Bank Of Ceylon - BOC")).isEqualTo("BO")
+        assertThat(Monogram.of("Declined · RAILWAY *14157")).isEqualTo("RA")
+        assertThat(Monogram.of("94279435")).isNull()
     }
 
     @Test
@@ -110,6 +118,7 @@ class TimelineItemTest {
         assertThat(named.monogram).isEqualTo("KS")
         assertThat(named.categoryColorSeed).isEqualTo(0)
         assertThat(generic.monogram).isNull()
+        assertThat(generic.badge).isEqualTo(RowBadge.ATM)
     }
 
     @Test
