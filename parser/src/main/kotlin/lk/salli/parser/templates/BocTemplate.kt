@@ -40,14 +40,14 @@ object BocTemplate : BankTemplate {
     //   2 = amount (with thousand separators, 2dp)
     //   3 = direction word: "From" (debit) or "To" (credit)
     //   4 = account number suffix — just the trailing digits after the X-mask
-    //   5 = balance
+    //   5 = balance — BOC prints a zero balance as "Rs .00", so the integer part is optional
     private val pattern: Regex = Regex(
         """^(ATM Withdrawal|ATM Cash Deposit|Cash Deposit|Cheque Deposit|""" +
             """Online Transfer Debit|Online Transfer Credit|""" +
             """CEFT Transfer Debit|CEFT Transfer Credit|""" +
             """Transfer Credit|Transfer Debit|POS/ATM Transaction)""" +
             """ Rs ([\d,]+\.\d{2}) (From|To) A/C No X+(\d{3,6})\.""" +
-            """ Balance available Rs ([\d,]+\.\d{2})""" +
+            """ Balance available Rs ([\d,]*\.\d{2})""" +
             """ - Thank you for banking with BOC$""",
     )
 
@@ -57,7 +57,7 @@ object BocTemplate : BankTemplate {
     private val achClearingPattern: Regex = Regex(
         """^(ACH Clearing Debit|ACH Clearing Credit|Cash Cheque Debit)\s+CHQ/NO\s+\d+""" +
             """\s+Rs ([\d,]+\.\d{2}) (From|To) A/C No X+(\d{3,6})\.""" +
-            """ Balance available Rs ([\d,]+\.\d{2})""" +
+            """ Balance available Rs ([\d,]*\.\d{2})""" +
             """ - Thank you for banking with BOC$""",
     )
 

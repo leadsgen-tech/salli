@@ -49,31 +49,60 @@ object HnbTemplate : BankTemplate {
     override val senderPatterns: List<Regex> = listOf(Regex("^HNB$"))
 
     // Shape 1 — account debit/credit.
+    // Amounts under a rupee arrive as "LKR .41" and a zero balance as "LKR .00": the integer
+    // part is optional everywhere HNB prints money.
     private val accountTxn = Regex(
-        """^LKR\s+([\d,]+\.\d{2})\s+(debited|credited)\s+to\s+Ac\s+No:(\S+)\s+on\s+""" +
+        """^LKR\s+([\d,]*\.\d{2})\s+(debited|credited)\s+to\s+Ac\s+No:(\S+)\s+on\s+""" +
             """(\d{2}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s+Reason:(.+?)\s+Bal:\s*LKR\s*""" +
-            """([\d,]+\.\d{2}).*$""",
+            """([\d,]*\.\d{2}).*$""",
         RegexOption.DOT_MATCHES_ALL,
     )
 
     // Shape 2 — fee / alert charge. The primary tell is the "A Transaction for LKR …" preamble
     // and the "debit ed" typo; match defensively with \s* between "debit" and "ed".
+    // "has been debit ed" is a charge; "has been credit ed" is a refund of one (FX markup).
     private val feeAlert = Regex(
-        """^A\s+Transaction\s+for\s+LKR\s+([\d,]+\.\d{2})\s+has\s+been\s+debit\s*ed\s+to\s+""" +
+        """^A\s+Transaction\s+for\s+LKR\s+([\d,]*\.\d{2})\s+has\s+been\s+(debit|credit)\s*ed\s+to\s+""" +
             """Ac\s+No:(\S+)\s+on\s+(\d{2}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s*\.\s*""" +
-            """Remarks\s*:(.+?)\.\s*Bal:\s*LKR\s*([\d,]+\.\d{2}).*$""",
+            """Remarks\s*:(.+?)\.\s*Bal:\s*LKR\s*([\d,]*\.\d{2}).*$""",
         RegexOption.DOT_MATCHES_ALL,
     )
 
     // Shape 3 — card SMS alert. Location has a trailing ", CC" (2-letter country) before
     // Amount; anchoring on ",Amount(Approx.):" keeps the merchant capture tight.
+    // Two spellings in the wild: "ALERT:PURCHASE, Account:" and "ALERT: PURCHASE, Debit account:".
     private val cardAlert = Regex(
-        """^HNB\s+SMS\s+ALERT:\S+,\s*Account:(\S+?),\s*Location:(.+?),\s*([A-Z]{2}),\s*""" +
-            """Amount\(Approx\.\):\s*([\d,]+\.\d{2})\s+([A-Z]{3}),\s*Av\.Bal:\s*([\d,]+\.\d{2})""" +
+        """^HNB\s+SMS\s+ALERT:\s*\S+,\s*(?:Debit\s+)?[Aa]ccount:(\S+?),\s*Location:(.+?),\s*([A-Z]{2}),\s*""" +
+            """Amount\(Approx\.\):\s*([\d,]*\.\d{2})\s+([A-Z]{3}),\s*Av\.Bal:\s*(-?[\d,]*\.\d{2})""" +
             """\s+LKR,\s*Date:(\d{2}\.\d{2}\.\d{2}),\s*Time:(\d{1,2}:\d{2}).*$""",
     )
 
     // Shape 4 — multi-line ATM receipt. DOTALL so `.` matches newlines.
+    // "HNB SMS ALERT:Transaction for Amt(Approx.):  549.00 LKR declined due to insufficient
+    //  funds. … Account: 0190***5845,Location: PickMe Ride, LK,Avl Bal: 276.02 LKR,Date: 24.07.26,
+    //  Time:06:54" — nothing moved, but a failing subscription is worth seeing.
+    private val declinedCard = Regex(
+        """^HNB\s+SMS\s+ALERT:\s*Transaction\s+for\s+Amt\(Approx\.\):\s*([\d,]*\.\d{2})\s+([A-Z]{3})\s+""" +
+            """declined.*?Account:\s*(\S+?),\s*Location:\s*(.+?),\s*([A-Z]{2}),\s*Avl\s+Bal:\s*(-?[\d,]*\.\d{2})""" +
+            """\s+LKR,\s*Date:\s*(\d{2}\.\d{2}\.\d{2}),\s*Time:\s*(\d{1,2}:\d{2}).*$""",
+        RegexOption.DOT_MATCHES_ALL,
+    )
+
+    // "TRANSACTION REVERSAL, Credit account:0190***5845,Location:PAYPAL, LU,Amount:1.00 USD,
+    //  Av.Bal:40260.92 LKR,Date:14.06.26,Time:20:45" — money coming back.
+    private val reversal = Regex(
+        """^TRANSACTION\s+REVERSAL,\s*Credit\s+account:(\S+?),\s*Location:(.+?),\s*([A-Z]{2}),\s*""" +
+            """Amount:\s*([\d,]*\.\d{2})\s+([A-Z]{3}),\s*Av\.Bal:\s*(-?[\d,]*\.\d{2})\s+LKR,\s*""" +
+            """Date:(\d{2}\.\d{2}\.\d{2}),\s*Time:(\d{1,2}:\d{2}).*$""",
+        RegexOption.DOT_MATCHES_ALL,
+    )
+
+    // The charge alert sometimes arrives cut after the time, with no remarks and no balance.
+    private val feeAlertShort = Regex(
+        """^A\s+Transaction\s+for\s+LKR\s+([\d,]*\.\d{2})\s+has\s+been\s+(debit|credit)\s*ed\s+to\s+""" +
+            """Ac\s+No:(\S+)\s+on\s+(\d{2}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s*\.?\s*$""",
+    )
+
     private val atmReceipt = Regex(
         """^HNB\s+ATM\s+Withdrawal\s+e-Receipt\s+Amt\(Approx\.\):\s*([\d,]+\.\d{2})\s+LKR\s+""" +
             """A/C:\s*(\S+)\s+Txn\s+Fee:\s*([\d,]+\.\d{2})\s*LKR\s+Location:\s*(.+?)\s+""" +
@@ -156,8 +185,9 @@ object HnbTemplate : BankTemplate {
         }
 
         feeAlert.find(trimmed)?.let { m ->
-            val (amountStr, account, date, time, remarks, balanceStr) = m.destructured
+            val (amountStr, direction, account, date, time, remarks, balanceStr) = m.destructured
             val bodyTs = TimeParser.parseHnbAccount(date, time)
+            val credited = direction.equals("credit", ignoreCase = true)
             return ParseResult.Success(
                 ParsedTransaction(
                     senderAddress = "HNB",
@@ -165,12 +195,75 @@ object HnbTemplate : BankTemplate {
                     amount = Money.ofMajor(amountStr, Currency.LKR),
                     balance = Money.ofMajor(balanceStr, Currency.LKR),
                     fee = null,
-                    flow = TransactionFlow.EXPENSE,
+                    flow = if (credited) TransactionFlow.INCOME else TransactionFlow.EXPENSE,
                     type = TransactionType.FEE,
                     merchantRaw = remarks.trim().takeIf { it.isNotBlank() },
                     location = null,
                     timestamp = bodyTs ?: receivedAt,
                     isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
+
+        feeAlertShort.find(trimmed)?.let { m ->
+            val (amountStr, direction, account, date, time) = m.destructured
+            val credited = direction.equals("credit", ignoreCase = true)
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "HNB",
+                    accountNumberSuffix = account,
+                    amount = Money.ofMajor(amountStr, Currency.LKR),
+                    balance = null,
+                    fee = null,
+                    flow = if (credited) TransactionFlow.INCOME else TransactionFlow.EXPENSE,
+                    type = TransactionType.FEE,
+                    merchantRaw = null,
+                    location = null,
+                    timestamp = TimeParser.parseHnbAccount(date, time) ?: receivedAt,
+                    isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
+
+        reversal.find(trimmed)?.let { m ->
+            val (account, merchant, _, amountStr, currencyRaw, balanceStr, date, time) = m.destructured
+            val currency = Currency.normalize(currencyRaw)
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "HNB",
+                    accountNumberSuffix = account,
+                    amount = Money.ofMajor(amountStr, currency),
+                    balance = if (currency == Currency.LKR) Money.ofMajor(balanceStr, Currency.LKR) else null,
+                    fee = null,
+                    flow = TransactionFlow.INCOME,
+                    type = TransactionType.OTHER,
+                    merchantRaw = merchant.trim(),
+                    location = null,
+                    timestamp = TimeParser.parseHnbDot(date, time) ?: receivedAt,
+                    isDeclined = false,
+                    rawBody = body,
+                ),
+            )
+        }
+
+        declinedCard.find(trimmed)?.let { m ->
+            val (amountStr, currencyRaw, account, merchant, _, balanceStr, date, time) = m.destructured
+            val currency = Currency.normalize(currencyRaw)
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "HNB",
+                    accountNumberSuffix = account,
+                    amount = Money.ofMajor(amountStr, currency),
+                    balance = if (currency == Currency.LKR) Money.ofMajor(balanceStr, Currency.LKR) else null,
+                    fee = null,
+                    flow = TransactionFlow.EXPENSE,
+                    type = TransactionType.DECLINED,
+                    merchantRaw = merchant.trim(),
+                    location = null,
+                    timestamp = TimeParser.parseHnbDot(date, time) ?: receivedAt,
+                    isDeclined = true,
                     rawBody = body,
                 ),
             )

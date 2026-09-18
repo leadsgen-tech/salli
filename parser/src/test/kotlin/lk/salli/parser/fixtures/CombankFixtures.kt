@@ -345,5 +345,30 @@ object CombankFixtures {
             body = "TRANSACTION ON YOUR CARD ENDING WITH 4273 AT UBER EATS DECLINED. AMOUNT 1,200.00 EXCEEDS LIMIT.",
             expected = Expectation.Unknown,
         ),
+        ParseCase(
+            label = "combank_justpay_qr",
+            sender = "COMBANK",
+            body = "Dear Customer, your transaction made via \"JP/QR\" for Rs.1250.00 has been approved sucessfully. Thank you",
+            expected = Expectation.Success(
+                type = TransactionType.MOBILE_PAYMENT,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 125_000,
+                currency = Currency.LKR,
+                merchantRaw = "JustPay QR",
+            ),
+        ),
+        ParseCase(
+            label = "combank_reference_unpaid_is_declined",
+            sender = "COMBANK",
+            body = "Your Reference-BCXXXXXX6783-for the amount Rs.             17,650.00-Sufficient funds are not available for payment, Please fund your account.",
+            expected = Expectation.Success(
+                type = TransactionType.DECLINED,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 1_765_000,
+                currency = Currency.LKR,
+                merchantRaw = "Payment BCXXXXXX6783",
+                isDeclined = true,
+            ),
+        ),
     )
 }

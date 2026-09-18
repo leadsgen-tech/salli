@@ -41,4 +41,17 @@ class OtpGuardTest {
     fun `empty body is not an OTP`() {
         assertThat(OtpGuard.isOtp("")).isFalse()
     }
+
+    @Test
+    fun `PINs and access codes are credentials, not transactions`() {
+        listOf(
+            "Dear Cardholder, 1818 is your temporary PIN for your debit card ' XXXX1117****9200 '. Please change the temporary PIN at any Commercial Bank ATM.",
+            "Dear Valued Customer,Your E-PIN for HNB Debit card 4555***2189 is 273471.",
+            "Welcome to Smart Passbook service. Your Access Code is 757815 to confirm the registration.",
+            "Please use code XXXXXXXX6048 for your temporary password for ComBank Digital. PbgqGoDg8jk",
+            "Dear Customer, please use the new access code 6946 for ComBank ePassbook Facility.",
+        ).forEach { body -> com.google.common.truth.Truth.assertWithMessage(body).that(OtpGuard.isOtp(body)).isTrue() }
+        // A card mask or an amount next to the word PIN is not a code.
+        assertThat(OtpGuard.isOtp("Purchase at KEELLS for LKR 3,450.00 with PIN on card ending #4273.")).isFalse()
+    }
 }

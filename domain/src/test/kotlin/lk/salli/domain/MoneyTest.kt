@@ -77,4 +77,11 @@ class MoneyTest {
         val m = Money.ofMajor("1.999", Currency.LKR)
         assertThat(m.minorUnits).isEqualTo(199)
     }
+
+    @Test
+    fun `amounts printed without a leading zero still parse`() {
+        assertThat(Money.ofMajor(".41", Currency.LKR).minorUnits).isEqualTo(41)
+        assertThat(Money.ofMajor(".00", Currency.LKR).minorUnits).isEqualTo(0)
+        assertThat(Money.ofMajor("-.50", Currency.LKR).minorUnits).isEqualTo(-50)
+    }
 }

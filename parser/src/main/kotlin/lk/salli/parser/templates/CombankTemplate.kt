@@ -87,10 +87,19 @@ object CombankTemplate : BankTemplate {
     // "Dear Customer, your transaction made via "Justpay" for Rs.<amt> has been approved
     //  sucessfully. Thank you"  ← bank's typo retained.
     // Note `Rs.` has NO space before the amount in this shape (e.g. `Rs.15600.00`).
+    // The same sentence also arrives with the channel "JP/QR" (a JustPay QR scan). One
+    // friend's inbox had 41 of them unparsed.
     private val justpay = Regex(
-        """^Dear\s+Customer,\s+your\s+transaction\s+made\s+via\s+"?Justpay"?\s+for\s+""" +
+        """^Dear\s+Customer,\s+your\s+transaction\s+made\s+via\s+"?(Justpay|JP/QR)"?\s+for\s+""" +
             """Rs\.?\s*([\d,]+\.\d{2})\s+has\s+been\s+approved.*$""",
         RegexOption.IGNORE_CASE,
+    )
+
+    // "Your Reference-BCXXXXXX6783-for the amount Rs.   17,675.00-Sufficient funds are not
+    //  available for payment, Please fund your account." — a payment the bank could not make.
+    private val referenceUnpaid = Regex(
+        """^Your\s+Reference-(\S+?)-for\s+the\s+amount\s+Rs\.?\s*([\d,]+\.\d{2})\s*-\s*Sufficient\s+funds\s+are\s+not\s+available.*$""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
     )
 
     // "We wish to confirm a CRM Deposit at HH:MM for Rs. <amt> through <LOC> to your account
@@ -358,8 +367,28 @@ object CombankTemplate : BankTemplate {
             )
         }
 
+        referenceUnpaid.find(trimmed)?.let { m ->
+            val (reference, amountStr) = m.destructured
+            return ParseResult.Success(
+                ParsedTransaction(
+                    senderAddress = "COMBANK",
+                    accountNumberSuffix = null,
+                    amount = Money.ofMajor(amountStr, Currency.LKR),
+                    balance = null,
+                    fee = null,
+                    flow = TransactionFlow.EXPENSE,
+                    type = TransactionType.DECLINED,
+                    merchantRaw = "Payment $reference",
+                    location = null,
+                    timestamp = receivedAt,
+                    isDeclined = true,
+                    rawBody = body,
+                ),
+            )
+        }
+
         justpay.find(trimmed)?.let { m ->
-            val (amountStr) = m.destructured
+            val (channel, amountStr) = m.destructured
             return ParseResult.Success(
                 ParsedTransaction(
                     senderAddress = "COMBANK",
@@ -369,7 +398,7 @@ object CombankTemplate : BankTemplate {
                     fee = null,
                     flow = TransactionFlow.EXPENSE,
                     type = TransactionType.MOBILE_PAYMENT,
-                    merchantRaw = "Justpay",
+                    merchantRaw = if (channel.equals("JP/QR", ignoreCase = true)) "JustPay QR" else "Justpay",
                     location = null,
                     timestamp = receivedAt,
                     isDeclined = false,

@@ -44,6 +44,15 @@ object OtpGuard {
         RegexOption.IGNORE_CASE,
     )
 
+    // PINs, e-PINs, access codes and temporary passwords: credentials, never money. "1818 is
+    // your temporary PIN", "Your E-PIN … is 273471", "Your Access Code is 757815", "use code
+    // XXXXXXXX6048 for your temporary password". Same adjacency rule as OTPs.
+    private val credentialKeyword = """(?:e-?pin|\bpin\b|access\s+code|temporary\s+password|passcode)"""
+    private val credentialCode = Regex(
+        """(?:(?:$code|\bX{4,}\d{3,6}\b).{0,60}?$credentialKeyword)|(?:$credentialKeyword.{0,60}?(?:$code|\bX{4,}\d{3,6}\b))""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun isOtp(body: String): Boolean =
-        otpWithCode.containsMatchIn(body) || approvalCode.containsMatchIn(body)
+        otpWithCode.containsMatchIn(body) || approvalCode.containsMatchIn(body) || credentialCode.containsMatchIn(body)
 }

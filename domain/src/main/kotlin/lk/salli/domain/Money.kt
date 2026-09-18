@@ -48,7 +48,9 @@ data class Money(
         fun ofMajor(majorWithDecimal: String, currency: String): Money {
             val cleaned = majorWithDecimal.replace(",", "").trim()
             val parts = cleaned.split(".")
-            val whole = parts[0].toLong()
+            // HNB and BOC print amounts under a rupee as ".41" and a zero balance as ".00".
+            val wholeText = parts[0].let { if (it.isEmpty() || it == "-") it + "0" else it }
+            val whole = wholeText.toLong()
             val fraction = when {
                 parts.size == 1 -> 0L
                 parts[1].length == 1 -> parts[1].toLong() * 10

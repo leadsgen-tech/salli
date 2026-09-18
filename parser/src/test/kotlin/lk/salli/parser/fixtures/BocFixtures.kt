@@ -168,5 +168,18 @@ object BocFixtures {
                 accountSuffix = "870",
             ),
         ),
+        ParseCase(
+            label = "boc_ceft_debit_zero_balance_prints_as_dot_zero",
+            sender = "BOC",
+            body = "CEFT Transfer Debit Rs 37550.00 From A/C No XXXXXXXXXX355. Balance available Rs .00 - Thank you for banking with BOC",
+            expected = Expectation.Success(
+                type = TransactionType.CEFT,
+                flow = TransactionFlow.EXPENSE,
+                amountMinor = 3_755_000,
+                currency = Currency.LKR,
+                balanceMinor = 0,
+                accountSuffix = "355",
+            ),
+        ),
     )
 }
