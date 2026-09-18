@@ -99,7 +99,21 @@ data class BudgetsUiState(
     val availableCategories: List<CategoryEntity> = emptyList(),
     val availableAccounts: List<AccountEntity> = emptyList(),
     val loading: Boolean = true,
+    /** Spent per category in the last few cycles (oldest first, current cycle last). Feeds the cap dial. */
+    val cycleHistory: List<CycleCategorySpend> = emptyList(),
+    /** The category most worth capping first: highest median over completed cycles. */
+    val capSuggestion: CapSuggestion? = null,
 )
+
+/** What one cycle cost, by category, in LKR minor units. */
+data class CycleCategorySpend(
+    val label: String,
+    val byCategory: Map<Long?, Long>,
+    val totalMinor: Long,
+    val complete: Boolean,
+)
+
+data class CapSuggestion(val categoryId: Long, val categoryName: String, val medianMinor: Long)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -119,7 +133,8 @@ class BudgetsViewModel @Inject constructor(
     // We fetch a wide slab of recent transactions and slice per-budget. The widest cycle is
     // 28 days + one-day boundary slack → 90 days covers "current cycle" plus room for history
     // features we haven't built yet without re-querying per budget.
-    private val recentWindowMs: Long = TimeUnit.DAYS.toMillis(90)
+    // Widened to four cycles so the cap dial can show three completed periods behind the current one.
+    private val recentWindowMs: Long = TimeUnit.DAYS.toMillis(125)
 
     private val recentTxns = run {
         val from = System.currentTimeMillis() - recentWindowMs
@@ -238,17 +253,56 @@ class BudgetsViewModel @Inject constructor(
             )
         }
 
+        val history = cycleHistory(txns, defaultPeriodStartDay.value, now)
         BudgetsUiState(
             budgets = uiBudgets,
             availableCategories = categories,
             availableAccounts = accounts.filter { !it.isArchived },
             loading = false,
+            cycleHistory = history,
+            capSuggestion = suggestCap(history, catLookup),
         )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         BudgetsUiState(loading = true),
     )
+
+    /** Spent per category for the three cycles before the current one, then the current one. */
+    private fun cycleHistory(txns: List<TransactionEntity>, startDay: Int, now: Long): List<CycleCategorySpend> {
+        val current = DateRange.cycleFor(now, startDay)
+        val cycles = ArrayList<DateRange>()
+        var c = current
+        repeat(3) { c = DateRange.prevCycle(c, startDay); cycles.add(0, c) }
+        cycles.add(current)
+        return cycles.map { range ->
+            val inRange = txns.filter {
+                it.timestamp in range.fromMillis until range.untilMillis &&
+                    lk.salli.data.transactions.TransactionSpending.counts(it) &&
+                    it.amountCurrency == "LKR"
+            }
+            val byCat = inRange.groupBy { it.categoryId }.mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
+            CycleCategorySpend(
+                label = range.label,
+                byCategory = byCat,
+                totalMinor = byCat.values.sum(),
+                complete = range.untilMillis <= now,
+            )
+        }
+    }
+
+    private fun suggestCap(history: List<CycleCategorySpend>, catLookup: Map<Long, CategoryEntity>): CapSuggestion? {
+        val completed = history.filter { it.complete }
+        if (completed.isEmpty()) return null
+        val medians = completed.flatMap { it.byCategory.keys }.filterNotNull().distinct().mapNotNull { catId ->
+            val values = completed.map { it.byCategory[catId] ?: 0L }.sorted()
+            val median = values[values.size / 2]
+            if (median <= 0L) null else catId to median
+        }
+        val (catId, median) = medians.maxByOrNull { it.second } ?: return null
+        val cat = catLookup[catId] ?: return null
+        return CapSuggestion(categoryId = catId, categoryName = cat.name, medianMinor = median)
+    }
 
     /**
      * Persist a new budget. Supports both cap modes:

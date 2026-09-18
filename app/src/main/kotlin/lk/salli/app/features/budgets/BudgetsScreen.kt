@@ -680,7 +680,7 @@ private fun ModeOption(label: String, selected: Boolean, onClick: () -> Unit, mo
 }
 
 @Composable
-private fun PillTextField(
+internal fun PillTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,

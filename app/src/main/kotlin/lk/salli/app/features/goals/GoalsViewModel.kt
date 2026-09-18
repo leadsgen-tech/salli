@@ -123,6 +123,31 @@ class GoalsViewModel @Inject constructor(
         }
     }
 
+    /** The last amount poured into a jar, kept so it can be taken back with one tap. */
+    data class Pour(val contributionId: Long, val goalId: Long, val goalName: String, val amountMinor: Long)
+
+    private val _lastPour = kotlinx.coroutines.flow.MutableStateFlow<Pour?>(null)
+    val lastPour: StateFlow<Pour?> = _lastPour
+
+    /** Pouring is a contribution with no note; unlike [addContribution] it remembers itself for undo. */
+    fun pour(goalId: Long, goalName: String, amountMinor: Long) {
+        if (amountMinor <= 0L) return
+        viewModelScope.launch {
+            val id = db.goals().insertContribution(
+                GoalContributionEntity(goalId = goalId, amountMinor = amountMinor, at = System.currentTimeMillis()),
+            )
+            _lastPour.value = Pour(id, goalId, goalName, amountMinor)
+        }
+    }
+
+    fun undoLastPour() {
+        val pour = _lastPour.value ?: return
+        _lastPour.value = null
+        viewModelScope.launch { db.goals().deleteContribution(pour.contributionId) }
+    }
+
+    fun forgetLastPour() { _lastPour.value = null }
+
     fun setArchived(goalId: Long, archived: Boolean) {
         viewModelScope.launch { db.goals().setArchived(goalId, archived) }
     }

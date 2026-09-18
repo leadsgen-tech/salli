@@ -40,6 +40,18 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import lk.salli.app.features.budgets.BudgetCapMode
+import lk.salli.app.features.budgets.CapDialSheet
+import lk.salli.design.components.PrimaryButton
+import lk.salli.design.components.stage.GoalJarTile
+import lk.salli.design.components.stage.GoalJarTileWidth
+import lk.salli.design.motion.LocalReducedMotion
+import lk.salli.design.motion.rememberDeviceTilt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.salli.app.R
@@ -56,7 +68,6 @@ import lk.salli.design.components.HeroCard
 import lk.salli.design.components.HeroEyebrow
 import lk.salli.design.components.HeroFact
 import lk.salli.design.components.HeroSplit
-import lk.salli.design.components.RingProgress
 import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.theme.LocalSalliColors
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -115,7 +126,14 @@ fun PlanScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val budgets by budgetsViewModel.state.collectAsStateWithLifecycle()
+    val defaultPeriodStart by budgetsViewModel.defaultPeriodStartDay.collectAsStateWithLifecycle()
     val goals by goalsViewModel.state.collectAsStateWithLifecycle()
+    val lastPour by goalsViewModel.lastPour.collectAsStateWithLifecycle()
+    var capSheet by remember { mutableStateOf<CapSheetRequest?>(null) }
+    // The undo chip for a pour lives five seconds, then the pour is final.
+    LaunchedEffect(lastPour) {
+        if (lastPour != null) { delay(5_000); goalsViewModel.forgetLastPour() }
+    }
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
     val planning by viewModel.planningSnapshot.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
@@ -201,24 +219,35 @@ fun PlanScreen(
         item {
             SectionHeader(
                 title = stringResource(R.string.plan_budgets_header),
-                actionLabel = stringResource(R.string.plan_budgets_manage),
-                onAction = onOpenBudgets,
+                actionLabel = stringResource(if (budgets.budgets.isEmpty()) R.string.plan_new_cap else R.string.plan_budgets_manage),
+                onAction = { if (budgets.budgets.isEmpty()) capSheet = CapSheetRequest(null) else onOpenBudgets() },
             )
         }
         item { Spacer(Modifier.height(SalliSpacing.xs)) }
-        item {
-            GroupedList {
-                if (budgets.budgets.isEmpty()) {
-                    ListRow(
-                        title = stringResource(R.string.plan_budgets_empty_title),
-                        subtitle = stringResource(R.string.plan_budgets_empty_subtitle),
-                        onClick = onOpenBudgets,
-                    )
-                } else {
+        if (budgets.budgets.isEmpty()) {
+            // No caps yet: propose the one most worth setting, computed from the last periods.
+            item {
+                SuggestionCard(
+                    eyebrow = stringResource(R.string.plan_cap_suggestion_title),
+                    body = budgets.capSuggestion?.let {
+                        stringResource(R.string.plan_cap_suggestion, it.categoryName, MoneyFormat.formatMinor(it.medianMinor, "LKR"))
+                    } ?: stringResource(R.string.plan_cap_suggestion_generic),
+                    action = stringResource(R.string.plan_cap_pull),
+                    onAction = { capSheet = CapSheetRequest(budgets.capSuggestion?.categoryId) },
+                )
+            }
+        } else {
+            item {
+                GroupedList {
                     budgets.budgets.forEachIndexed { index, budget ->
                         if (index > 0) ListDivider()
                         BudgetSummaryRow(budget = budget, onClick = onOpenBudgets)
                     }
+                }
+            }
+            item {
+                TextButton(onClick = { capSheet = CapSheetRequest(null) }) {
+                    Text("+ " + stringResource(R.string.plan_new_cap))
                 }
             }
         }
@@ -249,33 +278,66 @@ fun PlanScreen(
             }
             item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
         }
+        val liveGoals = goals.goals.filter { !it.isArchived }
         item {
             SectionHeader(
                 title = stringResource(R.string.plan_goals_title),
-                actionLabel = stringResource(R.string.plan_goals_all),
+                actionLabel = stringResource(if (liveGoals.isEmpty()) R.string.plan_new_goal else R.string.plan_goals_all),
                 onAction = onOpenGoals,
             )
         }
-        val liveGoals = goals.goals.filter { !it.isArchived }
+        item { Spacer(Modifier.height(SalliSpacing.xs)) }
         if (!goals.loading && liveGoals.isEmpty()) {
-            item { Spacer(Modifier.height(SalliSpacing.xs)) }
             item {
-                GroupedList {
-                    ListRow(
-                        title = stringResource(R.string.plan_goals_title),
-                        subtitle = stringResource(R.string.plan_goals_empty),
-                        onClick = onOpenGoals,
-                    )
-                }
+                SuggestionCard(
+                    eyebrow = stringResource(R.string.plan_goal_suggestion_title),
+                    body = stringResource(R.string.plan_goal_suggestion),
+                    action = stringResource(R.string.plan_goal_start),
+                    onAction = onOpenGoals,
+                )
             }
         } else {
-            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            // The jars live here, on Plan, in the same row as the button: hold one to pour.
             item {
+                val tilt by rememberDeviceTilt(enabled = liveGoals.isNotEmpty())
+                val reduced = LocalReducedMotion.current
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(SalliSpacing.sm),
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 ) {
-                    liveGoals.forEach { goal -> GoalPreview(goal, onOpenGoals) }
+                    liveGoals.forEach { goal ->
+                        GoalJarTile(
+                            name = goal.name,
+                            savedMinor = goal.saved.minorUnits,
+                            targetMinor = goal.target.minorUnits,
+                            lineMinor = goal.toSaveThisCycle?.let { goal.saved.minorUnits + it.minorUnits },
+                            formatAmount = { MoneyFormat.short(Money(it, goal.saved.currency)) },
+                            onPour = { goalsViewModel.pour(goal.id, goal.name, it) },
+                            tilt = tilt,
+                            canPour = goal.linkedAccountId == null && !goal.isComplete,
+                            reducedMotion = reduced,
+                            modifier = Modifier.width(GoalJarTileWidth),
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(SalliSpacing.xs)) }
+            item {
+                val pour = lastPour
+                if (pour != null) {
+                    TextButton(onClick = goalsViewModel::undoLastPour) {
+                        Text(stringResource(R.string.plan_undo_pour, MoneyFormat.formatMinor(pour.amountMinor, "LKR"), pour.goalName))
+                    }
+                } else {
+                    val needy = liveGoals.firstOrNull { (it.toSaveThisCycle?.minorUnits ?: 0L) > 0L && !it.isComplete }
+                    Text(
+                        text = stringResource(R.string.plan_goal_hint) + " · " + (
+                            needy?.let { stringResource(R.string.plan_goal_needs, it.name, MoneyFormat.short(it.toSaveThisCycle!!)) }
+                                ?: stringResource(R.string.plan_goal_on_line)
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -341,6 +403,50 @@ fun PlanScreen(
             }
         }
     }
+    }
+    capSheet?.let { request ->
+        CapDialSheet(
+            categories = budgets.availableCategories,
+            history = budgets.cycleHistory,
+            defaultPeriodStartDay = defaultPeriodStart,
+            initialCategoryId = request.categoryId,
+            onDismiss = { capSheet = null },
+            onSave = { payload ->
+                if (payload.categoryIds.isEmpty()) {
+                    budgetsViewModel.create(
+                        name = payload.name, currency = "LKR", capMode = BudgetCapMode.Total,
+                        lines = emptyList(), totalCapMinor = payload.capMinor,
+                        accountIds = emptyList(), periodStartDay = payload.periodStartDay,
+                    )
+                } else {
+                    budgetsViewModel.create(
+                        name = payload.name, currency = "LKR", capMode = BudgetCapMode.PerCategory,
+                        lines = payload.perCategoryMinor.map { it.key to it.value }, totalCapMinor = null,
+                        accountIds = emptyList(), periodStartDay = payload.periodStartDay,
+                    )
+                }
+                capSheet = null
+            },
+        )
+    }
+}
+
+/** Opens the cap dial, optionally seated on one category. */
+private data class CapSheetRequest(val categoryId: Long?)
+
+/** A nudge computed from the user's own numbers, with one action. Replaces an empty row. */
+@Composable
+private fun SuggestionCard(eyebrow: String, body: String, action: String, onAction: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(SalliSpacing.md), verticalArrangement = Arrangement.spacedBy(SalliSpacing.xs)) {
+            Text(eyebrow.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(body, style = MaterialTheme.typography.bodyLarge)
+            PrimaryButton(text = action, onClick = onAction)
+        }
     }
 }
 
@@ -436,31 +542,6 @@ private fun PlanUpcomingRow(
 }
 
 @Composable
-private fun GoalPreview(goal: GoalRow, onClick: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.width(170.dp).clickable(onClick = onClick),
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(SalliSpacing.xs),
-            modifier = Modifier.padding(SalliSpacing.md),
-        ) {
-            RingProgress(progress = goal.percent / 100f)
-            Text(goal.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-            Text(
-                stringResource(
-                    R.string.plan_goal_saved_of_target,
-                    MoneyFormat.short(goal.saved),
-                    MoneyFormat.short(goal.target),
-                ),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
-}
-
-@Composable
 private fun TrackerRow(
     icon: ImageVector,
     title: String,
@@ -515,6 +596,18 @@ private fun BudgetSummaryRow(budget: BudgetUi, onClick: () -> Unit) {
             expected = budget.paceExpectedFraction,
             tone = budget.pace.tone(),
         )
+        // The one line that changes a decision: where this pace lands at the end of the cycle.
+        if (budget.paceExpectedFraction > 0.05f && budget.totalCapMinor > 0L) {
+            val projected = (budget.totalSpentMinor / budget.paceExpectedFraction).toLong()
+            val spare = budget.totalCapMinor - projected
+            Spacer(Modifier.height(SalliSpacing.xxs))
+            Text(
+                text = if (spare >= 0L) stringResource(R.string.plan_budget_projection_spare, MoneyFormat.formatMinor(spare, budget.currency))
+                else stringResource(R.string.plan_budget_projection_over, MoneyFormat.formatMinor(-spare, budget.currency)),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (spare >= 0L) MaterialTheme.colorScheme.onSurfaceVariant else LocalSalliColors.current.negative,
+            )
+        }
     }
 }
 

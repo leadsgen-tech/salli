@@ -63,4 +63,34 @@
 
     <string name="plan_split_title">Shared expenses</string>
     <string name="plan_split_subtitle">Split bills with people and see who owes whom</string>
+    <string name="plan_new_cap">New cap</string>
+    <string name="plan_new_goal">New goal</string>
+    <string name="plan_cap_suggestion_title">Suggested cap</string>
+    <string name="plan_cap_suggestion">Your %1$s median is %2$s. Cap it?</string>
+    <string name="plan_cap_suggestion_generic">Cap a category, or everything, against what it usually costs.</string>
+    <string name="plan_cap_pull">Pull the dial</string>
+    <string name="plan_goal_suggestion_title">Suggested goal</string>
+    <string name="plan_goal_suggestion">Give some money a purpose. A jar fills as you set money aside.</string>
+    <string name="plan_goal_start">Start a jar</string>
+    <string name="plan_goal_hint">Hold a jar to add money</string>
+    <string name="plan_goal_needs">%1$s needs %2$s more this period</string>
+    <string name="plan_goal_on_line">Every jar is on its line</string>
+    <string name="plan_undo_pour">Undo %1$s into %2$s</string>
+    <string name="plan_budget_projection_spare">At this pace you finish with %1$s spare</string>
+    <string name="plan_budget_projection_over">At this pace you finish %1$s over</string>
+    <string name="cap_title">Cap</string>
+    <string name="cap_everything">Everything</string>
+    <string name="cap_usual_line">You usually spend %1$s on %2$s</string>
+    <string name="cap_no_history">No history yet for this. Pick a number you can live with.</string>
+    <string name="cap_per_day">That\'s %1$s a day</string>
+    <string name="cap_under_usual">%1$s under your usual</string>
+    <string name="cap_over_usual">%1$s over your usual</string>
+    <string name="cap_exactly_usual">exactly your usual</string>
+    <string name="cap_stop_tight" formatted="false">Tight −10 %</string>
+    <string name="cap_stop_usual">Usual</string>
+    <string name="cap_stop_loose" formatted="false">Loose +10 %</string>
+    <string name="cap_so_far">%1$s so far</string>
+    <string name="cap_name_placeholder">Name this cap</string>
+    <string name="cap_resets">Resets on day %1$d of the month</string>
+    <string name="cap_set">Set cap</string>
 </resources>
