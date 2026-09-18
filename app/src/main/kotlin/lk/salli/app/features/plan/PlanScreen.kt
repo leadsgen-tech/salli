@@ -46,7 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import lk.salli.app.features.budgets.BudgetCapMode
-import lk.salli.app.features.budgets.CapDialSheet
+import lk.salli.app.features.budgets.CapSheet
 import lk.salli.design.components.PrimaryButton
 import lk.salli.design.components.stage.GoalJarTile
 import lk.salli.design.components.stage.GoalJarTileWidth
@@ -418,7 +418,7 @@ fun PlanScreen(
         )
     }
     capSheet?.let { request ->
-        CapDialSheet(
+        CapSheet(
             categories = budgets.availableCategories,
             history = budgets.cycleHistory,
             defaultPeriodStartDay = defaultPeriodStart,
@@ -444,7 +444,7 @@ fun PlanScreen(
     }
 }
 
-/** Opens the cap dial, optionally seated on one category. */
+/** Opens the cap glass, optionally seated on one category. */
 private data class CapSheetRequest(val categoryId: Long?)
 
 /** A nudge computed from the user's own numbers, with one action. Replaces an empty row. */

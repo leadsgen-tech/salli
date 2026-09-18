@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,7 +22,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -33,24 +31,21 @@ import java.util.Calendar
 import lk.salli.app.R
 import lk.salli.app.features.budgets.PillTextField
 import lk.salli.design.components.PrimaryButton
-import lk.salli.design.components.stage.CapDial
-import lk.salli.design.components.stage.DialMark
-import lk.salli.design.components.stage.LiquidFill
-import lk.salli.design.motion.rememberDeviceTilt
-import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
+import lk.salli.design.components.stage.Glass
+import lk.salli.design.components.stage.GlassMark
 import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.motion.LocalReducedMotion
+import lk.salli.design.motion.rememberDeviceTilt
 import lk.salli.design.theme.LocalSalliColors
 import lk.salli.design.theme.SalliSpacing
 import lk.salli.domain.Currency
-import lk.salli.domain.Money
 import lk.salli.domain.money.MoneyFormat
 
 /**
- * Starting a jar, the same way a cap is set: pull the target on a dial, pick a horizon, name
- * it, done. The jar on the right previews the level the first period should reach. One sheet,
- * no separate page, the same shape as the cap sheet so the two never feel like different apps.
+ * Starting a jar, the same way a cap is set: fill the glass to the target, pick a horizon, name
+ * it, done. The rungs on the wall are the usual targets; the scale is bent so 25k and 500k both
+ * fit. One sheet, no separate page, the same shape as the cap sheet so the two never feel like
+ * different apps.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,35 +59,23 @@ fun JarSheet(
     var months by remember { mutableIntStateOf(0) }
     var name by remember { mutableStateOf("") }
 
-    val stops = listOf(
-        DialMark("25k", 2_500_000L),
-        DialMark("50k", 5_000_000L),
-        DialMark("100k", 10_000_000L),
-        DialMark("250k", 25_000_000L),
-        DialMark("500k", 50_000_000L),
+    val rungs = listOf(
+        GlassMark("500k", 50_000_000L),
+        GlassMark("250k", 25_000_000L),
+        GlassMark("100k", 10_000_000L),
+        GlassMark("50k", 5_000_000L),
+        GlassMark("25k", 2_500_000L),
     )
     val horizons = listOf(0, 3, 6, 12)
     val perMonth = if (months > 0) target / months else null
     val placeholder = stringResource(R.string.jar_name_placeholder)
-
-    // The sheet is the vessel: pull the target up and the liquid rises behind everything.
     val tilt by rememberDeviceTilt()
-    var stirring by remember { mutableStateOf(false) }
-    LaunchedEffect(target) { stirring = true; delay(700); stirring = false }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     ) {
-        Box {
-        LiquidFill(
-            fraction = target.toFloat() / 60_000_000f,
-            alpha = 0.16f,
-            tilt = tilt,
-            stirring = stirring,
-            reducedMotion = reduced,
-            modifier = Modifier.matchParentSize(),
-        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -105,25 +88,31 @@ fun JarSheet(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            SpringOdometer(
-                text = MoneyFormat.formatMinor(target, Currency.LKR),
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                reducedMotion = reduced,
-            )
-            Text(
-                text = perMonth?.let { stringResource(R.string.jar_per_month, MoneyFormat.formatMinor(it, Currency.LKR)) }
-                    ?: stringResource(R.string.jar_pick_date),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            CapDial(
+            Glass(
                 valueMinor = target,
                 maxMinor = 60_000_000L,
                 onChange = { target = it },
-                stops = stops,
+                rungs = rungs,
                 stepMinor = 500_000L,
+                curve = 0.5f,
+                tilt = tilt,
                 reducedMotion = reduced,
-            )
+                modifier = Modifier.fillMaxWidth().height(280.dp),
+            ) { value ->
+                Column {
+                    SpringOdometer(
+                        text = MoneyFormat.formatMinor(value, Currency.LKR),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                        reducedMotion = reduced,
+                    )
+                    Text(
+                        text = perMonth?.let { stringResource(R.string.jar_per_month, MoneyFormat.formatMinor(it, Currency.LKR)) }
+                            ?: stringResource(R.string.jar_pick_date),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Text(
                 text = stringResource(R.string.jar_by_when),
                 style = MaterialTheme.typography.labelMedium,
@@ -153,7 +142,6 @@ fun JarSheet(
                 }
             }
             PillTextField(value = name, onValueChange = { name = it }, placeholder = placeholder)
-            Spacer(Modifier.height(SalliSpacing.xxs))
             PrimaryButton(
                 text = stringResource(R.string.jar_start),
                 enabled = target > 0L && name.isNotBlank(),
@@ -166,7 +154,6 @@ fun JarSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
         }
     }
 }
