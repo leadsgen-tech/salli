@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -90,7 +91,9 @@ fun InsightsScreen(
                     next = viewModel::onNextRange,
                 )
             }
-            if (state.slices.isEmpty() && !state.loading) {
+            // Empty only when nothing was spent AND nothing was moved; a period that is all
+            // transfers still has a story to tell.
+            if (state.slices.isEmpty() && state.movedTo.isEmpty() && !state.loading) {
                 item {
                     EmptyState(
                         title = stringResource(R.string.insights_empty_title),
@@ -106,22 +109,24 @@ fun InsightsScreen(
                         onSelectMonth = viewModel::onSelectMonthlyBar,
                     )
                 }
-                item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
-                item {
-                    SectionHeader(
-                        title = stringResource(R.string.insights_by_category),
-                        modifier = Modifier.padding(horizontal = gutter),
-                    )
-                }
-                item { Spacer(Modifier.height(SalliSpacing.xs)) }
-                item {
-                    GroupedList(Modifier.padding(horizontal = gutter)) {
-                        state.slices.forEachIndexed { index, slice ->
-                            if (index > 0) ListDivider()
-                            CategoryInsightRow(
-                                slice = slice,
-                                onClick = slice.categoryId?.let { id -> { onOpenActivityCategory(id) } },
-                            )
+                if (state.slices.isNotEmpty()) {
+                    item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+                    item {
+                        SectionHeader(
+                            title = stringResource(R.string.insights_by_category),
+                            modifier = Modifier.padding(horizontal = gutter),
+                        )
+                    }
+                    item { Spacer(Modifier.height(SalliSpacing.xs)) }
+                    item {
+                        GroupedList(Modifier.padding(horizontal = gutter)) {
+                            state.slices.forEachIndexed { index, slice ->
+                                if (index > 0) ListDivider()
+                                CategoryInsightRow(
+                                    slice = slice,
+                                    onClick = slice.categoryId?.let { id -> { onOpenActivityCategory(id) } },
+                                )
+                            }
                         }
                     }
                 }
@@ -186,7 +191,41 @@ fun InsightsScreen(
                     }
                 }
 
-                item { CashFlow(state.totalIncome, state.totalSpend) }
+                if (state.movedTo.isNotEmpty()) {
+                    item { Spacer(Modifier.height(SalliSpacing.sectionGap)) }
+                    item {
+                        SectionHeader(
+                            title = stringResource(R.string.insights_moved_header),
+                            modifier = Modifier.padding(horizontal = gutter),
+                        )
+                    }
+                    item { Spacer(Modifier.height(SalliSpacing.xs)) }
+                    item {
+                        GroupedList(Modifier.padding(horizontal = gutter)) {
+                            state.movedTo.forEachIndexed { index, moved ->
+                                if (index > 0) ListDivider()
+                                ListRow(
+                                    title = when {
+                                        moved.isOwn -> stringResource(R.string.insights_moved_own)
+                                        moved.name.isBlank() -> stringResource(R.string.insights_moved_unnamed)
+                                        else -> moved.name
+                                    },
+                                    subtitle = pluralStringResource(R.plurals.insights_moved_count, moved.count, moved.count),
+                                    leading = { CategoryIcon(iconName = "swap_horiz", colorSeed = 11) },
+                                    trailing = { Text(MoneyFormat.format(Money(moved.totalMinor, moved.currency))) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Cash flow is the ledger view: out = spent + moved, so net stays honest.
+                item {
+                    CashFlow(
+                        state.totalIncome,
+                        Money(state.totalSpend.minorUnits + state.totalMoved.minorUnits, state.totalSpend.currency),
+                    )
+                }
             }
         }
     }
@@ -243,8 +282,10 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
             top = SalliSpacing.sm,
         ),
     ) {
+        val hasMoved = state.totalMoved.minorUnits > 0L
+        val out = Money(state.totalSpend.minorUnits + state.totalMoved.minorUnits, state.totalSpend.currency)
         Text(
-            text = MoneyFormat.format(state.totalSpend),
+            text = MoneyFormat.format(out),
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -254,7 +295,7 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
             horizontalArrangement = Arrangement.spacedBy(SalliSpacing.xs),
         ) {
             Text(
-                text = stringResource(R.string.insights_spent_this_period),
+                text = stringResource(if (hasMoved) R.string.insights_out_this_period else R.string.insights_spent_this_period),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -265,6 +306,20 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
                         top.categoryName,
                         (top.percent * 100).toInt(),
                     ),
+                    tone = SalliTone.NEUTRAL,
+                )
+            }
+        }
+        if (hasMoved) {
+            Spacer(Modifier.height(SalliSpacing.xs))
+            // Spent and moved side by side, never added: one bought things, the other went somewhere.
+            Row(horizontalArrangement = Arrangement.spacedBy(SalliSpacing.xs)) {
+                StatusPill(
+                    text = stringResource(R.string.insights_spent_pill, MoneyFormat.format(state.totalSpend)),
+                    tone = SalliTone.NEUTRAL,
+                )
+                StatusPill(
+                    text = stringResource(R.string.insights_moved_pill, MoneyFormat.format(state.totalMoved)),
                     tone = SalliTone.NEUTRAL,
                 )
             }

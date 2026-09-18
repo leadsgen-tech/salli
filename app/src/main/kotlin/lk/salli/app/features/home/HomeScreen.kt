@@ -72,6 +72,8 @@ import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.theme.LocalSalliColors
 import lk.salli.design.theme.SalliSpacing
 import lk.salli.app.ui.TimelineItem
+import lk.salli.app.ui.foldOwnTransfers
+import androidx.compose.ui.platform.LocalContext
 import lk.salli.design.components.SalliIconButton
 import lk.salli.domain.money.MoneyFormat
 import lk.salli.design.theme.BankBrand
@@ -110,8 +112,12 @@ fun HomeScreen(
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val todayLabel = stringResource(R.string.home_today)
     val yesterdayLabel = stringResource(R.string.home_yesterday)
-    val grouped = remember(state.recent, todayLabel, yesterdayLabel) {
-        groupByDay(state.recent.take(8), todayLabel, yesterdayLabel)
+    val movedLabel = stringResource(R.string.home_moved_between_accounts)
+    val resources = LocalContext.current.resources
+    val grouped = remember(state.recent, todayLabel, yesterdayLabel, movedLabel) {
+        groupByDay(state.recent.take(8), todayLabel, yesterdayLabel) { rows ->
+            foldOwnTransfers(rows, movedLabel) { n -> resources.getQuantityString(R.plurals.home_moves, n, n) }
+        }
     }
     val totalBalance = remember(state.accounts) { computeTotalBalance(state.accounts) }
 
@@ -158,6 +164,7 @@ fun HomeScreen(
                 totalBalance = totalBalance,
                 monthTrend = state.monthTrend,
                 monthExpense = state.monthExpense,
+                monthMoved = state.monthMoved,
                 onOpenSafeToSpend = onOpenSafeToSpend,
                 safeTodayMinor = planning?.safeToSpend?.perDayMinor?.takeIf { it > 0L },
                 budgetMinor = planning?.safeToSpend?.budgetMinor,
@@ -229,8 +236,10 @@ fun HomeScreen(
                                 timestamp = row.timestamp,
                                 isDeclined = row.isDeclined,
                                 isOwnTransfer = row.isOwnTransfer,
+                                pairSenders = if (row.isOwnTransfer) row.fromSender to row.toSender else null,
                                 standalone = false,
-                                modifier = Modifier.clickable { onTransactionClick(row.id) },
+                                // A folded "moved between your accounts" row opens Activity, where each move is listed.
+                                modifier = Modifier.clickable { if (row.foldedMoves > 0) onSeeAllActivity() else onTransactionClick(row.id) },
                             )
                         }
                     }
@@ -289,6 +298,7 @@ private fun AccountStack(
     totalBalance: Money,
     monthTrend: Trend?,
     monthExpense: Money,
+    monthMoved: Money,
     onOpenSafeToSpend: () -> Unit,
     safeTodayMinor: Long?,
     budgetMinor: Long?,
@@ -308,6 +318,7 @@ private fun AccountStack(
             totalBalance = totalBalance,
             monthTrend = monthTrend,
             monthExpense = monthExpense,
+            monthMoved = monthMoved,
             onOpenSafeToSpend = onOpenSafeToSpend,
             safeTodayMinor = safeTodayMinor,
             budgetMinor = budgetMinor,
@@ -402,6 +413,7 @@ private fun SummaryCard(
     totalBalance: Money,
     monthTrend: Trend?,
     monthExpense: Money,
+    monthMoved: Money,
     onOpenSafeToSpend: () -> Unit,
     safeTodayMinor: Long?,
     budgetMinor: Long?,
@@ -410,14 +422,30 @@ private fun SummaryCard(
     modifier: Modifier = Modifier,
 ) {
     val onHero = LocalSalliColors.current.onHero
+    // Out = spent + moved. The big number is everything that left; the line under the bar
+    // says how much of it bought something and how much just went somewhere.
+    val hasMoved = monthMoved.minorUnits > 0L
+    val monthOut = Money(monthExpense.minorUnits + monthMoved.minorUnits, monthExpense.currency)
     HeroCard(modifier = modifier) {
-        HeroEyebrow(stringResource(R.string.home_spent_this_period))
+        HeroEyebrow(stringResource(if (hasMoved) R.string.home_out_this_period else R.string.home_spent_this_period))
         Spacer(Modifier.height(SalliSpacing.xs))
         SpringOdometer(
-            text = MoneyFormat.format(monthExpense),
+            text = MoneyFormat.format(monthOut),
             style = MaterialTheme.typography.displayMedium,
             color = onHero,
         )
+        if (hasMoved) {
+            Spacer(Modifier.height(SalliSpacing.xs))
+            Text(
+                text = stringResource(
+                    R.string.home_spent_moved_line,
+                    MoneyFormat.short(monthExpense),
+                    MoneyFormat.short(monthMoved),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = onHero.copy(alpha = 0.85f),
+            )
+        }
         if (budgetMinor != null && budgetMinor > 0L) {
             Spacer(Modifier.height(SalliSpacing.md))
             PaceBar(
@@ -567,7 +595,12 @@ private data class DayGroup(
     val total: Money,
 )
 
-private fun groupByDay(rows: List<TimelineItem>, todayLabel: String, yesterdayLabel: String): List<DayGroup> {
+private fun groupByDay(
+    rows: List<TimelineItem>,
+    todayLabel: String,
+    yesterdayLabel: String,
+    fold: (List<TimelineItem>) -> List<TimelineItem> = { it },
+): List<DayGroup> {
     val bucketed = rows.groupBy { row ->
         val c = Calendar.getInstance().apply {
             timeInMillis = row.timestamp
@@ -609,7 +642,7 @@ private fun groupByDay(rows: List<TimelineItem>, todayLabel: String, yesterdayLa
             DayGroup(
                 label = label,
                 dayMillis = bucket,
-                rows = list,
+                rows = fold(list),
                 total = Money(net, currency),
             )
         }

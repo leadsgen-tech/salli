@@ -4,6 +4,14 @@
     <string name="home_spent_this_period">Spent this period</string>
     <string name="home_vs_last_period">%1$s%% vs last period</string>
     <string name="home_safe_today">Safe today</string>
+    <string name="home_moved">Moved</string>
+    <string name="home_out_this_period">Out this period</string>
+    <string name="home_spent_moved_line">Spent %1$s · Moved %2$s</string>
+    <string name="home_moved_between_accounts">Moved between your accounts</string>
+    <plurals name="home_moves">
+        <item quantity="one">%1$d move</item>
+        <item quantity="other">%1$d moves</item>
+    </plurals>
     <string name="home_balance">Balance</string>
     <string name="home_accounts">Accounts</string>
     <string name="home_up_next">Up next</string>

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.ui.graphics.vector.ImageVector
 import lk.salli.data.db.entities.CategoryEntity
 import lk.salli.data.db.entities.TransactionEntity
+import lk.salli.data.transactions.TransactionSpending
 import lk.salli.domain.Money
 import lk.salli.domain.money.MoneyFormat
 import lk.salli.domain.TransactionFlow
@@ -40,7 +41,40 @@ data class TimelineItem(
     val counterpartId: Long? = null,
     /** Excluded by the user: still listed when asked for, muted, and left out of every total. */
     val isExcluded: Boolean = false,
+    /** Sender ids of the two banks of an own transfer, for the pair avatar. */
+    val fromSender: String? = null,
+    val toSender: String? = null,
+    /** How many own transfers a folded "moved between your accounts" row stands for; 0 otherwise. */
+    val foldedMoves: Int = 0,
 )
+
+/**
+ * Folds two or more own transfers in [rows] into one "moved between your accounts" row, placed
+ * where the first of them was. Home's Recent list uses it per day so a run of moves reads as one
+ * line instead of a wall of "Own transfer"; a single move stays as it is.
+ */
+fun foldOwnTransfers(rows: List<TimelineItem>, title: String, subtitle: (Int) -> String): List<TimelineItem> {
+    val moves = rows.filter { it.isOwnTransfer }
+    if (moves.size < 2) return rows
+    val currency = moves.first().amount.currency
+    val same = moves.filter { it.amount.currency == currency }
+    if (same.size < 2) return rows
+    val folded = same.first().copy(
+        title = title,
+        subtitle = subtitle(same.size),
+        amount = Money(same.sumOf { it.amount.minorUnits }, currency),
+        foldedMoves = same.size,
+        timestamp = same.maxOf { it.timestamp },
+    )
+    val out = ArrayList<TimelineItem>(rows.size)
+    var placed = false
+    for (row in rows) {
+        if (row in same) {
+            if (!placed) { out.add(folded); placed = true }
+        } else out.add(row)
+    }
+    return out
+}
 
 /**
  * Maps a list of rows to timeline items, folding each complete internal-transfer pair into a
@@ -109,6 +143,8 @@ private fun ownTransferItem(
         isOwnTransfer = true,
         counterpartId = to.id,
         isExcluded = from.isHidden && to.isHidden,
+        fromSender = from.senderAddress,
+        toSender = to.senderAddress,
     )
 }
 
@@ -121,7 +157,7 @@ fun TransactionEntity.toTimelineItem(
     // Older rows stored People's Bank transfers and bill payments under MOBILE_PAYMENT.
     // Normalise them while presenting so existing installs become consistent immediately;
     // newly parsed rows use the specific types directly.
-    val type = canonicalType(parsedType, senderAddress, rawBody)
+    val type = TransactionSpending.canonicalType(parsedType, senderAddress, rawBody)
     val flow = TransactionFlow.fromId(flowId)
     // A user-written note wins over everything — if they took the time to type a name, use
     // it as the row title. Falls through to merchantRaw, then the type's generic label.
@@ -217,19 +253,3 @@ private fun iconFor(type: TransactionType): ImageVector = when (type) {
     TransactionType.OTHER -> Icons.Outlined.AttachMoney
 }
 
-private fun canonicalType(
-    type: TransactionType,
-    senderAddress: String?,
-    rawBody: String?,
-): TransactionType = when {
-    type != TransactionType.MOBILE_PAYMENT -> type
-    !senderAddress.orEmpty().trim().equals("PeoplesBank", ignoreCase = true) -> type
-    rawBody.orEmpty().contains("Mobile Payment Successful", ignoreCase = true) ->
-        TransactionType.BILL_PAYMENT
-    rawBody.orEmpty().contains("LPAY Tfr", ignoreCase = true) ||
-        rawBody.orEmpty().contains("PeoPAY", ignoreCase = true) ||
-        rawBody.orEmpty().contains("Just Pay", ignoreCase = true) ||
-        rawBody.orEmpty().contains("Fund transfer", ignoreCase = true) ->
-        TransactionType.ONLINE_TRANSFER
-    else -> type
-}

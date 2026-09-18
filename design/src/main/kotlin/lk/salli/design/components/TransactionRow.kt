@@ -1,6 +1,7 @@
 package lk.salli.design.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Icon
@@ -76,6 +78,8 @@ fun TransactionRow(
     standalone: Boolean = true,
     /** Non-null when the user excluded this row: drawn faded, with this label before the subtitle. */
     excludedLabel: String? = null,
+    /** From-bank and to-bank sender ids of an own transfer; draws both logos in the leading slot. */
+    pairSenders: Pair<String?, String?>? = null,
 ) {
     if (standalone) {
         Surface(
@@ -99,6 +103,7 @@ fun TransactionRow(
                 isOwnTransfer = isOwnTransfer,
                 statusLabel = statusLabel,
                 excludedLabel = excludedLabel,
+                pairSenders = pairSenders,
             )
         }
     } else {
@@ -116,6 +121,7 @@ fun TransactionRow(
             isOwnTransfer = isOwnTransfer,
             statusLabel = statusLabel,
             excludedLabel = excludedLabel,
+            pairSenders = pairSenders,
             modifier = modifier,
         )
     }
@@ -137,6 +143,7 @@ private fun TransactionRowContent(
     statusLabel: String?,
     modifier: Modifier = Modifier,
     excludedLabel: String? = null,
+    pairSenders: Pair<String?, String?>? = null,
 ) {
     val salli = LocalSalliColors.current
     val logoPath = MerchantLogos.resolve(merchantRaw)
@@ -153,6 +160,7 @@ private fun TransactionRowContent(
     ) {
         when {
             logoPath != null -> MerchantLogo(path = logoPath, size = LeadingSize)
+            isOwnTransfer && pairSenders != null -> PairAvatar(from = pairSenders.first, to = pairSenders.second)
             isOwnTransfer -> MutedAvatar(icon = Icons.Outlined.SwapHoriz)
             categoryColorSeed != null -> CategoryIcon(
                 iconName = categoryIconName,
@@ -235,6 +243,38 @@ private fun MerchantLogo(
             .size(size)
             .clip(CircleShape),
     )
+}
+
+/**
+ * Both banks of an own transfer in one slot: the sending bank behind, the receiving bank in
+ * front, a small arrow between. Reads "BOC → Peoples" before the title does.
+ */
+@Composable
+private fun PairAvatar(from: String?, to: String?) {
+    Box(modifier = Modifier.size(LeadingSize)) {
+        BankAvatar(sender = from, size = 30.dp, modifier = Modifier.align(Alignment.TopStart))
+        BankAvatar(
+            sender = to,
+            size = 30.dp,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .border(2.dp, MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape),
+        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .size(16.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(10.dp),
+            )
+        }
+    }
 }
 
 @Composable

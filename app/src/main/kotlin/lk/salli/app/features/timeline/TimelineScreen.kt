@@ -224,6 +224,7 @@ private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> U
                 leadingIcon = row.icon, merchantRaw = row.merchantRaw, timestamp = row.timestamp,
                 isDeclined = row.isDeclined, isOwnTransfer = row.isOwnTransfer,
                 excludedLabel = if (row.isExcluded) stringResource(R.string.activity_excluded_label) else null,
+                pairSenders = if (row.isOwnTransfer) row.fromSender to row.toSender else null,
                 modifier = Modifier.clickable { onClick() },
             )
         },

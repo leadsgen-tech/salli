@@ -1,5 +1,21 @@
 package lk.salli.app.features.txdetail
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import lk.salli.design.components.BankAvatar
+import lk.salli.design.motion.LocalReducedMotion
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -86,6 +102,20 @@ fun TransactionDetailScreen(
                 Text(SimpleDateFormat("EEE d MMM · h:mm a", Locale.getDefault()).format(Date(tx.timestamp)), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AmountText(Money(tx.amountMinor, tx.amountCurrency), flow, tx.isDeclined, style = MaterialTheme.typography.displaySmall)
             }
+            if (state.counterpartAccountName != null && state.counterpartAmountMinor != null) {
+                // This leg is the sender when it is the larger one: the sending bank keeps the fee.
+                val sending = tx.amountMinor >= state.counterpartAmountMinor!!
+                MoveStage(
+                    fromName = if (sending) state.accountName ?: "" else state.counterpartAccountName!!,
+                    fromSender = if (sending) state.accountSender else state.counterpartSender,
+                    toName = if (sending) state.counterpartAccountName!! else state.accountName ?: "",
+                    toSender = if (sending) state.counterpartSender else state.accountSender,
+                    moved = Money(minOf(tx.amountMinor, state.counterpartAmountMinor!!), tx.amountCurrency),
+                    fee = (tx.amountMinor - state.counterpartAmountMinor!!).let { kotlin.math.abs(it) }
+                        .takeIf { it > 0L }?.let { Money(it, tx.amountCurrency) },
+                    key = tx.id,
+                )
+            }
             GroupedList {
                 ListRow(stringResource(R.string.transaction_detail_account), trailing = { Text(state.accountName ?: "—") })
                 tx.balanceMinor?.let { ListDivider(); ListRow(stringResource(R.string.transaction_detail_balance), trailing = { Text(MoneyFormat.format(Money(it, tx.amountCurrency))) }) }
@@ -105,6 +135,93 @@ fun TransactionDetailScreen(
             }
             if (tx.rawBody != null) Text(tx.rawBody!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (flow == TransactionFlow.EXPENSE && !tx.isDeclined) TextButton(onClick = { onSplit(tx.id) }) { Text(stringResource(R.string.transaction_detail_split)) }
+        }
+    }
+}
+
+
+/**
+ * An own transfer, shown as the thing it is: the amount leaves one bank card and lands on the
+ * other, on the spatial spring, then the line under it says what moved and what it cost.
+ */
+@Composable
+private fun MoveStage(
+    fromName: String,
+    fromSender: String?,
+    toName: String,
+    toSender: String?,
+    moved: Money,
+    fee: Money?,
+    key: Long,
+) {
+    val progress = remember(key) { Animatable(0f) }
+    val reduced = LocalReducedMotion.current
+    LaunchedEffect(key) {
+        if (reduced) progress.snapTo(1f) else {
+            progress.snapTo(0f)
+            // A short pause so the eye finds the two cards before the money moves.
+            kotlinx.coroutines.delay(250)
+            progress.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 200f))
+        }
+    }
+    var pillWidth by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.transaction_detail_own_transfer),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val cardWidth = 150.dp
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MoveBankCard(name = fromName, sender = fromSender, width = cardWidth)
+                MoveBankCard(name = toName, sender = toSender, width = cardWidth)
+            }
+            val inset = with(density) { 12.dp.toPx() }
+            val travel = with(density) { maxWidth.toPx() } - pillWidth - 2 * inset
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape,
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 10.dp)
+                    .onSizeChanged { pillWidth = it.width }
+                    .offset { IntOffset((inset + travel.coerceAtLeast(0f) * progress.value).roundToInt(), 0) },
+            ) {
+                Text(
+                    MoneyFormat.format(moved),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
+        Text(
+            if (fee == null) stringResource(R.string.transaction_detail_moved, MoneyFormat.format(moved))
+            else stringResource(R.string.transaction_detail_moved_fee, MoneyFormat.format(moved), MoneyFormat.format(fee)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun MoveBankCard(name: String, sender: String?, width: androidx.compose.ui.unit.Dp) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.width(width).height(104.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            BankAvatar(sender = sender, size = 28.dp, displayName = name)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                name,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

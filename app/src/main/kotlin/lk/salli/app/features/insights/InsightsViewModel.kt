@@ -23,6 +23,7 @@ import lk.salli.data.db.entities.TransactionEntity
 import lk.salli.domain.Currency
 import lk.salli.domain.DateRange
 import lk.salli.domain.Money
+import lk.salli.data.transactions.TransactionSpending
 import lk.salli.domain.TransactionFlow
 
 /** One category's contribution to the visible range. */
@@ -62,9 +63,22 @@ data class AccountInsight(
     val currency: String,
 )
 
+/** One destination of moved money: a counterparty, or the user's own other accounts. */
+data class MovedInsight(
+    val name: String,
+    val totalMinor: Long,
+    val count: Int,
+    val currency: String,
+    val isOwn: Boolean = false,
+)
+
 data class InsightsUiState(
     val range: DateRange,
+    /** Spent: real expenses that are not transfers. Category, merchant and account insights cover this. */
     val totalSpend: Money,
+    /** Moved: transfers to others plus transfers between own accounts. Reported beside spent, never added. */
+    val totalMoved: Money = Money.zero(Currency.LKR),
+    val movedTo: List<MovedInsight> = emptyList(),
     val totalIncome: Money,
     val slices: List<InsightSlice> = emptyList(),
     val monthlyBars: List<MonthlyBar> = emptyList(),
@@ -159,20 +173,20 @@ class InsightsViewModel @Inject constructor(
         categories: List<CategoryEntity>,
         accounts: List<lk.salli.data.db.entities.AccountEntity>,
     ): InsightsUiState {
-        val real = txns.filter { !it.isDeclined && it.transferGroupId == null && !it.isHidden }
-        val expense = real.filter { it.flowId == TransactionFlow.EXPENSE.id }
+        val visible = txns.filter { !it.isHidden }
+        val real = visible.filter { !it.isDeclined && it.transferGroupId == null }
         val income = real.filter { it.flowId == TransactionFlow.INCOME.id }
 
-        val dominantCurrency = expense
-            .groupBy { it.amountCurrency }
-            .maxByOrNull { it.value.size }
-            ?.key
-            ?: Currency.LKR
+        val dominantCurrency = TransactionSpending.dominantCurrency(visible)
 
-        val expenseInCurrency = expense.filter { it.amountCurrency == dominantCurrency }
+        // Spent and moved are two piles. Everything below the hero is about the spent pile;
+        // the moved pile gets its own "where to" list.
+        val expenseInCurrency = real.filter { TransactionSpending.counts(it) && it.amountCurrency == dominantCurrency }
         val totalSpendMinor = expenseInCurrency.sumOf { it.amountMinor }
+        val totalMovedMinor = TransactionSpending.movedMinor(visible, dominantCurrency)
         val totalIncomeMinor = income.filter { it.amountCurrency == dominantCurrency }
             .sumOf { it.amountMinor }
+        val movedTo = buildMovedTo(visible, dominantCurrency)
 
         val catLookup = categories.associateBy { it.id }
 
@@ -216,6 +230,8 @@ class InsightsViewModel @Inject constructor(
         return InsightsUiState(
             range = range,
             totalSpend = Money(totalSpendMinor, dominantCurrency),
+            totalMoved = Money(totalMovedMinor, dominantCurrency),
+            movedTo = movedTo,
             totalIncome = Money(totalIncomeMinor, dominantCurrency),
             slices = slices,
             monthlyBars = monthlyBars,
@@ -225,6 +241,32 @@ class InsightsViewModel @Inject constructor(
             merchants = merchants,
             accounts = accountInsights,
         )
+    }
+
+    /**
+     * Where the moved money went: own accounts first (paired legs, counted once by what
+     * arrived), then each counterparty by name. Digit-only counterparties fold into "Transfer".
+     */
+    private fun buildMovedTo(visible: List<TransactionEntity>, currency: String): List<MovedInsight> {
+        val ownLegs = visible.filter {
+            it.transferGroupId != null && !it.isDeclined && it.amountCurrency == currency
+        }.groupBy { it.transferGroupId!! }
+        val own = if (ownLegs.isEmpty()) null else MovedInsight(
+            name = "",
+            totalMinor = ownLegs.values.sumOf { legs -> legs.minOf { it.amountMinor } },
+            count = ownLegs.size,
+            currency = currency,
+            isOwn = true,
+        )
+        val others = visible
+            .filter { TransactionSpending.movesMoney(it) && it.amountCurrency == currency }
+            .groupBy { tx ->
+                tx.merchantRaw?.trim()?.takeIf { it.isNotBlank() && it.any(Char::isLetter) } ?: ""
+            }
+            .map { (name, rows) -> MovedInsight(name, rows.sumOf { it.amountMinor }, rows.size, currency) }
+            .sortedByDescending { it.totalMinor }
+            .take(6)
+        return listOfNotNull(own) + others
     }
 
     /**
@@ -258,8 +300,7 @@ class InsightsViewModel @Inject constructor(
             val monthRange = DateRange.monthContaining(start.timeInMillis)
             val label = fmt.format(start.time)
             val inMonth = sixMonth.filter {
-                !it.isDeclined && it.transferGroupId == null && !it.isHidden &&
-                    it.flowId == TransactionFlow.EXPENSE.id &&
+                !it.isHidden && TransactionSpending.counts(it) &&
                     it.amountCurrency == dominantCurrency &&
                     it.timestamp in start.timeInMillis until end.timeInMillis
             }

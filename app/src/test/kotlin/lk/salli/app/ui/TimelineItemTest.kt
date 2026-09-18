@@ -1,7 +1,9 @@
 package lk.salli.app.ui
 
+import androidx.compose.material.icons.outlined.Receipt
 import com.google.common.truth.Truth.assertThat
 import lk.salli.data.db.entities.TransactionEntity
+import lk.salli.domain.Money
 import lk.salli.domain.TransactionFlow
 import lk.salli.domain.TransactionMethod
 import lk.salli.domain.TransactionType
@@ -55,6 +57,26 @@ class TimelineItemTest {
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
         assertThat(item.title).isEqualTo("Transfer")
+    }
+
+    @Test
+    fun `two or more own transfers in a day fold into one moved row`() {
+        val move = { id: Long, minor: Long -> TimelineItem(
+            id = id, title = "Own transfer", subtitle = "BOC → Peoples", amount = Money(minor, "LKR"),
+            flow = TransactionFlow.TRANSFER, type = TransactionType.ONLINE_TRANSFER,
+            icon = androidx.compose.material.icons.Icons.Outlined.Receipt, merchantRaw = null,
+            isDeclined = false, timestamp = id, isOwnTransfer = true, fromSender = "BOC", toSender = "PeoplesBank",
+        ) }
+        val spend = move(9, 500).copy(title = "Keells", flow = TransactionFlow.EXPENSE, isOwnTransfer = false)
+        val rows = listOf(move(1, 25_000), spend, move(3, 10_000))
+
+        val folded = foldOwnTransfers(rows, "Moved between your accounts") { n -> "$n moves" }
+
+        assertThat(folded.map { it.title }).containsExactly("Moved between your accounts", "Keells").inOrder()
+        assertThat(folded.first().amount.minorUnits).isEqualTo(35_000)
+        assertThat(folded.first().subtitle).isEqualTo("2 moves")
+        assertThat(folded.first().foldedMoves).isEqualTo(2)
+        assertThat(foldOwnTransfers(listOf(move(1, 25_000), spend), "x") { "" }).hasSize(2)
     }
 
     @Test

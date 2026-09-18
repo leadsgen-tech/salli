@@ -22,7 +22,8 @@ object SummaryBuilder {
         hiddenAccountIds: Set<Long>,
     ): SpendingSummary? {
         val real = txns.filter { !it.isDeclined && it.transferGroupId == null && it.accountId !in hiddenAccountIds }
-        val spend = real.filter { it.flowId == TransactionFlow.EXPENSE.id }
+        // Spent only: transfers to others are "moved" and never read as spending.
+        val spend = real.filter { lk.salli.data.transactions.TransactionSpending.counts(it) }
         val income = real.filter { it.flowId == TransactionFlow.INCOME.id }
         if (spend.isEmpty() && income.isEmpty()) return null
 

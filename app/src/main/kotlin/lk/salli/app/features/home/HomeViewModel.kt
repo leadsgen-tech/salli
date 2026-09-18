@@ -77,7 +77,10 @@ data class HomeUiState(
     val accounts: List<AccountSummary> = emptyList(),
     val recent: List<TimelineItem> = emptyList(),
     val monthIncome: Money = Money.zero(Currency.LKR),
+    /** Spent this period: real expenses that are not transfers. */
     val monthExpense: Money = Money.zero(Currency.LKR),
+    /** Moved this period: transfers to others and between own accounts. Never added to spent. */
+    val monthMoved: Money = Money.zero(Currency.LKR),
     val todaySpend: Money = Money.zero(Currency.LKR),
     val weekTrend: Trend? = null,
     val monthTrend: Trend? = null,
@@ -210,6 +213,7 @@ class HomeViewModel @Inject constructor(
         }
 
         val monthExpense = expenseIn(thisMonth)
+        val monthMoved = TransactionSpending.movedMinor(thisMonth, dominantCurrency)
         val monthIncome = incomeIn(thisMonth)
         val todayExpense = expenseIn(today)
         val weekTrend = Trend(
@@ -218,9 +222,10 @@ class HomeViewModel @Inject constructor(
             currency = dominantCurrency,
             buckets = bucketByDay(thisWeek, dominantCurrency, windows.weekRange.fromMillis, days = 7),
         )
+        // The hero shows everything that went out (spent + moved), so its trend compares the same.
         val monthTrend = Trend(
-            currentMinor = monthExpense,
-            previousMinor = expenseIn(prevMonth),
+            currentMinor = monthExpense + monthMoved,
+            previousMinor = expenseIn(prevMonth) + TransactionSpending.movedMinor(prevMonth, dominantCurrency),
             currency = dominantCurrency,
             // Always render exactly 30 days' worth of bars so the tile layout is
             // consistent regardless of where in the month we are. The bucket list
@@ -235,7 +240,7 @@ class HomeViewModel @Inject constructor(
 
         // Top 3 categories by month expense.
         val topSpenders = realThisMonth
-            .filter { it.flowId == TransactionFlow.EXPENSE.id && it.amountCurrency == dominantCurrency }
+            .filter { TransactionSpending.counts(it) && it.amountCurrency == dominantCurrency }
             .groupBy { it.categoryId }
             .map { (catId, list) ->
                 val cat = catId?.let { categoriesById[it] }
@@ -258,6 +263,7 @@ class HomeViewModel @Inject constructor(
             recent = items,
             monthIncome = Money(monthIncome, dominantCurrency),
             monthExpense = Money(monthExpense, dominantCurrency),
+            monthMoved = Money(monthMoved, dominantCurrency),
             todaySpend = Money(todayExpense, dominantCurrency),
             weekTrend = weekTrend,
             monthTrend = monthTrend,
@@ -287,8 +293,7 @@ class HomeViewModel @Inject constructor(
         val dayMs = 24L * 60 * 60 * 1000
         val out = LongArray(days) { 0L }
         for (t in txns) {
-            if (t.isDeclined || t.transferGroupId != null) continue
-            if (t.flowId != TransactionFlow.EXPENSE.id) continue
+            if (!TransactionSpending.counts(t)) continue
             if (t.amountCurrency != currency) continue
             val idx = ((t.timestamp - startMs) / dayMs).toInt()
             if (idx in 0 until days) out[idx] += t.amountMinor

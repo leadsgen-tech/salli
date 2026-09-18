@@ -15,6 +15,16 @@
     <string name="insights_visits">%1$d visits</string>
     <string name="insights_accounts">By account</string>
     <string name="insights_account_subtitle">Spent this period</string>
+    <string name="insights_moved_pill">Moved %1$s</string>
+    <string name="insights_spent_pill">Spent %1$s</string>
+    <string name="insights_out_this_period">out this period</string>
+    <string name="insights_moved_header">Moved · where to</string>
+    <string name="insights_moved_own">Between your accounts</string>
+    <string name="insights_moved_unnamed">Transfer</string>
+    <plurals name="insights_moved_count">
+        <item quantity="one">%1$d transfer</item>
+        <item quantity="other">%1$d transfers</item>
+    </plurals>
     <string name="insights_cash_flow">Cash flow</string>
     <string name="insights_income">In %1$s</string>
     <string name="insights_expense">Out %1$s</string>

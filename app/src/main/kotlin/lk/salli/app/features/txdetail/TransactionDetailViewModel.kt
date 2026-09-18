@@ -19,8 +19,11 @@ data class TxDetailState(
     val loading: Boolean = true,
     val transaction: TransactionEntity? = null,
     val accountName: String? = null,
+    val accountSender: String? = null,
     /** Set when this row is one leg of an internal transfer: the other account's name. */
     val counterpartAccountName: String? = null,
+    val counterpartSender: String? = null,
+    val counterpartAmountMinor: Long? = null,
     /** Set when the transaction was split with other people. */
     val linkedSplit: SplitService.LinkedSplit? = null,
     val categoryId: Long? = null,
@@ -50,18 +53,22 @@ class TransactionDetailViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             val tx = db.transactions().byId(txId)
             val account = tx?.accountId?.let { db.accounts().byId(it) }
-            val counterpart = tx?.transferGroupId?.let { gid ->
+            val otherLeg = tx?.transferGroupId?.let { gid ->
                 db.transferGroups().byId(gid)?.let { g ->
                     val otherId = if (g.debitTxId == tx.id) g.creditTxId else g.debitTxId
-                    db.transactions().byId(otherId)?.accountId?.let { db.accounts().byId(it) }
+                    db.transactions().byId(otherId)
                 }
             }
+            val counterpart = otherLeg?.accountId?.let { db.accounts().byId(it) }
             val cats = db.categories().all()
             _state.value = TxDetailState(
                 loading = false,
                 transaction = tx,
                 accountName = account?.displayName,
+                accountSender = account?.senderAddress,
                 counterpartAccountName = counterpart?.displayName,
+                counterpartSender = counterpart?.senderAddress,
+                counterpartAmountMinor = otherLeg?.amountMinor,
                 linkedSplit = tx?.let { split.linkedSplit(it.id) },
                 categoryId = tx?.categoryId,
                 categories = cats,

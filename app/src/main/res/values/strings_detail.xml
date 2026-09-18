@@ -16,4 +16,7 @@
     <string name="transaction_detail_balance">Balance after</string>
     <string name="transaction_detail_fee">Fee</string>
     <string name="transaction_detail_split">Split this</string>
+    <string name="transaction_detail_own_transfer">Own transfer</string>
+    <string name="transaction_detail_moved">Moved %1$s · both balances updated</string>
+    <string name="transaction_detail_moved_fee">Moved %1$s · fee %2$s · both balances updated</string>
 </resources>

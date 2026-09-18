@@ -181,8 +181,7 @@ class BudgetsViewModel @Inject constructor(
             // honest and avoids silently treating USD cents as LKR cents.
             val cycleExpense = txns
                 .filter { it.timestamp in cycle.fromMillis until cycle.untilMillis }
-                .filter { !it.isDeclined && it.transferGroupId == null }
-                .filter { it.flowId == TransactionFlow.EXPENSE.id }
+                .filter { lk.salli.data.transactions.TransactionSpending.counts(it) }
                 .filter { it.amountCurrency == b.currency }
                 .filter { scope.allAccounts || it.accountId in scopedAccountIds }
 
