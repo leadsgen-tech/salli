@@ -314,11 +314,21 @@ private fun UnlockedSalliNavHost(
 private const val UNLOCKED_STATE_KEY = "salli-unlocked-content"
 
 private fun NavHostController.navigateToTab(dest: Destination) {
+    if (dest == Destination.HOME) {
+        // Home is the root of every stack, so going there is a pop, never a navigate. Navigating
+        // to it with restoreState re-pushed whatever had just been popped whenever nothing had
+        // been saved for Home yet: open an account from the hero on a fresh stack, tap Home,
+        // and the filtered Activity came straight back.
+        popBackStack(Destination.HOME.route, inclusive = false, saveState = true)
+        return
+    }
     navigate(dest.route) {
         popUpTo(Destination.HOME.route) {
             saveState = true
         }
         launchSingleTop = true
-        restoreState = true
+        // Activity is also reached with filters (an account from Home, a category from
+        // Insights); the tab must open the plain list, not restore the last filter.
+        restoreState = dest != Destination.ACTIVITY
     }
 }
