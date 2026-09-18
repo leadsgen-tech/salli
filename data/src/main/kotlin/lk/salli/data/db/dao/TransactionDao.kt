@@ -121,6 +121,20 @@ interface TransactionDao {
     )
     fun observeInRange(fromMillis: Long, untilMillis: Long): Flow<List<TransactionEntity>>
 
+    /**
+     * Same window, excluded rows included. Activity's "Show excluded" filter is the one place
+     * an excluded transaction can be found again, so Include stays reachable.
+     */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE timestamp >= :fromMillis
+          AND timestamp < :untilMillis
+        ORDER BY timestamp DESC
+        """,
+    )
+    fun observeInRangeIncludingHidden(fromMillis: Long, untilMillis: Long): Flow<List<TransactionEntity>>
+
     @Query("UPDATE transactions SET transfer_group_id = :groupId, flow_id = :flowId WHERE id = :id")
     suspend fun assignTransferGroup(id: Long, groupId: Long, flowId: Int)
 

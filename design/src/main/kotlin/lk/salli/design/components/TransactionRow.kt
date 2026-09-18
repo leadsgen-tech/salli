@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -73,6 +74,8 @@ fun TransactionRow(
     isOwnTransfer: Boolean = flow == TransactionFlow.TRANSFER,
     statusLabel: String? = null,
     standalone: Boolean = true,
+    /** Non-null when the user excluded this row: drawn faded, with this label before the subtitle. */
+    excludedLabel: String? = null,
 ) {
     if (standalone) {
         Surface(
@@ -95,6 +98,7 @@ fun TransactionRow(
                 categoryColorSeed = categoryColorSeed,
                 isOwnTransfer = isOwnTransfer,
                 statusLabel = statusLabel,
+                excludedLabel = excludedLabel,
             )
         }
     } else {
@@ -111,6 +115,7 @@ fun TransactionRow(
             categoryColorSeed = categoryColorSeed,
             isOwnTransfer = isOwnTransfer,
             statusLabel = statusLabel,
+            excludedLabel = excludedLabel,
             modifier = modifier,
         )
     }
@@ -131,6 +136,7 @@ private fun TransactionRowContent(
     isOwnTransfer: Boolean,
     statusLabel: String?,
     modifier: Modifier = Modifier,
+    excludedLabel: String? = null,
 ) {
     val salli = LocalSalliColors.current
     val logoPath = MerchantLogos.resolve(merchantRaw)
@@ -140,7 +146,10 @@ private fun TransactionRowContent(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 64.dp)
-            .padding(horizontal = SalliSpacing.md, vertical = SalliSpacing.sm),
+            .padding(horizontal = SalliSpacing.md, vertical = SalliSpacing.sm)
+            // Excluded rows fade as a whole rather than recolouring each part: they are still
+            // real transactions, just ones the totals ignore.
+            .alpha(if (excludedLabel != null) 0.5f else 1f),
     ) {
         when {
             logoPath != null -> MerchantLogo(path = logoPath, size = LeadingSize)
@@ -164,7 +173,9 @@ private fun TransactionRowContent(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val secondary = statusLabel ?: subtitle
+            val secondary = statusLabel
+                ?: excludedLabel?.let { label -> listOf(label, subtitle).filter { it.isNotBlank() }.joinToString(" · ") }
+                ?: subtitle
             if (secondary.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(

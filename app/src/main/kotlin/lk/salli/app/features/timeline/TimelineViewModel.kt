@@ -67,6 +67,8 @@ data class TimelineUiState(
     val categories: List<CategoryEntity> = emptyList(),
     val type: ActivityType = ActivityType.ALL,
     val showOwnTransfers: Boolean = true,
+    /** Lists excluded rows (muted) so they can be opened and included again. Off by default. */
+    val showExcluded: Boolean = false,
     val selectedAccountId: Long? = null,
     val selectedCategoryId: Long? = null,
 )
@@ -112,16 +114,24 @@ class TimelineViewModel @Inject constructor(
     private val _filters = MutableStateFlow(ActivityFilterArgs.NONE)
     private val _type = MutableStateFlow(ActivityType.ALL)
     private val _showOwnTransfers = MutableStateFlow(true)
+    private val _showExcluded = MutableStateFlow(false)
 
     fun applyFilters(filters: ActivityFilterArgs) {
         _filters.value = filters
         _query.value = filters.query.orEmpty()
     }
 
-    fun updateFilters(accountId: Long?, categoryId: Long?, type: ActivityType, showOwnTransfers: Boolean) {
+    fun updateFilters(
+        accountId: Long?,
+        categoryId: Long?,
+        type: ActivityType,
+        showOwnTransfers: Boolean,
+        showExcluded: Boolean = _showExcluded.value,
+    ) {
         _filters.value = ActivityFilterArgs(accountId = accountId, categoryId = categoryId, query = _query.value)
         _type.value = type
         _showOwnTransfers.value = showOwnTransfers
+        _showExcluded.value = showExcluded
     }
 
     fun changeCategory(transactionId: Long, categoryId: Long) {
@@ -143,14 +153,18 @@ class TimelineViewModel @Inject constructor(
         .map { it.isNotBlank() }
         .distinctUntilChanged()
 
-    private val txns = kotlinx.coroutines.flow.combine(_range, searchAllTime) { r, allTime -> r to allTime }
-        .flatMapLatest { (r, allTime) ->
-            if (!allTime) db.transactions().observeInRange(r.fromMillis, r.untilMillis)
-            else db.transactions().observeInRange(0L, Long.MAX_VALUE)
+    private val txns = kotlinx.coroutines.flow.combine(_range, searchAllTime, _showExcluded) { r, allTime, excluded ->
+        Triple(r, allTime, excluded)
+    }
+        .flatMapLatest { (r, allTime, excluded) ->
+            val from = if (allTime) 0L else r.fromMillis
+            val until = if (allTime) Long.MAX_VALUE else r.untilMillis
+            if (excluded) db.transactions().observeInRangeIncludingHidden(from, until)
+            else db.transactions().observeInRange(from, until)
         }
 
-    private val searchAndFilters = combine(_query, _filters, _type, _showOwnTransfers) { query, filters, type, transfers ->
-        FilterInputs(query, filters, type, transfers)
+    private val searchAndFilters = combine(_query, _filters, _type, _showOwnTransfers, _showExcluded) { query, filters, type, transfers, excluded ->
+        FilterInputs(query, filters, type, transfers, excluded)
     }
 
     val state: StateFlow<TimelineUiState> = combine(
@@ -161,7 +175,7 @@ class TimelineViewModel @Inject constructor(
         db.accounts().observeAll(),
     ) { rangeAndCustom, search, rows, categories, accounts ->
         val (range, customRange, startDay) = rangeAndCustom
-        val (query, filters, type, showOwnTransfers) = search
+        val (query, filters, type, showOwnTransfers, showExcluded) = search
         // Hidden accounts are a persisted Settings choice (accounts.is_hidden). The legend
         // chips on this screen flip the same flag, so the two places can never disagree.
         val hiddenAccountIds = accounts.filter { it.isHidden }.map { it.id }.toSet()
@@ -197,14 +211,18 @@ class TimelineViewModel @Inject constructor(
                 }
         }
 
+        // Excluded rows may be listed (muted) but never counted: totals, day nets, the daily
+        // bars and the account series all read from `counted`.
+        val counted = filtered.filter { !it.isHidden }
+
         // Pick the dominant currency for the pill totals — we don't sum across currencies.
-        val dominantCurrency = filtered
+        val dominantCurrency = counted
             .groupBy { it.amountCurrency }
             .maxByOrNull { it.value.size }
             ?.key
             ?: Currency.LKR
 
-        val realSpend = filtered.filter { !it.isDeclined }
+        val realSpend = counted.filter { !it.isDeclined }
         val income = realSpend.filter {
             it.flowId == TransactionFlow.INCOME.id && it.amountCurrency == dominantCurrency
         }.sumOf { it.amountMinor }
@@ -216,7 +234,7 @@ class TimelineViewModel @Inject constructor(
         // People's debit at 23:00 and the BOC credit next morning are one movement and must
         // become one row, which a per-day fold would have split back into two.
         val items = filtered.toTimelineItems(byCat, byAcc)
-        val netByBucket = filtered.groupBy { dayBucket(it.timestamp) }
+        val netByBucket = counted.groupBy { dayBucket(it.timestamp) }
             .mapValues { (_, rows) -> netOf(rows, dominantCurrency) }
         val groups = items
             .groupBy { dayBucket(it.timestamp) }
@@ -234,7 +252,7 @@ class TimelineViewModel @Inject constructor(
         // straight from it. For the legend we want every account that HAS activity in the
         // query-scoped range so the user can tap to re-enable a hidden one — compute that
         // from `queryFiltered` (pre-hide) instead.
-        val visibleSeries = buildAccountSeries(range, filtered, byAcc, dominantCurrency)
+        val visibleSeries = buildAccountSeries(range, counted, byAcc, dominantCurrency)
         val accountsInView = buildAccountSeries(range, queryFiltered.filter {
             filters.accountId == null || it.accountId == filters.accountId
         }, byAcc, dominantCurrency)
@@ -246,17 +264,18 @@ class TimelineViewModel @Inject constructor(
             grouped = groups,
             totalIncome = Money(income, dominantCurrency),
             totalExpense = Money(expense, dominantCurrency),
-            transactionCount = filtered.size,
+            transactionCount = counted.size,
             isEmpty = groups.isEmpty(),
             monthOffset = if (customRange) null else DateRange.cycleMonthOffset(range, startDay),
             cycleStartMillis = DateRange.cycleFor(System.currentTimeMillis(), startDay).fromMillis,
             series = visibleSeries,
             accountsInView = accountsInView,
             hiddenAccountIds = hiddenAccountIds,
-            dailySpend = buildDailySpend(range, filtered, dominantCurrency),
+            dailySpend = buildDailySpend(range, counted, dominantCurrency),
             categories = categories,
             type = type,
             showOwnTransfers = showOwnTransfers,
+            showExcluded = showExcluded,
             selectedAccountId = filters.accountId,
             selectedCategoryId = filters.categoryId,
         )
@@ -401,4 +420,5 @@ private data class FilterInputs(
     val filters: ActivityFilterArgs,
     val type: ActivityType,
     val showOwnTransfers: Boolean,
+    val showExcluded: Boolean,
 )

@@ -112,7 +112,8 @@ fun TimelineScreen(
                 onCloseSearch = { searchOpen = false; viewModel.clearQuery() },
                 onQueryChange = { viewModel.onQueryChanged(it) },
                 activeFilterCount = listOfNotNull(state.selectedAccountId, state.selectedCategoryId).size +
-                    if (state.type != ActivityType.ALL) 1 else 0,
+                    (if (state.type != ActivityType.ALL) 1 else 0) +
+                    (if (state.showExcluded) 1 else 0),
                 onOpenFilters = { filtersOpen = true },
             )
         }
@@ -182,8 +183,8 @@ fun TimelineScreen(
             selectedAccountId = state.selectedAccountId,
             selectedCategoryId = state.selectedCategoryId,
             onDismiss = { filtersOpen = false },
-            onApply = { account, category, type, transfers ->
-                viewModel.updateFilters(account, category, type, transfers)
+            onApply = { account, category, type, transfers, excluded ->
+                viewModel.updateFilters(account, category, type, transfers, excluded)
                 filtersOpen = false
             },
         )
@@ -222,6 +223,7 @@ private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> U
                 title = row.title, subtitle = row.subtitle, amount = row.amount, flow = row.flow,
                 leadingIcon = row.icon, merchantRaw = row.merchantRaw, timestamp = row.timestamp,
                 isDeclined = row.isDeclined, isOwnTransfer = row.isOwnTransfer,
+                excludedLabel = if (row.isExcluded) stringResource(R.string.activity_excluded_label) else null,
                 modifier = Modifier.clickable { onClick() },
             )
         },
@@ -321,12 +323,13 @@ private fun ActivityFilterSheet(
     selectedAccountId: Long?,
     selectedCategoryId: Long?,
     onDismiss: () -> Unit,
-    onApply: (Long?, Long?, ActivityType, Boolean) -> Unit,
+    onApply: (Long?, Long?, ActivityType, Boolean, Boolean) -> Unit,
 ) {
     var account by remember(selectedAccountId) { mutableStateOf(selectedAccountId) }
     var category by remember(selectedCategoryId) { mutableStateOf(selectedCategoryId) }
     var type by remember(state.type) { mutableStateOf(state.type) }
     var transfers by remember(state.showOwnTransfers) { mutableStateOf(state.showOwnTransfers) }
+    var excluded by remember(state.showExcluded) { mutableStateOf(state.showExcluded) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -334,7 +337,7 @@ private fun ActivityFilterSheet(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.activity_filters), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = { account = null; category = null; type = ActivityType.ALL; transfers = true }) {
+                TextButton(onClick = { account = null; category = null; type = ActivityType.ALL; transfers = true; excluded = false }) {
                     Text(stringResource(R.string.activity_filters_clear))
                 }
             }
@@ -362,7 +365,12 @@ private fun ActivityFilterSheet(
                 Text(stringResource(R.string.activity_filters_transfers_toggle), modifier = Modifier.weight(1f))
                 Switch(checked = transfers, onCheckedChange = { transfers = it })
             }
-            TextButton(onClick = { onApply(account, category, type, transfers) }, modifier = Modifier.align(Alignment.End)) {
+            // The only way back for an excluded transaction: list it here, muted, open it, Include.
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.activity_filters_excluded_toggle), modifier = Modifier.weight(1f))
+                Switch(checked = excluded, onCheckedChange = { excluded = it })
+            }
+            TextButton(onClick = { onApply(account, category, type, transfers, excluded) }, modifier = Modifier.align(Alignment.End)) {
                 Text(stringResource(R.string.activity_filters_done))
             }
         }

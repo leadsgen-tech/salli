@@ -10,14 +10,14 @@ import org.junit.Test
 class TimelineItemTest {
 
     @Test
-    fun `bank transfer uses one shared title and the source account`() {
+    fun `bank transfer is titled by its counterparty`() {
         val item = row(
             type = TransactionType.ONLINE_TRANSFER,
             merchant = "Commercial Bank PLC",
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Transfer")
+        assertThat(item.title).isEqualTo("Commercial Bank PLC")
         assertThat(item.subtitle).isEqualTo("People's Bank 0068")
         assertThat(item.merchantRaw).isEqualTo("Commercial Bank PLC")
     }
@@ -43,7 +43,29 @@ class TimelineItemTest {
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
         assertThat(item.type).isEqualTo(TransactionType.ONLINE_TRANSFER)
+        assertThat(item.title).isEqualTo("Commercial Bank PLC")
+    }
+
+    @Test
+    fun `a transfer whose counterparty is only digits falls back to Transfer`() {
+        val item = row(
+            type = TransactionType.ONLINE_TRANSFER,
+            merchant = "94279435",
+            body = "Fund transfer Successful",
+        ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
+
         assertThat(item.title).isEqualTo("Transfer")
+    }
+
+    @Test
+    fun `an excluded row is flagged so lists can mute it`() {
+        val item = row(
+            type = TransactionType.POS,
+            merchant = "KEELLS",
+            body = "spent at KEELLS",
+        ).copy(isHidden = true).toTimelineItem(category = null, accountDisplayName = "ComBank 4273")
+
+        assertThat(item.isExcluded).isTrue()
     }
 
     @Test

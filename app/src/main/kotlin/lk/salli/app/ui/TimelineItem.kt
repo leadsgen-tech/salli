@@ -38,6 +38,8 @@ data class TimelineItem(
     val isOwnTransfer: Boolean = false,
     /** The other leg's transaction id when [isOwnTransfer]; lets detail views show both. */
     val counterpartId: Long? = null,
+    /** Excluded by the user: still listed when asked for, muted, and left out of every total. */
+    val isExcluded: Boolean = false,
 )
 
 /**
@@ -106,6 +108,7 @@ private fun ownTransferItem(
         timestamp = maxOf(from.timestamp, to.timestamp),
         isOwnTransfer = true,
         counterpartId = to.id,
+        isExcluded = from.isHidden && to.isHidden,
     )
 }
 
@@ -159,6 +162,7 @@ fun TransactionEntity.toTimelineItem(
         merchantRaw = merchantRaw,
         isDeclined = isDeclined,
         timestamp = timestamp,
+        isExcluded = isHidden,
     )
 }
 
@@ -188,11 +192,11 @@ private fun deriveTitle(
         TransactionType.BALANCE_CORRECTION -> "Balance correction"
         TransactionType.OTHER -> "Transaction"
     }
-    val isTransfer = type == TransactionType.ONLINE_TRANSFER ||
-        type == TransactionType.CEFT ||
-        type == TransactionType.SLIPS
-    val base = if (isTransfer) generic else merchantRaw?.takeIf { it.isNotBlank() } ?: generic
-    return prefix + base
+    // A transfer is titled by who it went to — the beneficiary bank or the person the parser
+    // found — and only falls back to "Transfer" when the counterparty is just digits. The
+    // detail screen already showed the counterparty; the row used to throw it away.
+    val counterparty = merchantRaw?.trim()?.takeIf { it.isNotBlank() && it.any(Char::isLetter) }
+    return prefix + (counterparty ?: generic)
 }
 
 private fun iconFor(type: TransactionType): ImageVector = when (type) {
