@@ -36,6 +36,8 @@ data class TimelineGroup(
     val items: List<TimelineItem>,
     val netMinor: Long,
     val currency: String,
+    /** Start of this day in local time; the chart scrub jumps here. */
+    val dayStartMillis: Long = 0L,
 )
 
 /** One line on the Timeline's per-account spend chart. */
@@ -71,6 +73,8 @@ data class TimelineUiState(
     val showExcluded: Boolean = false,
     val selectedAccountId: Long? = null,
     val selectedCategoryId: Long? = null,
+    /** The typical amount in view; rows scale their weight ring against it. */
+    val medianMinor: Long = 0L,
 )
 
 enum class ActivityType { ALL, SPENDING, INCOME, TRANSFERS }
@@ -245,6 +249,7 @@ class TimelineViewModel @Inject constructor(
                     items = list,
                     netMinor = netByBucket[bucketStart] ?: 0L,
                     currency = dominantCurrency,
+                    dayStartMillis = bucketStart,
                 )
             }
 
@@ -276,6 +281,7 @@ class TimelineViewModel @Inject constructor(
             type = type,
             showOwnTransfers = showOwnTransfers,
             showExcluded = showExcluded,
+            medianMinor = lk.salli.app.ui.medianAmount(realSpend.filter { it.amountCurrency == dominantCurrency }.map { it.amountMinor }),
             selectedAccountId = filters.accountId,
             selectedCategoryId = filters.categoryId,
         )

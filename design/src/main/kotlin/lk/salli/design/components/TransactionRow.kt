@@ -25,6 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -80,6 +88,10 @@ fun TransactionRow(
     excludedLabel: String? = null,
     /** From-bank and to-bank sender ids of an own transfer; draws both logos in the leading slot. */
     pairSenders: Pair<String?, String?>? = null,
+    /** Two letters for the leading tile when there is no logo; null falls back to the category glyph. */
+    monogram: String? = null,
+    /** 0..1, how heavy this amount is against the user's typical one; sets the ring around the tile. */
+    weight: Float = 0f,
 ) {
     if (standalone) {
         Surface(
@@ -104,6 +116,8 @@ fun TransactionRow(
                 statusLabel = statusLabel,
                 excludedLabel = excludedLabel,
                 pairSenders = pairSenders,
+                monogram = monogram,
+                weight = weight,
             )
         }
     } else {
@@ -122,6 +136,8 @@ fun TransactionRow(
             statusLabel = statusLabel,
             excludedLabel = excludedLabel,
             pairSenders = pairSenders,
+            monogram = monogram,
+            weight = weight,
             modifier = modifier,
         )
     }
@@ -144,6 +160,8 @@ private fun TransactionRowContent(
     modifier: Modifier = Modifier,
     excludedLabel: String? = null,
     pairSenders: Pair<String?, String?>? = null,
+    monogram: String? = null,
+    weight: Float = 0f,
 ) {
     val salli = LocalSalliColors.current
     val logoPath = MerchantLogos.resolve(merchantRaw)
@@ -159,15 +177,20 @@ private fun TransactionRowContent(
             .alpha(if (excludedLabel != null) 0.5f else 1f),
     ) {
         when {
-            logoPath != null -> MerchantLogo(path = logoPath, size = LeadingSize)
+            logoPath != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
+                MerchantLogo(path = logoPath, size = RingInnerSize)
+            }
             isOwnTransfer && pairSenders != null -> PairAvatar(from = pairSenders.first, to = pairSenders.second)
             isOwnTransfer -> MutedAvatar(icon = Icons.Outlined.SwapHoriz)
-            categoryColorSeed != null -> CategoryIcon(
-                iconName = categoryIconName,
-                colorSeed = categoryColorSeed,
-                size = LeadingSize,
-            )
-            else -> MutedAvatar(icon = leadingIcon)
+            monogram != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
+                MonogramTile(text = monogram, colorSeed = categoryColorSeed ?: NeutralSeed, size = RingInnerSize)
+            }
+            categoryColorSeed != null -> WeightRing(weight = weight, seed = categoryColorSeed, declined = isDeclined) {
+                CategoryIcon(iconName = categoryIconName, colorSeed = categoryColorSeed, size = RingInnerSize)
+            }
+            else -> WeightRing(weight = weight, seed = null, declined = isDeclined) {
+                MutedAvatar(icon = leadingIcon, size = RingInnerSize)
+            }
         }
 
         Spacer(Modifier.width(SalliSpacing.sm))
@@ -243,6 +266,69 @@ private fun MerchantLogo(
             .size(size)
             .clip(CircleShape),
     )
+}
+
+private val RingInnerSize = 36.dp
+private const val NeutralSeed = 11
+
+/**
+ * Two letters on the category's tinted tile. Recognition (KE is Keells) and category colour at
+ * once, with no artwork to draw for the long tail of merchants we have no logo for.
+ */
+@Composable
+private fun MonogramTile(text: String, colorSeed: Int, size: androidx.compose.ui.unit.Dp) {
+    val hue = LocalSalliColors.current.categoryHue(colorSeed)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(size)
+            .clip(SalliShapeTokens.row)
+            .background(hue.container),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+            color = hue.onContainer,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The ring around a leading tile whose thickness is the amount against the user's typical
+ * transaction: a hairline for small change, a fat band for the month's big hit. Dashed when the
+ * bank declined it. Information, not decoration: a list scans for weight before any digit.
+ */
+@Composable
+private fun WeightRing(
+    weight: Float,
+    seed: Int?,
+    declined: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val hue = LocalSalliColors.current.categoryHue(seed ?: NeutralSeed)
+    val ringColor = if (declined) LocalSalliColors.current.negative else hue.accent
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(LeadingSize)
+            .drawBehind {
+                val stroke = (1.5f + weight.coerceIn(0f, 1f) * 6f).dp.toPx()
+                val inset = stroke / 2f
+                drawRoundRect(
+                    color = ringColor,
+                    topLeft = Offset(inset, inset),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius(14.dp.toPx()),
+                    style = Stroke(
+                        width = stroke,
+                        pathEffect = if (declined) PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())) else null,
+                    ),
+                )
+            },
+    ) {
+        content()
+    }
 }
 
 /**

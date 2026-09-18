@@ -46,7 +46,47 @@ data class TimelineItem(
     val toSender: String? = null,
     /** How many own transfers a folded "moved between your accounts" row stands for; 0 otherwise. */
     val foldedMoves: Int = 0,
+    /** The category's hue and glyph, when the row has a category. */
+    val categoryColorSeed: Int? = null,
+    val categoryIconName: String? = null,
+    /** Two letters for the leading tile when there is a real name to take them from. */
+    val monogram: String? = null,
 )
+
+/**
+ * Two letters that stand for a name: the first letters of the first two words, or the first
+ * two letters of a single word. "Keells Super" → KE, "PickMe" → PI, "Bank Of Ceylon - BOC" → BO.
+ * Null when the name has no letters to give.
+ */
+fun monogramFor(name: String): String? {
+    val words = name.removePrefix("Declined · ")
+        .split(' ', '-', '·', '/', '.', '_', ',')
+        .map { w -> w.filter(Char::isLetter) }
+        .filter { it.isNotEmpty() }
+    return when {
+        words.isEmpty() -> null
+        words.size >= 2 -> (words[0].take(1) + words[1].take(1)).uppercase()
+        else -> words[0].take(2).uppercase()
+    }
+}
+
+/**
+ * How heavy a transaction is against the user's typical one, 0..1 on a log scale: a typical
+ * amount lands near 0.3, ten times typical at 1. Drives the ring around the leading tile so a
+ * list can be scanned for the big hits without reading a digit.
+ */
+fun amountWeight(minor: Long, medianMinor: Long): Float {
+    if (medianMinor <= 0L || minor <= 0L) return 0f
+    val ratio = minor.toDouble() / medianMinor
+    return (kotlin.math.log10(ratio + 1.0) / kotlin.math.log10(11.0)).toFloat().coerceIn(0f, 1f)
+}
+
+/** The middle absolute amount of [rows], the yardstick for [amountWeight]. */
+fun medianAmount(rows: List<Long>): Long {
+    if (rows.isEmpty()) return 0L
+    val sorted = rows.map { kotlin.math.abs(it) }.sorted()
+    return sorted[sorted.size / 2]
+}
 
 /**
  * Folds two or more own transfers in [rows] into one "moved between your accounts" row, placed
@@ -187,6 +227,9 @@ fun TransactionEntity.toTimelineItem(
             add("Fee " + MoneyFormat.formatMinor(fee, amountCurrency))
         }
     }
+    // A monogram only when the title is a real name: a merchant, a counterparty or the user's
+    // own note. Generic titles ("ATM", "Cheque") keep their type glyph.
+    val named = !note.isNullOrBlank() || merchantRaw?.any(Char::isLetter) == true
     return TimelineItem(
         id = id,
         title = title,
@@ -199,6 +242,9 @@ fun TransactionEntity.toTimelineItem(
         isDeclined = isDeclined,
         timestamp = timestamp,
         isExcluded = isHidden,
+        categoryColorSeed = category?.colorSeed,
+        categoryIconName = category?.iconName,
+        monogram = if (named) monogramFor(title) else null,
     )
 }
 
@@ -231,8 +277,11 @@ private fun deriveTitle(
     // A transfer is titled by who it went to — the beneficiary bank or the person the parser
     // found — and only falls back to "Transfer" when the counterparty is just digits. The
     // detail screen already showed the counterparty; the row used to throw it away.
-    val counterparty = merchantRaw?.trim()?.takeIf { it.isNotBlank() && it.any(Char::isLetter) }
-    return prefix + (counterparty ?: generic)
+    val raw = merchantRaw?.trim().orEmpty()
+    val counterparty = raw.takeIf { it.isNotBlank() && it.any(Char::isLetter) }
+    // An account number is still worth its last four digits: "Transfer to ····9435" beats "Transfer".
+    val accountTail = raw.filter(Char::isDigit).takeIf { counterparty == null && it.length >= 4 }?.takeLast(4)
+    return prefix + (counterparty ?: accountTail?.let { "$generic to ····$it" } ?: generic)
 }
 
 private fun iconFor(type: TransactionType): ImageVector = when (type) {

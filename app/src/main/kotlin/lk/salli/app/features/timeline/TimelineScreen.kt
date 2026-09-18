@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -92,6 +95,11 @@ fun TimelineScreen(
     var searchOpen by remember(filters) { mutableStateOf(!filters.query.isNullOrBlank()) }
     var filtersOpen by remember { mutableStateOf(false) }
     var categoryTarget by remember { mutableStateOf<Long?>(null) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var scrubbedDay by remember { mutableStateOf<Int?>(null) }
+    // The scrub label fades on its own; the list stays where the scrub sent it.
+    LaunchedEffect(scrubbedDay) { if (scrubbedDay != null) { kotlinx.coroutines.delay(2_500); scrubbedDay = null } }
 
     lk.salli.design.components.SalliPullToRefresh(
         isRefreshing = refreshing,
@@ -101,6 +109,7 @@ fun TimelineScreen(
         modifier = Modifier.fillMaxSize(),
     ) {
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(top = statusBar, bottom = 120.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -134,12 +143,42 @@ fun TimelineScreen(
                 )
             }
             item("daily-bars") {
-                MiniBarChart(
-                    values = state.dailySpend,
-                    highlight = state.dailySpend.lastIndex,
-                    height = 40.dp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                )
+                Column {
+                    // Scrub the bars and the list follows: release on a day and it scrolls there.
+                    MiniBarChart(
+                        values = state.dailySpend,
+                        highlight = state.dailySpend.lastIndex,
+                        selected = scrubbedDay,
+                        height = 40.dp,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                        onSelect = { day ->
+                            scrubbedDay = day
+                            val dayMs = 24L * 60 * 60 * 1000
+                            val target = state.range.fromMillis + day * dayMs
+                            val fixed = if (searchOpen) 1 else 4
+                            var index = fixed
+                            var found: Int? = null
+                            for (group in state.grouped) {
+                                if (group.dayStartMillis in (target - dayMs / 2)..(target + dayMs / 2)) { found = index; break }
+                                index += 1 + group.items.size
+                            }
+                            found?.let { scope.launch { listState.animateScrollToItem(it) } }
+                        },
+                    )
+                    val day = scrubbedDay
+                    if (day != null) {
+                        val dayMs = 24L * 60 * 60 * 1000
+                        val stamp = state.range.fromMillis + day * dayMs
+                        val amount = state.dailySpend.getOrNull(day) ?: 0L
+                        Text(
+                            text = java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(stamp)) +
+                                " · " + formatMoney(Money(amount, state.totalExpense.currency)),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -167,11 +206,15 @@ fun TimelineScreen(
                     )
                 }
                 items(group.items, key = { it.id }) { row ->
-                    CategorySwipeRow(
-                        row = row,
-                        onClick = { onTransactionClick(row.id) },
-                        onCategory = { categoryTarget = row.id },
-                    )
+                    // A row that arrives while the list is open slides into its slot.
+                    Box(modifier = Modifier.animateItem()) {
+                        CategorySwipeRow(
+                            row = row,
+                            medianMinor = state.medianMinor,
+                            onClick = { onTransactionClick(row.id) },
+                            onCategory = { categoryTarget = row.id },
+                        )
+                    }
                 }
             }
         }
@@ -203,7 +246,7 @@ fun TimelineScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> Unit, onCategory: () -> Unit) {
+private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, medianMinor: Long, onClick: () -> Unit, onCategory: () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         if (value == SwipeToDismissBoxValue.EndToStart) onCategory()
         false
@@ -225,6 +268,10 @@ private fun CategorySwipeRow(row: lk.salli.app.ui.TimelineItem, onClick: () -> U
                 isDeclined = row.isDeclined, isOwnTransfer = row.isOwnTransfer,
                 excludedLabel = if (row.isExcluded) stringResource(R.string.activity_excluded_label) else null,
                 pairSenders = if (row.isOwnTransfer) row.fromSender to row.toSender else null,
+                categoryIconName = row.categoryIconName,
+                categoryColorSeed = row.categoryColorSeed,
+                monogram = row.monogram,
+                weight = lk.salli.app.ui.amountWeight(row.amount.minorUnits, medianMinor),
                 modifier = Modifier.clickable { onClick() },
             )
         },

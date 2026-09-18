@@ -49,14 +49,15 @@ class TimelineItemTest {
     }
 
     @Test
-    fun `a transfer whose counterparty is only digits falls back to Transfer`() {
+    fun `a transfer whose counterparty is only digits keeps the last four`() {
         val item = row(
             type = TransactionType.ONLINE_TRANSFER,
             merchant = "94279435",
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Transfer")
+        assertThat(item.title).isEqualTo("Transfer to ····9435")
+        assertThat(item.monogram).isNull()
     }
 
     @Test
@@ -77,6 +78,38 @@ class TimelineItemTest {
         assertThat(folded.first().subtitle).isEqualTo("2 moves")
         assertThat(folded.first().foldedMoves).isEqualTo(2)
         assertThat(foldOwnTransfers(listOf(move(1, 25_000), spend), "x") { "" }).hasSize(2)
+    }
+
+    @Test
+    fun `monograms take two letters from a name and nothing from digits`() {
+        assertThat(monogramFor("Keells Super")).isEqualTo("KS")
+        assertThat(monogramFor("Keells")).isEqualTo("KE")
+        assertThat(monogramFor("PickMe")).isEqualTo("PI")
+        assertThat(monogramFor("Bank Of Ceylon - BOC")).isEqualTo("BO")
+        assertThat(monogramFor("Declined · RAILWAY *14157")).isEqualTo("RA")
+        assertThat(monogramFor("94279435")).isNull()
+    }
+
+    @Test
+    fun `weight is log scaled against the typical amount`() {
+        assertThat(amountWeight(3_200_00, 3_200_00)).isWithin(0.02f).of(0.29f)
+        assertThat(amountWeight(32_000_00, 3_200_00)).isEqualTo(1f)
+        assertThat(amountWeight(0, 3_200_00)).isEqualTo(0f)
+        assertThat(amountWeight(500_00, 0)).isEqualTo(0f)
+        assertThat(medianAmount(listOf(100, -900, 300))).isEqualTo(300)
+    }
+
+    @Test
+    fun `rows carry their category hue and a monogram only for named merchants`() {
+        val cat = lk.salli.data.db.entities.CategoryEntity(id = 4, name = "Groceries", iconName = "shopping_cart", colorSeed = 0)
+        val named = row(type = TransactionType.POS, merchant = "KEELLS SUPER", body = "spent at KEELLS")
+            .toTimelineItem(category = cat, accountDisplayName = "ComBank 4273")
+        val generic = row(type = TransactionType.ATM, merchant = "", body = "withdrawn")
+            .toTimelineItem(category = null, accountDisplayName = "BOC 870")
+
+        assertThat(named.monogram).isEqualTo("KS")
+        assertThat(named.categoryColorSeed).isEqualTo(0)
+        assertThat(generic.monogram).isNull()
     }
 
     @Test

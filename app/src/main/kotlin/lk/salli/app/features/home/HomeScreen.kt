@@ -73,6 +73,7 @@ import lk.salli.design.theme.LocalSalliColors
 import lk.salli.design.theme.SalliSpacing
 import lk.salli.app.ui.TimelineItem
 import lk.salli.app.ui.foldOwnTransfers
+import lk.salli.app.ui.amountWeight
 import androidx.compose.ui.platform.LocalContext
 import lk.salli.design.components.SalliIconButton
 import lk.salli.domain.money.MoneyFormat
@@ -237,6 +238,10 @@ fun HomeScreen(
                                 isDeclined = row.isDeclined,
                                 isOwnTransfer = row.isOwnTransfer,
                                 pairSenders = if (row.isOwnTransfer) row.fromSender to row.toSender else null,
+                                categoryIconName = row.categoryIconName,
+                                categoryColorSeed = row.categoryColorSeed,
+                                monogram = row.monogram,
+                                weight = amountWeight(row.amount.minorUnits, state.medianMinor),
                                 standalone = false,
                                 // A folded "moved between your accounts" row opens Activity, where each move is listed.
                                 modifier = Modifier.clickable { if (row.foldedMoves > 0) onSeeAllActivity() else onTransactionClick(row.id) },

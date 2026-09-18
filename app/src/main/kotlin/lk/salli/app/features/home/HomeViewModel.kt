@@ -86,6 +86,8 @@ data class HomeUiState(
     val monthTrend: Trend? = null,
     val topSpenders: List<TopSpender> = emptyList(),
     val isEmpty: Boolean = true,
+    /** The typical amount among recent rows; the weight ring scales against it. */
+    val medianMinor: Long = 0L,
 )
 
 @HiltViewModel
@@ -261,6 +263,7 @@ class HomeViewModel @Inject constructor(
             userName = userName,
             accounts = accountSummaries,
             recent = items,
+            medianMinor = lk.salli.app.ui.medianAmount(recent.filter { !it.isDeclined && it.transferGroupId == null }.map { it.amountMinor }),
             monthIncome = Money(monthIncome, dominantCurrency),
             monthExpense = Money(monthExpense, dominantCurrency),
             monthMoved = Money(monthMoved, dominantCurrency),
