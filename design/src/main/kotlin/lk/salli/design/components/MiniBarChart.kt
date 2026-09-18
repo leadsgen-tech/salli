@@ -20,6 +20,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,8 @@ import lk.salli.design.motion.LocalReducedMotion
  * @param values    raw magnitudes; scaled against the largest. Empty renders nothing.
  * @param highlight index drawn in the accent colour (today, or the selected period).
  * @param selected  index currently scrubbed, if any.
+ * @param ghosts    optional per-bar projection: a dashed outline continues the bar up to this
+ *                  value ("at this pace the month ends here"). Null entries draw nothing.
  */
 @Composable
 fun MiniBarChart(
@@ -52,6 +56,7 @@ fun MiniBarChart(
     barColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     accentColor: Color = MaterialTheme.colorScheme.primary,
     onSelect: ((Int) -> Unit)? = null,
+    ghosts: List<Long?>? = null,
 ) {
     if (values.isEmpty()) return
 
@@ -71,7 +76,7 @@ fun MiniBarChart(
         }
     }
 
-    val max = values.maxOrNull()?.coerceAtLeast(1L) ?: 1L
+    val max = maxOf(values.maxOrNull() ?: 1L, ghosts?.filterNotNull()?.maxOrNull() ?: 1L).coerceAtLeast(1L)
     val currentOnSelect by rememberUpdatedState(onSelect)
     var previewIndex by remember { mutableIntStateOf(-1) }
 
@@ -134,6 +139,18 @@ fun MiniBarChart(
                 size = Size(width = barWidth, height = barHeight),
                 cornerRadius = radius,
             )
+            val ghost = ghosts?.getOrNull(index)
+            if (ghost != null && ghost > value) {
+                val ghostHeight = size.height * (ghost.toFloat() / max.toFloat()).coerceIn(0f, 1f) * grow.value
+                val inset = 0.75.dp.toPx()
+                drawRoundRect(
+                    color = accentColor.copy(alpha = 0.55f),
+                    topLeft = Offset(x = index * slot + inset, y = size.height - ghostHeight + inset),
+                    size = Size(width = (barWidth - 2 * inset).coerceAtLeast(1f), height = (ghostHeight - barHeight).coerceAtLeast(0f)),
+                    cornerRadius = radius,
+                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 4f))),
+                )
+            }
         }
     }
 }

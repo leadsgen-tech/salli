@@ -339,6 +339,7 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
             highlight = state.monthlyBars.indexOfFirst { it.isCurrent }.takeIf { it >= 0 },
             height = 80.dp,
             onSelect = onSelectMonth,
+            ghosts = state.monthlyBars.map { it.projectedMinor },
         )
         Spacer(Modifier.height(SalliSpacing.xs))
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -368,6 +369,20 @@ private fun InsightSummary(state: InsightsUiState, onSelectMonth: (Int) -> Unit)
                         },
                     )
                 }
+            }
+        }
+        // The dashed top of the running month, in words.
+        state.monthlyBars.lastOrNull()?.let { bar ->
+            bar.projectedMinor?.let { projected ->
+                Text(
+                    text = stringResource(
+                        R.string.insights_projection,
+                        bar.label,
+                        MoneyFormat.short(Money(projected, state.totalSpend.currency)),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

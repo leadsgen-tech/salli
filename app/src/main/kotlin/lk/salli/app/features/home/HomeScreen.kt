@@ -5,6 +5,17 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import lk.salli.design.theme.SalliShapeTokens
+import lk.salli.design.motion.LocalReducedMotion
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -319,6 +330,8 @@ private fun AccountStack(
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // One card, two faces: what left this period on the front, each bank's balance on
+        // the back. The account chips used to sit under the card; they live on the back now.
         SummaryCard(
             totalBalance = totalBalance,
             monthTrend = monthTrend,
@@ -329,90 +342,18 @@ private fun AccountStack(
             budgetMinor = budgetMinor,
             expectedProgress = expectedProgress,
             hasBalance = accounts.any { it.balance != null },
+            accounts = accounts,
+            onAccountClick = onAccountClick,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (accounts.isNotEmpty()) {
-            SectionHeader(title = stringResource(R.string.home_accounts))
-            AccountChipsRow(accounts = accounts, onAccountClick = onAccountClick)
-        }
     }
 }
 
 /**
- * Horizontal strip of account cards. Every card keeps enough width for a full LKR balance,
- * regardless of account count. The old equal-weight layout squeezed three accounts into roughly
- * 100 dp each, so six-figure balances ended in an ellipsis even though the value was available.
+ * The hero with two faces. Tap anywhere on it and it turns over on a spring: the front is
+ * what left this period, the back is every bank's balance, full width, no truncation. Both
+ * faces are composed so the card keeps the taller height and never jumps mid-turn.
  */
-@Composable
-private fun AccountChipsRow(accounts: List<AccountSummary>, onAccountClick: (Long) -> Unit) {
-    androidx.compose.foundation.lazy.LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(accounts, key = { it.id }) { account ->
-            AccountChip(
-                account = account,
-                color = BankBrand.forSender(account.senderAddress).secondary,
-                onClick = { onAccountClick(account.id) },
-                modifier = Modifier.width(216.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AccountChip(
-    account: AccountSummary,
-    color: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(color.copy(alpha = 0.08f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BankAvatar(sender = account.senderAddress, displayName = account.displayName, size = 36.dp)
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = account.displayName,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = account.accountLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        // Single line, same style for every account. Real balances come from BOC's
-        // `Av_Bal` / People's Bank's anchor-plus-delta imputation; for senders that never
-        // ship a balance (ComBank cards, the Q+ account) we fall back to the signed net of
-        // tracked activity. A card with only outflows reads as `−Rs 45,385.00`, an account
-        // with mixed flow as `Rs 14,153.28` — same visual, no extra labels.
-        val display: Money? = account.balance ?: account.activityNet
-        if (display != null) {
-            Text(
-                text = MoneyFormat.formatWithMinus(display),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
-    }
-}
-
 @Composable
 private fun SummaryCard(
     totalBalance: Money,
@@ -424,14 +365,131 @@ private fun SummaryCard(
     budgetMinor: Long?,
     expectedProgress: Float?,
     hasBalance: Boolean,
+    accounts: List<AccountSummary>,
+    onAccountClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
+) {
+    val reduced = LocalReducedMotion.current
+    val canFlip = accounts.isNotEmpty()
+    var flipped by remember { mutableStateOf(false) }
+    val turn = remember { Animatable(0f) }
+    LaunchedEffect(flipped, reduced) {
+        val target = if (flipped) 180f else 0f
+        if (reduced) turn.snapTo(target) else turn.animateTo(target, spring(dampingRatio = 0.72f, stiffness = 170f))
+    }
+    val density = LocalDensity.current
+    Box(
+        modifier = modifier
+            .height(IntrinsicSize.Max)
+            .graphicsLayer {
+                rotationY = turn.value
+                cameraDistance = 16f * density.density
+            }
+            .clip(SalliShapeTokens.hero)
+            .clickable(enabled = canFlip) { flipped = !flipped },
+    ) {
+        val showBack = turn.value > 90f
+        Box(Modifier.fillMaxHeight().graphicsLayer { alpha = if (showBack) 0f else 1f }) {
+            SummaryFront(
+                totalBalance = totalBalance,
+                monthTrend = monthTrend,
+                monthExpense = monthExpense,
+                monthMoved = monthMoved,
+                onOpenSafeToSpend = onOpenSafeToSpend,
+                safeTodayMinor = safeTodayMinor,
+                budgetMinor = budgetMinor,
+                expectedProgress = expectedProgress,
+                hasBalance = hasBalance,
+                canFlip = canFlip,
+                enabled = !showBack,
+            )
+        }
+        if (canFlip) {
+            // Pre-turned by a half, so it reads the right way round once the card is over.
+            Box(Modifier.fillMaxHeight().graphicsLayer { rotationY = 180f; alpha = if (showBack) 1f else 0f }) {
+                SummaryBack(accounts = accounts, onAccountClick = onAccountClick, enabled = showBack)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryBack(
+    accounts: List<AccountSummary>,
+    onAccountClick: (Long) -> Unit,
+    enabled: Boolean,
+) {
+    val onHero = LocalSalliColors.current.onHero
+    HeroCard(modifier = Modifier.fillMaxHeight()) {
+        HeroEyebrow(stringResource(R.string.home_balances_by_bank))
+        Spacer(Modifier.height(SalliSpacing.xs))
+        accounts.forEach { account ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                // No pointer node at all while this face is hidden: an invisible clickable on
+                // top of the front would swallow the tap that should turn the card.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .then(if (enabled) Modifier.clickable { onAccountClick(account.id) } else Modifier)
+                    .padding(vertical = 8.dp),
+            ) {
+                BankAvatar(sender = account.senderAddress, displayName = account.displayName, size = 32.dp)
+                Spacer(Modifier.width(12.dp))
+                // The display name already carries the account number; no second line.
+                Text(
+                    text = account.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = onHero,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(12.dp))
+                // Real balance where the bank ships one; otherwise the signed net we tracked.
+                val display: Money? = account.balance ?: account.activityNet
+                if (display != null) {
+                    Text(
+                        text = MoneyFormat.formatWithMinus(display),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onHero,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f, fill = true))
+        Spacer(Modifier.height(SalliSpacing.xs))
+        Text(
+            text = stringResource(R.string.home_flip_back),
+            style = MaterialTheme.typography.labelSmall,
+            color = onHero.copy(alpha = 0.7f),
+        )
+    }
+}
+
+@Composable
+private fun SummaryFront(
+    totalBalance: Money,
+    monthTrend: Trend?,
+    monthExpense: Money,
+    monthMoved: Money,
+    onOpenSafeToSpend: () -> Unit,
+    safeTodayMinor: Long?,
+    budgetMinor: Long?,
+    expectedProgress: Float?,
+    hasBalance: Boolean,
+    canFlip: Boolean,
+    enabled: Boolean,
 ) {
     val onHero = LocalSalliColors.current.onHero
     // Out = spent + moved. The big number is everything that left; the line under the bar
     // says how much of it bought something and how much just went somewhere.
     val hasMoved = monthMoved.minorUnits > 0L
     val monthOut = Money(monthExpense.minorUnits + monthMoved.minorUnits, monthExpense.currency)
-    HeroCard(modifier = modifier) {
+    HeroCard(modifier = Modifier.fillMaxHeight()) {
         HeroEyebrow(stringResource(if (hasMoved) R.string.home_out_this_period else R.string.home_spent_this_period))
         Spacer(Modifier.height(SalliSpacing.xs))
         SpringOdometer(
@@ -480,7 +538,7 @@ private fun SummaryCard(
                         label = stringResource(R.string.home_safe_today),
                         value = MoneyFormat.formatMinor(safeTodayMinor, monthExpense.currency),
                         valueColor = LocalSalliColors.current.positive,
-                        modifier = Modifier.weight(1f).clickable(onClick = onOpenSafeToSpend),
+                        modifier = Modifier.weight(1f).then(if (enabled) Modifier.clickable(onClick = onOpenSafeToSpend) else Modifier),
                     )
                 }
                 if (hasBalance) {
@@ -491,6 +549,15 @@ private fun SummaryCard(
                     )
                 }
             }
+        }
+        if (canFlip) {
+            Spacer(Modifier.weight(1f, fill = true))
+            Spacer(Modifier.height(SalliSpacing.xs))
+            Text(
+                text = stringResource(R.string.home_flip_front),
+                style = MaterialTheme.typography.labelSmall,
+                color = onHero.copy(alpha = 0.7f),
+            )
         }
     }
 }

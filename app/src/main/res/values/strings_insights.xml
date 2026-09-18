@@ -36,4 +36,5 @@
     <string name="insights_income_label">In</string>
     <string name="insights_expense_label">Out</string>
     <string name="insights_net_label">Net</string>
+    <string name="insights_projection">At this pace %1$s ends near %2$s</string>
 </resources>

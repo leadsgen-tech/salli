@@ -48,6 +48,8 @@ data class MonthlyBar(
     /** Per-category contributions. The slice at index `i` shares the `i`-th colour tint. */
     val slices: List<BarSlice>,
     val isCurrent: Boolean,
+    /** Where this month lands at its current daily pace; only the running calendar month has one. */
+    val projectedMinor: Long? = null,
 )
 
 data class BarSlice(
@@ -338,11 +340,21 @@ class InsightsViewModel @Inject constructor(
                 )
             }.sortedByDescending { it.totalMinor }.take(3)
             val total = inMonth.sumOf { it.amountMinor }
+            // The running month is drawn to where its pace lands it, once three days are in.
+            val projected = if (back == 5) {
+                val today = Calendar.getInstance()
+                val elapsed = today.get(Calendar.DAY_OF_MONTH)
+                val length = today.getActualMaximum(Calendar.DAY_OF_MONTH)
+                if (elapsed >= 3 && total > 0L && elapsed < length) total * length / elapsed else null
+            } else {
+                null
+            }
             MonthlyBar(
                 label = label,
                 range = monthRange,
                 totalMinor = total,
                 slices = barSlices,
+                projectedMinor = projected?.takeIf { it > total },
                 // Bars stay calendar months; the highlighted one is the month the active
                 // cycle starts in, so a 25th-to-25th cycle still lights up a single bar.
                 isCurrent = rangeStartMs in start.timeInMillis until end.timeInMillis,

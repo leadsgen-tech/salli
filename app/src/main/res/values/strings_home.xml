@@ -38,4 +38,7 @@
     <string name="home_headline_safe">%1$s safe to spend today</string>
     <string name="home_empty_title">Waiting for your first bank alert</string>
     <string name="home_empty_message">Salli reads bank messages on this phone. Your transactions will appear here when an alert arrives.</string>
+    <string name="home_balances_by_bank">Balances by bank</string>
+    <string name="home_flip_front">Tap for balances by bank</string>
+    <string name="home_flip_back">Tap to turn back</string>
 </resources>
