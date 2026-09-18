@@ -114,6 +114,8 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("androidx.test:core:1.6.1")
+    // Compose component tests run under Robolectric's native graphics so they can read pixels.
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
 // M3 Expressive is still annotated @ExperimentalMaterial3ExpressiveApi in material3 1.4.x, so

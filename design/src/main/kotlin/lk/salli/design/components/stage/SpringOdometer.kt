@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import lk.salli.design.theme.SalliTheme
@@ -167,7 +169,9 @@ private fun DigitWheel(
     val digits = remember(column.from, column.to, column.direction, steps) {
         OdometerDigits.wheelDigits(column, OdometerDefaults.MaxVisibleSteps)
     }
-    val heightPx = with(LocalDensity.current) { metrics.height.toPx() }
+    val density = LocalDensity.current
+    val widthPx = with(density) { metrics.width.roundToPx() }
+    val heightPx = with(density) { metrics.height.roundToPx() }
 
     Box(
         modifier = Modifier
@@ -175,7 +179,21 @@ private fun DigitWheel(
             .height(metrics.height)
             .clipToBounds(),
     ) {
-        Column(
+        // The strip is laid out by hand so every cell is a full digit tall. A Column here would
+        // be handed the one-digit window as its limit and squeeze every cell after the first to
+        // nothing, which left a rolled digit blank once its wheel had turned.
+        Layout(
+            content = {
+                digits.forEach { digit ->
+                    Text(
+                        text = digit.toString(),
+                        style = style,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            },
             modifier = Modifier.graphicsLayer {
                 // The strip runs from `from` down to `to`, so sliding it up by `steps` cells
                 // brings the destination digit into the window. No upper clamp: the spring
@@ -183,15 +201,13 @@ private fun DigitWheel(
                 // exactly what a real wheel does.
                 translationY = -progress().coerceAtLeast(0f) * steps * heightPx
             },
-        ) {
-            digits.forEach { digit ->
-                Text(
-                    text = digit.toString(),
-                    style = style,
-                    color = color,
-                    maxLines = 1,
-                    modifier = Modifier.height(metrics.height),
-                )
+        ) { measurables, _ ->
+            val cell = Constraints.fixed(widthPx, heightPx)
+            val placeables = measurables.map { it.measure(cell) }
+            layout(widthPx, heightPx) {
+                placeables.forEachIndexed { index, placeable ->
+                    placeable.placeRelative(0, index * heightPx)
+                }
             }
         }
     }
