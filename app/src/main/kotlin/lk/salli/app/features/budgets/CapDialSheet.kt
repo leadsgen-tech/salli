@@ -31,7 +31,12 @@ import lk.salli.design.components.CategoryChip
 import lk.salli.design.components.PrimaryButton
 import lk.salli.design.components.stage.CapDial
 import lk.salli.design.components.stage.DialMark
+import lk.salli.design.components.stage.LiquidFill
 import lk.salli.design.components.stage.SpringOdometer
+import lk.salli.design.motion.rememberDeviceTilt
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import lk.salli.design.motion.LocalReducedMotion
 import lk.salli.design.theme.SalliSpacing
 import lk.salli.domain.Currency
@@ -110,11 +115,24 @@ fun CapDialSheet(
     }
     val reduced = LocalReducedMotion.current
 
+    // The sheet is the vessel: the cap you pull is the level the liquid rises to.
+    val tilt by rememberDeviceTilt()
+    var stirring by remember { mutableStateOf(false) }
+    LaunchedEffect(cap) { stirring = true; delay(700); stirring = false }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     ) {
+        Box {
+        LiquidFill(
+            fraction = if (maxMinor > 0L) cap.toFloat() / maxMinor else 0f,
+            alpha = 0.16f,
+            tilt = tilt,
+            stirring = stirring,
+            reducedMotion = reduced,
+            modifier = Modifier.matchParentSize(),
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -218,9 +236,9 @@ fun CapDialSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        }
     }
 }
-
 /** "September 2026" → "Sep". */
 private fun shortLabel(label: String): String = label.take(3)
 

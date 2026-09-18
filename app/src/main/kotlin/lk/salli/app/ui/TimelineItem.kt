@@ -156,7 +156,7 @@ private fun ownTransferItem(
     }.joinToString(" · ")
     return TimelineItem(
         id = from.id,
-        title = "Moved to $toName",
+        title = "Moved",
         subtitle = subtitle,
         // What actually moved between the accounts is the credited amount; the fee is
         // surfaced separately so the row never reads as spending.
@@ -206,6 +206,10 @@ fun TransactionEntity.toTimelineItem(
     val subtitleParts = buildList {
         if (directionLine != null) {
             add(directionLine)
+        } else if (isTransfer(type)) {
+            // "Sent" up top; who and from where down here.
+            transferCounterparty(merchantRaw)?.let { add(it) } ?: category?.name?.let { add(it) }
+            accountDisplayName?.let { add(it) }
         } else {
             category?.name?.let { add(it) }
             accountDisplayName?.let { add(it) }
@@ -273,13 +277,18 @@ private fun deriveTitle(
     val raw = merchantRaw?.trim().orEmpty()
     val counterparty = raw.takeIf { it.isNotBlank() && it.any(Char::isLetter) }
     if (!isTransfer(type)) return prefix + (counterparty ?: generic)
-    // Every transfer starts with the same verb; the counterparty follows when the bank named
-    // one (People's Bank does, BOC does not). An account number keeps its last four digits.
-    val verb = if (flow == TransactionFlow.INCOME) "Received" else "Sent"
-    val joiner = if (flow == TransactionFlow.INCOME) "from" else "to"
-    val accountTail = raw.filter(Char::isDigit).takeIf { counterparty == null && it.length >= 4 }?.takeLast(4)
-    val who = counterparty ?: accountTail?.let { "····$it" }
-    return prefix + if (who != null) "$verb $joiner $who" else verb
+    // Every transfer is titled by the same one word, whatever the bank told us. People's Bank
+    // names the beneficiary and BOC does not; that detail belongs in the subtitle, so the list
+    // reads the same top to bottom.
+    return prefix + if (flow == TransactionFlow.INCOME) "Received" else "Sent"
+}
+
+/** The counterparty of a transfer as the subtitle shows it, or null when the bank gave none. */
+private fun transferCounterparty(merchantRaw: String?): String? {
+    val raw = merchantRaw?.trim().orEmpty()
+    raw.takeIf { it.isNotBlank() && it.any(Char::isLetter) }?.let { return it }
+    val digits = raw.filter(Char::isDigit)
+    return if (digits.length >= 4) "····" + digits.takeLast(4) else null
 }
 
 private fun iconFor(type: TransactionType): ImageVector = when (type) {

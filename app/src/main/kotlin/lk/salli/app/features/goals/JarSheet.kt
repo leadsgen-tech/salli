@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -36,7 +35,10 @@ import lk.salli.app.features.budgets.PillTextField
 import lk.salli.design.components.PrimaryButton
 import lk.salli.design.components.stage.CapDial
 import lk.salli.design.components.stage.DialMark
-import lk.salli.design.components.stage.GoalJarTile
+import lk.salli.design.components.stage.LiquidFill
+import lk.salli.design.motion.rememberDeviceTilt
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import lk.salli.design.components.stage.SpringOdometer
 import lk.salli.design.motion.LocalReducedMotion
 import lk.salli.design.theme.LocalSalliColors
@@ -73,11 +75,24 @@ fun JarSheet(
     val perMonth = if (months > 0) target / months else null
     val placeholder = stringResource(R.string.jar_name_placeholder)
 
+    // The sheet is the vessel: pull the target up and the liquid rises behind everything.
+    val tilt by rememberDeviceTilt()
+    var stirring by remember { mutableStateOf(false) }
+    LaunchedEffect(target) { stirring = true; delay(700); stirring = false }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     ) {
+        Box {
+        LiquidFill(
+            fraction = target.toFloat() / 60_000_000f,
+            alpha = 0.16f,
+            tilt = tilt,
+            stirring = stirring,
+            reducedMotion = reduced,
+            modifier = Modifier.matchParentSize(),
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -90,34 +105,17 @@ fun JarSheet(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    SpringOdometer(
-                        text = MoneyFormat.formatMinor(target, Currency.LKR),
-                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                        reducedMotion = reduced,
-                    )
-                    Text(
-                        text = perMonth?.let { stringResource(R.string.jar_per_month, MoneyFormat.formatMinor(it, Currency.LKR)) }
-                            ?: stringResource(R.string.jar_pick_date),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                // The jar as it will look on Plan: empty, its first-period line already drawn.
-                GoalJarTile(
-                    name = name.ifBlank { placeholder },
-                    savedMinor = 0L,
-                    targetMinor = target,
-                    lineMinor = perMonth,
-                    formatAmount = { MoneyFormat.short(Money(it, Currency.LKR)) },
-                    onPour = {},
-                    canPour = false,
-                    reducedMotion = reduced,
-                    jarHeight = 84.dp,
-                    modifier = Modifier.width(88.dp),
-                )
-            }
+            SpringOdometer(
+                text = MoneyFormat.formatMinor(target, Currency.LKR),
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                reducedMotion = reduced,
+            )
+            Text(
+                text = perMonth?.let { stringResource(R.string.jar_per_month, MoneyFormat.formatMinor(it, Currency.LKR)) }
+                    ?: stringResource(R.string.jar_pick_date),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             CapDial(
                 valueMinor = target,
                 maxMinor = 60_000_000L,
@@ -168,6 +166,7 @@ fun JarSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
         }
     }
 }

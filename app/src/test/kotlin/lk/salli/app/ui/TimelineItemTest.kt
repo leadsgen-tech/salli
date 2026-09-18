@@ -13,15 +13,15 @@ import org.junit.Test
 class TimelineItemTest {
 
     @Test
-    fun `bank transfer is titled by its counterparty`() {
+    fun `bank transfer is titled Sent and names the counterparty underneath`() {
         val item = row(
             type = TransactionType.ONLINE_TRANSFER,
             merchant = "Commercial Bank PLC",
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Sent to Commercial Bank PLC")
-        assertThat(item.subtitle).isEqualTo("People's Bank 0068")
+        assertThat(item.title).isEqualTo("Sent")
+        assertThat(item.subtitle).isEqualTo("Commercial Bank PLC · People's Bank 0068")
         assertThat(item.badge).isEqualTo(RowBadge.SENT)
         assertThat(item.monogram).isNull()
         assertThat(item.merchantRaw).isEqualTo("Commercial Bank PLC")
@@ -48,18 +48,19 @@ class TimelineItemTest {
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
         assertThat(item.type).isEqualTo(TransactionType.ONLINE_TRANSFER)
-        assertThat(item.title).isEqualTo("Sent to Commercial Bank PLC")
+        assertThat(item.title).isEqualTo("Sent")
     }
 
     @Test
-    fun `a transfer whose counterparty is only digits keeps the last four`() {
+    fun `a transfer whose counterparty is only digits keeps the last four in the subtitle`() {
         val item = row(
             type = TransactionType.ONLINE_TRANSFER,
             merchant = "94279435",
             body = "Fund transfer Successful",
         ).toTimelineItem(category = null, accountDisplayName = "People's Bank 0068")
 
-        assertThat(item.title).isEqualTo("Sent to ····9435")
+        assertThat(item.title).isEqualTo("Sent")
+        assertThat(item.subtitle).isEqualTo("····9435 · People's Bank 0068")
         assertThat(item.monogram).isNull()
     }
 
